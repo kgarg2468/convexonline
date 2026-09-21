@@ -19,6 +19,20 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
   // deployment's webhook. Configured keys never stand in for it.
   const inboxReady = integrations?.inboxWebhookReady === true;
   const canProvision = !inn.isDemo && role === "owner" && !inboxConfigured && liveMail.allowed;
+  // Repair re-runs the same server action: with an inbox already bound it skips
+  // creation and only completes the webhook subscription. Offered only once the
+  // server has answered and confirmed the inbox is not ready, and only when the
+  // deployment has a registered webhook id: without one the server action
+  // throws webhook_not_configured, so there is nothing to retry from here.
+  const canRepair =
+    !inn.isDemo &&
+    role === "owner" &&
+    inboxConfigured &&
+    liveMail.allowed &&
+    integrations !== undefined &&
+    integrations.agentmail &&
+    integrations.webhookId &&
+    !inboxReady;
 
   async function runProvision() {
     const r = (await action.run(() => provision({ innId: inn._id }))) as { inboxAddress: string } | undefined;
@@ -69,11 +83,35 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
               guest messages arrive here.
             </Notice>
           ) : (
-            <Notice tone="caution">
-              An inbox is bound to {inn.name}, but it is not subscribed to this deployment's webhook. Guest mail sent to
-              it will not arrive here until the subscription is repaired
-              {integrations.webhookId ? "." : "; this deployment has no registered webhook id."}
-            </Notice>
+            <>
+              <Notice tone="caution">
+                An inbox is bound to {inn.name}, but it is not subscribed to this deployment's webhook. Guest mail sent
+                to it will not arrive here until the subscription is repaired
+                {integrations.webhookId
+                  ? "."
+                  : "; this deployment has no registered webhook id, so deployment setup is needed before it can be repaired here."}
+              </Notice>
+              {action.error ? (
+                <div style={{ marginTop: 8 }}>
+                  <Notice tone="error">{action.error}</Notice>
+                </div>
+              ) : null}
+              {canRepair ? (
+                <div className="fd-btn-row" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="fd-btn fd-btn--primary"
+                    disabled={action.busy}
+                    onClick={() => void runProvision()}
+                  >
+                    {action.busy ? "Connecting…" : "Finish connecting inbox"}
+                  </button>
+                  <span className="fd-muted fd-small">
+                    Retries the subscription for the existing inbox; no new inbox is created.
+                  </span>
+                </div>
+              ) : null}
+            </>
           )
         ) : (
           <>
@@ -90,7 +128,13 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
               <button
                 type="button"
                 className="fd-btn fd-btn--primary"
-                disabled={!canProvision || action.busy || integrations === undefined || !integrations.agentmail}
+                disabled={
+                  !canProvision ||
+                  action.busy ||
+                  integrations === undefined ||
+                  !integrations.agentmail ||
+                  !integrations.webhookId
+                }
                 onClick={() => void runProvision()}
               >
                 {action.busy ? "Setting up…" : "Set up a guest inbox"}
@@ -102,7 +146,9 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                     ? "Checking providers…"
                     : !integrations.agentmail
                       ? "Mail provisioning is not configured on this deployment."
-                      : !liveMail.allowed
+                      : !integrations.webhookId
+                        ? "The inbound mail webhook is not registered for this deployment yet."
+                        : !liveMail.allowed
                         ? LIVE_MAIL_REASON[liveMail.reason] ?? "Live mail is not available."
                         : ""}
               </span>
