@@ -2,10 +2,19 @@ import { convexTest } from "convex-test";
 import presenceComponent from "@convex-dev/presence/test";
 import rateLimiterComponent from "@convex-dev/rate-limiter/test";
 import aggregateComponent from "@convex-dev/aggregate/test";
+import agentmailComponent from "@agentmail/convex/test";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 
 export const modules = import.meta.glob("../convex/**/!(*.*.*)*.*s");
+
+/**
+ * The published @agentmail/convex component's real sources. Its `./test`
+ * export globs only `*.ts`, which misses the component's `_generated/*.js`
+ * files that convex-test uses to locate the module root, so the same
+ * directory is globbed here with the pattern the app uses for its own modules.
+ */
+const agentmailModules = import.meta.glob("../node_modules/@agentmail/convex/src/component/**/!(*.*.*)*.*s");
 
 export function makeTest() {
   const t = convexTest(schema, modules);
@@ -20,6 +29,11 @@ export function makeTest() {
   for (const name of ["threadStatusCounts", "threadFirstResponseTimes", "sentRepliesBySentAt", "correctionStatusCounts"]) {
     aggregateComponent.register(t, name);
   }
+  // The real AgentMail component, as mounted in convex.config.ts, so every
+  // verified inbound archives through the published package's handleEvent.
+  // Its nested workpools are not registered: the archive path configures no
+  // callbacks and never sends, so nothing is ever enqueued on them.
+  t.registerComponent("agentmail", agentmailComponent.schema, agentmailModules);
   return t;
 }
 

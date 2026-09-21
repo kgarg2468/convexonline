@@ -9,6 +9,7 @@
  */
 
 import type * as access from "../access.js";
+import type * as agentmailArchive from "../agentmailArchive.js";
 import type * as aggregates from "../aggregates.js";
 import type * as auth from "../auth.js";
 import type * as corrections from "../corrections.js";
@@ -64,6 +65,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   access: typeof access;
+  agentmailArchive: typeof agentmailArchive;
   aggregates: typeof aggregates;
   auth: typeof auth;
   corrections: typeof corrections;
@@ -146,4 +148,5 @@ export declare const components: {
   threadFirstResponseTimes: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"threadFirstResponseTimes">;
   sentRepliesBySentAt: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"sentRepliesBySentAt">;
   correctionStatusCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"correctionStatusCounts">;
+  agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
 };
