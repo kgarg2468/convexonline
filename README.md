@@ -22,6 +22,8 @@ The [walkthrough](docs/walkthrough.md) covers the isolated demo and the live
 fictional-inn workflow, including staff invitations and approved follow-ups.
 The [verification record](docs/verification.md) documents actual provider delivery,
 source changes, scheduled follow-ups and the remaining external checks.
+The video uses an exact HTTP route that redirects to the current public storage
+asset, preserving byte-range support for native playback and seeking.
 
 The [40-case grounding evaluation](docs/grounding-evaluation.md) records real
 OpenAI calls through the app's generation pipeline. No unanswerable or
