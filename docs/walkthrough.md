@@ -1,9 +1,9 @@
 # Front Desk walkthrough
 
 [Open Front Desk](https://outgoing-zebra-720.convex.site). Front Desk is a shared
-email workspace for independent inns. Its main demonstration starts after a
-published policy changes: staff can see which previously sent replies cited the
-old policy and decide whether to correct them.
+email workspace for independent inns. Its main demonstration starts when an inn
+updates a policy on its website. Staff can see which previously sent replies
+cited the old policy and decide whether to correct them.
 
 ## Explore without connecting an inbox
 
