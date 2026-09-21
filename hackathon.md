@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T19:01:08Z
+- **Last updated:** 2026-09-21T19:49:17Z
 
 ## Log
 
@@ -104,3 +104,8 @@ Evidence: `src/workspace/inbox/FollowUpPanel.tsx`, `src/workspace/inbox/ThreadDe
 Added owner-edited fictional inn websites served as escaped public HTML on Convex. Real crawls are restricted to the inn's own pages and request fresh content; saving a website never directly changes source versions or sent claims.
 Automated review caught a scope bypass through regular-property creation. Creation, ingestion and scheduled refresh now reject foreign deployment-hosted sites, including legacy records. All 309 tests, CI and the follow-up review pass; the backend is deployed. The change-to-correction tests mock provider transport; the hosted real-provider walkthrough is not yet verified.
 Evidence: `convex/innWebsites.ts`, `convex/lib/innWebsiteHtml.ts`, `convex/ingest.ts`, `tests/innWebsites.test.ts`, `tests/ingest.test.ts`.
+
+### 2026-09-21 - dfecb2c
+Added fictional-inn onboarding and the owner website editor, with public-page links and a read-only staff view. Draft edits survive updates from another session; concurrent changes are disclosed and pending controls are locked.
+Three website browser scenarios pass, including two-session draft preservation, discard, overwrite and pending-state checks. The earlier full 27-test browser suite also passed. CI and automated follow-up review passed; the frontend is deployed on Convex. These checks publish actual website HTML without calling mail, crawl or model providers.
+Evidence: `src/workspace/onboarding/InnPicker.tsx`, `src/workspace/settings/InnWebsiteEditor.tsx`, `tests/browser/specs/inn-website.spec.ts`.

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { makeTest, signedInUser } from "./setup";
-import { agentmailReplyRoute, draftOutput, json, openaiRoutes, responsesOutput, seedInboundThread, seedLiveInn, settle, stubFetch, withEnv } from "./integrationSetup";
+import { agentmailReplyRoute, draftOutput, json, judgeOutput, openaiRoutes, responsesOutput, seedInboundThread, seedLiveInn, settle, stubFetch, withEnv } from "./integrationSetup";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -106,6 +106,8 @@ describe("corrections on real inns", () => {
     const t = makeTest();
     const s = await seedSentInn(t);
     let drafterPages: unknown;
+    let drafterBody: Record<string, unknown> | undefined;
+    let judgeBody: Record<string, unknown> | undefined;
     stubFetch(
       openaiRoutes({
         draft: (body) => {
@@ -126,12 +128,17 @@ describe("corrections on real inns", () => {
       openaiRoutes({
         draft: (body) => {
           drafterPages = JSON.stringify(body);
+          drafterBody = body;
           return responsesOutput(
             draftOutput({
               answer: "Update: our pet fee is now $40 per night pet fee, one dog per room.",
               claims: [{ statement: "fee is $40", url: "https://seagull.example/policies", quote: "$40 per night pet fee", sourceId: result.pageVersionId }],
             }),
           );
+        },
+        judge: (body) => {
+          judgeBody = body;
+          return responsesOutput(judgeOutput());
         },
       }),
     );
@@ -144,6 +151,36 @@ describe("corrections on real inns", () => {
     expect(String(drafterPages)).toContain("limited to one dog per room");
     expect(String(drafterPages)).not.toMatch(/"markdown":"[^"]*\$25 per night/);
 
+    // Correction instructions travel in the trusted system message (adapter correction
+    // mode), not inside the untrusted <guest_email> block, which holds history only.
+    const drafterInput = drafterBody!.input as Array<{ role: string; content: string }>;
+    const drafterSystem = drafterInput[0].content;
+    const drafterUser = drafterInput[1].content;
+    expect(drafterInput[0].role).toBe("system");
+    expect(drafterSystem).toMatch(/Correction mode\. This is not a fresh guest inquiry/);
+    expect(drafterSystem).toMatch(/ONE purpose only: to identify which topic/);
+    expect(drafterSystem).toMatch(/Do not repeat the earlier figure, time or wording/);
+    expect(drafterSystem).toMatch(/Do not say or imply that anything changed/);
+    expect(drafterUser).toContain("<guest_email>\nSubject: Re: Dog?\n\nReply already sent to this guest:\nDogs are welcome for a $25 per night pet fee.\n");
+    expect(drafterUser).toContain('Passage of the old page that reply relied on (no longer on the page): "$25 per night pet fee"');
+    expect(drafterUser).not.toMatch(/Write a short, polite/);
+    expect(drafterUser).not.toMatch(/citing only the current page/);
+    expect(drafterUser).not.toMatch(/Correction mode/);
+    // The old reply and passage appear nowhere except inside <guest_email>.
+    const guestBlock = drafterUser.slice(drafterUser.indexOf("<guest_email>"));
+    expect(drafterUser.slice(0, drafterUser.indexOf("<guest_email>"))).not.toContain("$25");
+    expect(guestBlock).toContain("$25 per night pet fee");
+
+    // The judge stays source-only: it sees the reply and the verified current-page
+    // quote, never the earlier reply or the old passage as evidence or context.
+    const judgeInput = judgeBody!.input as Array<{ role: string; content: string }>;
+    expect(judgeInput[0].content).not.toMatch(/guest_email/);
+    expect(judgeInput[0].content).not.toMatch(/Correction mode/);
+    expect(judgeInput[1].content).not.toContain("<guest_email>");
+    expect(judgeInput[1].content).not.toContain("$25");
+    expect(judgeInput[1].content).not.toContain("Reply already sent");
+    expect(judgeInput[1].content).toContain("<quote>$40 per night pet fee</quote>");
+
     // Staff rewrite: the drafter's later output must not clobber it.
     await s.owner.as.mutation(api.threads.claim, { threadId: s.pet.threadId });
     await s.owner.as.mutation(api.corrections.setText, { correctionId: c._id, proposedText: "Heads up: the pet fee is now $40 per night.", evidenceQuote: "$40 per night pet fee" });
@@ -154,6 +191,86 @@ describe("corrections on real inns", () => {
       s.owner.as.mutation(api.corrections.setText, { correctionId: c._id, proposedText: "x", evidenceQuote: "$25 per night pet fee" }),
     ).rejects.toThrow(/invalid_quote/);
   });
+
+  it("a generated correction the judge rejects stays held and cannot be approved unedited", async () => {
+    withEnv({ OPENAI_API_KEY: "sk-test" });
+    const t = makeTest();
+    const s = await seedSentInn(t);
+    stubFetch(openaiRoutes({ draft: () => json(500, { error: "not yet" }) }));
+    const result = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V2 });
+    vi.unstubAllGlobals();
+    // The drafter still repeats the old figure; the source-only judge rejects it.
+    const repeated = "Correction: the pet fee is $40 per night pet fee, not the $25 we quoted before.";
+    stubFetch(
+      openaiRoutes({
+        draft: () =>
+          responsesOutput(
+            draftOutput({
+              answer: repeated,
+              claims: [{ statement: "fee is $40", url: "https://seagull.example/policies", quote: "$40 per night pet fee", sourceId: result.pageVersionId }],
+            }),
+          ),
+        judge: () => responsesOutput(judgeOutput(false, false, "the earlier $25 quote is not supported by the evidence")),
+      }),
+    );
+    await t.action(internal.corrections.generateProposal, { correctionId: (await pending(t, s.owner, s.innId))[0]._id });
+    const [c] = await pending(t, s.owner, s.innId);
+    expect(c).toMatchObject({
+      status: "needs_review",
+      textSource: "generated",
+      proposedText: repeated,
+      evidenceQuote: "$40 per night pet fee",
+      judgeVerdict: { entailed: false, promisedOutsideQuotes: false, notes: "the earlier $25 quote is not supported by the evidence" },
+    });
+    expect(c.statusReason).toMatch(/judge did not accept/);
+    await s.owner.as.mutation(api.threads.claim, { threadId: s.pet.threadId });
+    await expect(s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "approve" })).rejects.toThrow(/unverified_proposal/);
+    await expect(s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "approve", proposedText: repeated })).rejects.toThrow(
+      /unverified_proposal/,
+    );
+    await expect(s.owner.as.mutation(api.corrections.send, { correctionId: c._id })).rejects.toThrow(/claimed|not_approved/);
+    expect((await pending(t, s.owner, s.innId))[0].status).toBe("needs_review");
+    expect(await t.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
+  });
+
+  it.each(["needs_staff_fact", "needs_availability_or_approval"] as const)(
+    "a %s draft with a well-grounded quote is held for staff without judging or storing a proposal",
+    async (cls) => {
+      withEnv({ OPENAI_API_KEY: "sk-test" });
+      const t = makeTest();
+      const s = await seedSentInn(t);
+      stubFetch(openaiRoutes({ draft: () => json(500, { error: "not yet" }) }));
+      const result = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V2 });
+      vi.unstubAllGlobals();
+      let judgeCalls = 0;
+      stubFetch(
+        openaiRoutes({
+          draft: () =>
+            responsesOutput(
+              draftOutput({
+                class: cls,
+                abstain: false,
+                answer: "Update: our pet fee is now $40 per night pet fee, one dog per room.",
+                claims: [{ statement: "fee is $40", url: "https://seagull.example/policies", quote: "$40 per night pet fee", sourceId: result.pageVersionId }],
+              }),
+            ),
+          judge: () => {
+            judgeCalls += 1;
+            return responsesOutput(judgeOutput());
+          },
+        }),
+      );
+      await t.action(internal.corrections.generateProposal, { correctionId: (await pending(t, s.owner, s.innId))[0]._id });
+      expect(judgeCalls).toBe(0);
+      const [c] = await pending(t, s.owner, s.innId);
+      expect(c).toMatchObject({ status: "needs_review", proposedText: null, evidenceQuote: null, judgeVerdict: null });
+      expect(c.statusReason).toContain(cls);
+      await s.owner.as.mutation(api.threads.claim, { threadId: s.pet.threadId });
+      await expect(s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "approve" })).rejects.toThrow(/needs text before approval/);
+      expect((await pending(t, s.owner, s.innId))[0].status).toBe("needs_review");
+      expect(await t.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
+    },
+  );
 
   it("approve → live send into the original thread; the claim becomes corrected and cannot be sent twice", async () => {
     withEnv({ OPENAI_API_KEY: undefined, AGENTMAIL_API_KEY: "am-test" });
