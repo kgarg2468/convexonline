@@ -1547,3 +1547,78 @@ body {
 .fd-followup__history {
   margin-top: 12px;
 }
+
+/* ---------- onboarding: kind of property ---------- */
+
+.fd-kind {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+.fd-kind legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.fd-kind__option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--fd-line);
+  border-radius: var(--fd-radius);
+  background: var(--fd-white);
+  cursor: pointer;
+}
+.fd-kind__option:has(input:checked) {
+  border-color: var(--fd-pine);
+}
+.fd-kind__option input {
+  margin-top: 4px;
+  flex: none;
+}
+.fd-kind__option > span {
+  display: grid;
+  gap: 2px;
+  font-size: 14.5px;
+}
+
+/* ---------- settings: hosted inn website ---------- */
+
+.fd-site__lede {
+  margin-bottom: 10px;
+  max-width: 64ch;
+}
+.fd-site__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.fd-site__pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+}
+.fd-site__form {
+  margin-top: 14px;
+}
+.fd-site__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+.fd-site__toolbar {
+  margin-top: 4px;
+}
+@media (max-width: 600px) {
+  .fd-site__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

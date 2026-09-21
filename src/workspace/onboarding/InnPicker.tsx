@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { ConvexError } from "convex/values";
 import { useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
@@ -7,7 +8,23 @@ import type { InnSummary, Viewer } from "../types";
 import { Field, Notice } from "../lib/ui";
 import { Mark } from "../lib/Mark";
 import { useAsyncAction } from "../lib/hooks";
-import { hostOf } from "../lib/format";
+import { errorMessage, hostOf } from "../lib/format";
+
+/**
+ * "external": a real property whose own public site is crawled later.
+ * "fictional": an inn whose example website this deployment hosts and the
+ * owner edits in Settings; its URL is chosen by the server.
+ */
+type PropertyKind = "external" | "fictional";
+
+/** Keeps the server's field message for `invalid` errors (the shared mapper flattens it). */
+function createErrorMessage(error: unknown): string {
+  if (error instanceof ConvexError && typeof error.data === "object" && error.data !== null) {
+    const data = error.data as { code?: string; message?: string };
+    if (data.code === "invalid" && data.message) return data.message;
+  }
+  return errorMessage(error);
+}
 
 /**
  * Shown to real staff who have no inn yet (onboarding) or who belong to
@@ -25,6 +42,8 @@ export function InnPicker({
 }) {
   const { signOut } = useAuthActions();
   const createInn = useMutation(api.inns.create);
+  const createFictional = useMutation(api.innWebsites.createFictional);
+  const [kind, setKind] = useState<PropertyKind>("external");
   const [name, setName] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
   const [timezone, setTimezone] = useState(() => {
@@ -39,10 +58,26 @@ export function InnPicker({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (kind === "fictional") {
+      const created = (await action.run(async () => {
+        try {
+          return await createFictional({ name, timezone: timezone || undefined });
+        } catch (error) {
+          throw new Error(createErrorMessage(error));
+        }
+      })) as { innId: Id<"inns">; siteUrl: string } | undefined;
+      if (created) onSelect(created.innId);
+      return;
+    }
     const innId = (await action.run(() =>
       createInn({ name, siteUrl, timezone: timezone || undefined }),
     )) as Id<"inns"> | undefined;
     if (innId) onSelect(innId);
+  }
+
+  function chooseKind(next: PropertyKind) {
+    setKind(next);
+    action.clear();
   }
 
   return (
@@ -82,6 +117,37 @@ export function InnPicker({
         {showForm ? (
           <form onSubmit={submit}>
             <p className="fd-section__title">New property</p>
+            {/* Option labels deliberately avoid the words "Website" and
+                "Property name": those are the labels of the inputs below. */}
+            <fieldset className="fd-kind">
+              <legend className="fd-field__label">What are you setting up?</legend>
+              <label className="fd-kind__option">
+                <input
+                  type="radio"
+                  name="fd-inn-kind"
+                  checked={kind === "external"}
+                  onChange={() => chooseKind("external")}
+                />
+                <span>
+                  <strong>A real property with its own site</strong>
+                  <span className="fd-muted fd-small">Replies are drafted only from what its public pages say.</span>
+                </span>
+              </label>
+              <label className="fd-kind__option">
+                <input
+                  type="radio"
+                  name="fd-inn-kind"
+                  checked={kind === "fictional"}
+                  onChange={() => chooseKind("fictional")}
+                />
+                <span>
+                  <strong>A fictional inn with a hosted example site</strong>
+                  <span className="fd-muted fd-small">
+                    Front Desk hosts a small example site for it that you edit in Settings.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
             <Field label="Property name" htmlFor="fd-inn-name">
               <input
                 id="fd-inn-name"
@@ -92,27 +158,29 @@ export function InnPicker({
                 onChange={(e) => setName(e.target.value)}
               />
             </Field>
-            <Field
-              label="Website"
-              htmlFor="fd-inn-url"
-              hint="Replies are drafted only from what this site says. Must be a public site starting with https://."
-            >
-              <input
-                id="fd-inn-url"
-                className="fd-input"
-                type="url"
-                required
-                pattern="[Hh][Tt][Tt][Pp][Ss]://.*"
-                title="Must start with https://"
-                placeholder="https://"
-                value={siteUrl}
-                onChange={(e) => setSiteUrl(e.target.value)}
-              />
-            </Field>
+            {kind === "external" ? (
+              <Field
+                label="Website"
+                htmlFor="fd-inn-url"
+                hint="Replies are drafted only from what this site says. Must be a public site starting with https://."
+              >
+                <input
+                  id="fd-inn-url"
+                  className="fd-input"
+                  type="url"
+                  required
+                  pattern="[Hh][Tt][Tt][Pp][Ss]://.*"
+                  title="Must start with https://"
+                  placeholder="https://"
+                  value={siteUrl}
+                  onChange={(e) => setSiteUrl(e.target.value)}
+                />
+              </Field>
+            ) : null}
             <Field
               label="Time zone"
               htmlFor="fd-inn-tz"
-              hint="Used for arrival and follow-up times. An IANA name like America/New_York; leave blank for America/Los_Angeles."
+              hint="The property's local time zone, stored on the inn record. An IANA name like America/New_York; leave blank for America/Los_Angeles."
             >
               <input
                 id="fd-inn-tz"
@@ -122,10 +190,19 @@ export function InnPicker({
                 onChange={(e) => setTimezone(e.target.value)}
               />
             </Field>
+            {kind === "fictional" ? (
+              <div style={{ marginBottom: 14 }}>
+                <Notice tone="info">
+                  This creates a public website with illustrative policies. Every page is labelled as a fictional inn.
+                  Edit it in Settings, then use Knowledge to crawl it. Email and crawling require provider setup;
+                  creating the inn does not start either.
+                </Notice>
+              </div>
+            ) : null}
             {action.error ? <Notice tone="error">{action.error}</Notice> : null}
             <div className="fd-btn-row" style={{ marginTop: 14 }}>
               <button type="submit" className="fd-btn fd-btn--primary" disabled={action.busy}>
-                {action.busy ? "Creating…" : "Create property"}
+                {action.busy ? "Creating…" : kind === "fictional" ? "Create fictional inn" : "Create property"}
               </button>
               {inns.length > 0 ? (
                 <button type="button" className="fd-btn fd-btn--quiet" onClick={() => setShowForm(false)}>

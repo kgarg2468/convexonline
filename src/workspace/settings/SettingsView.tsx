@@ -6,6 +6,7 @@ import { ExternalLink, Notice, Pill } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { LIVE_MAIL_REASON } from "../lib/format";
 import { TeamSettings } from "./TeamSettings";
+import { InnWebsiteEditor } from "./InnWebsiteEditor";
 
 /** Real values only: what the server knows about this inn, its staff and its providers. */
 export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDetail }) {
@@ -70,6 +71,13 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
           <dd>{inn.isDemo ? <Pill tone="caution">Demo</Pill> : <Pill tone="pine">Live property</Pill>}</dd>
         </dl>
       </div>
+
+      {/* Only inns with a hosted website document render anything here. The
+          owner-only query is requested solely for a real (non-anonymous) owner;
+          everyone else reads the member view. Demo inns never have a site. */}
+      {!inn.isDemo ? (
+        <InnWebsiteEditor key={inn._id} innId={inn._id} canEdit={role === "owner" && !viewer.isAnonymous} />
+      ) : null}
 
       <div className="fd-section">
         <p className="fd-section__title">Guest inbox</p>
