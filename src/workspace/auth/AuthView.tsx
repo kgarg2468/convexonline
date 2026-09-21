@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Field, Notice } from "../lib/ui";
 import { Mark } from "../lib/Mark";
@@ -14,7 +14,7 @@ const HANDOFF_TIMEOUT_MS = 20_000;
  * Judges enter an isolated demo through the Anonymous provider; the demo inn
  * itself is seeded by FrontDeskWorkspace once the anonymous user exists.
  */
-export function AuthView() {
+export function AuthView({ banner }: { banner?: ReactNode } = {}) {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<Flow>("signIn");
   const [name, setName] = useState("");
@@ -71,6 +71,8 @@ export function AuthView() {
           <Mark size={26} />
           <span>Front Desk</span>
         </div>
+
+        {banner ? <div className="fd-auth__banner">{banner}</div> : null}
 
         <div className="fd-tabs" role="tablist" aria-label="Staff sign in">
           <button

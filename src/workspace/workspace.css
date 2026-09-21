@@ -1401,3 +1401,65 @@ body {
   margin: 12px 0 10px;
   padding: 8px 10px;
 }
+
+/* ---------- team settings and invitations ---------- */
+
+.fd-auth__banner {
+  margin-bottom: 16px;
+}
+.fd-team__members li {
+  flex-wrap: wrap;
+}
+.fd-team__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fd-team__confirm {
+  flex-basis: 100%;
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--fd-radius);
+  border: 1px solid #ecc9c9;
+  background: var(--fd-error-bg);
+  color: var(--fd-error);
+  font-size: 14px;
+}
+.fd-team__form {
+  max-width: 480px;
+}
+.fd-team__fresh {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: var(--fd-radius);
+  border: 1px solid #c6e0d0;
+  background: #e6f3ec;
+  color: var(--fd-pine-deep);
+}
+.fd-team__fresh-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.fd-team__link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.fd-team__link-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--fd-mono);
+  font-size: 13px;
+}
+.fd-team__invite {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fd-invite__lead {
+  font-size: 16px;
+  margin-bottom: 8px;
+}

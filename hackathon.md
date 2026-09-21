@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T16:35:00Z
+- **Last updated:** 2026-09-21T16:58:13Z
 
 ## Log
 
@@ -74,3 +74,8 @@ Evidence: `convex/providers/openai.ts`, `convex/generation.ts`, `tests/providers
 ### 2026-09-21 - de145cd
 Deployed the merged audit fixes to the production Convex backend and frontend. Backfilled 507 existing messages with their owning inn using bounded, repeatable batches; no orphaned threads were found.
 Evidence: `convex/migrations.ts`, `convex/http.ts`, `convex/convex.config.ts`.
+
+### 2026-09-21 - aedc595
+Added owner-created, one-use staff invitations with seven-day expiry, hashed token storage, revocation and atomic membership acceptance. Removed members cannot reuse consumed links to regain access. Owners can remove staff; membership revocation is immediate and claim cleanup proceeds in indexed batches of 100, stopping if the member rejoins.
+Automated review caught unbounded thread and invitation-history reads. Both were bounded before merge. Twenty-seven team integration tests and 255 total tests pass, including concurrent acceptance, tenant isolation, a 230-claim cleanup and rejoining during cleanup. CI and automated review passed; the backend is deployed on production Convex.
+Evidence: `convex/teams.ts`, `convex/schema.ts`, `tests/teams.test.ts`.

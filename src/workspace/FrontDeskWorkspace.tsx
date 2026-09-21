@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Correction, InnDetail, InnSummary, RecordVersionResult, ThreadStats, Viewer, WorkspaceView } from "./types";
 import { AuthView } from "./auth/AuthView";
 import { InnPicker } from "./onboarding/InnPicker";
+import { InvitationGate } from "./onboarding/InvitationGate";
 import { Shell, HeaderTitle } from "./shell/Shell";
 import { DemoActions } from "./shell/DemoActions";
 import { CorrectionsView } from "./corrections/CorrectionsView";
@@ -14,6 +16,8 @@ import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
 import { useStoredState } from "./lib/hooks";
+import { usePendingInvite, type PendingInvite } from "./lib/invitations";
+import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
 import "./workspace.css";
 
 const INN_KEY = "frontdesk.innId";
@@ -43,6 +47,9 @@ export function FrontDeskWorkspace() {
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip") as Viewer | null | undefined;
   const pending = isLoading || (isAuthenticated && viewer === undefined);
   const stalled = useStalled(pending);
+  // Captured from the #invite= fragment before anything else renders, so the
+  // token is out of the address bar whichever screen comes next.
+  const { invite, clear: clearInvite } = usePendingInvite();
 
   if (pending) {
     return (
@@ -67,23 +74,79 @@ export function FrontDeskWorkspace() {
   if (!isAuthenticated || viewer === null || viewer === undefined) {
     return (
       <div className="fd-root">
-        <AuthView />
+        <AuthView
+          banner={
+            invite?.kind === "token" ? (
+              <Notice tone="info">
+                <strong>You have a staff invitation.</strong> Sign in, or create a staff account, to see which property
+                it is for and join it. It stays in this tab until you decide.
+              </Notice>
+            ) : invite?.kind === "malformed" ? (
+              <Notice tone="caution">
+                <strong>The invitation link you opened is not valid.</strong> Ask the property owner for a new one. You
+                can still sign in, or create a staff account, and set the link aside there.
+              </Notice>
+            ) : undefined
+          }
+        />
       </div>
     );
   }
   return (
     <div className="fd-root">
-      <SignedIn viewer={viewer} />
+      <SignedIn viewer={viewer} invite={invite} onInviteDone={clearInvite} />
     </div>
   );
 }
 
-function SignedIn({ viewer }: { viewer: Viewer }) {
+/**
+ * An invitation link was opened that cannot be read as one. Nothing is sent
+ * to the server and the raw fragment is never shown; the only way on is to
+ * dismiss it, which drops it from this tab.
+ */
+function MalformedInvitation({ viewer, onDismiss }: { viewer: Viewer; onDismiss: () => void }) {
+  return (
+    <div className="fd-center">
+      <div className="fd-center__panel" role="region" aria-labelledby="fd-invite-title">
+        <h2 className="fd-h2" id="fd-invite-title">
+          Staff invitation
+        </h2>
+        <p className="fd-lede">Signed in as {viewer.name ?? viewer.email ?? "staff"}.</p>
+        <Notice tone="error">This invitation link is not valid. Ask the property owner for a new one.</Notice>
+        <div className="fd-btn-row" style={{ marginTop: 16 }}>
+          <button type="button" className="fd-btn" onClick={onDismiss}>
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignedIn({
+  viewer,
+  invite,
+  onInviteDone,
+}: {
+  viewer: Viewer;
+  invite: PendingInvite | null;
+  onInviteDone: () => void;
+}) {
   const inns = useQuery(api.inns.mine, {}) as InnSummary[] | undefined;
   const enterDemo = useMutation(api.demo.enter);
+  const { signOut } = useAuthActions();
   const [storedInn, setStoredInn] = useStoredState<string>(INN_KEY, "");
+  // Set by "Back to properties" on the access screen. Without it, a sole inn
+  // is re-selected by the fallback below and the same errored boundary stays
+  // mounted; with it, the picker shows until a property is chosen or joined.
+  const [choosingInn, setChoosingInn] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const seeding = useRef(false);
+
+  function openInn(innId: string) {
+    setStoredInn(innId);
+    setChoosingInn(false);
+  }
 
   // Anonymous visitors get their private demo inn seeded once, idempotently.
   const needsDemo = viewer.isAnonymous && inns !== undefined && !inns.some((i) => i.isDemo);
@@ -105,7 +168,36 @@ function SignedIn({ viewer }: { viewer: Viewer }) {
 
   if (inns === undefined) return <Spinner label="Loading your properties" />;
 
+  if (invite?.kind === "malformed") {
+    return <MalformedInvitation viewer={viewer} onDismiss={onInviteDone} />;
+  }
+
   if (viewer.isAnonymous) {
+    // A demo visitor cannot hold a staff membership, so the invitation is never
+    // sent to the server from here: it waits for a real sign-in.
+    if (invite) {
+      return (
+        <div className="fd-center">
+          <div className="fd-center__panel" role="region" aria-labelledby="fd-invite-demo-title">
+            <h2 className="fd-h2" id="fd-invite-demo-title">
+              Staff invitation waiting
+            </h2>
+            <p className="fd-lede">
+              You opened a staff invitation while looking at the demo. The demo visitor cannot join a real property;
+              leave the demo and sign in (or create a staff account) to accept it. The invitation stays in this tab.
+            </p>
+            <div className="fd-btn-row">
+              <button type="button" className="fd-btn fd-btn--primary" onClick={() => void signOut()}>
+                Leave demo and sign in
+              </button>
+              <button type="button" className="fd-btn fd-btn--quiet" onClick={onInviteDone}>
+                Discard invitation
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     if (demoError) {
       return (
         <div className="fd-center">
@@ -126,10 +218,34 @@ function SignedIn({ viewer }: { viewer: Viewer }) {
     return <Workspace key={demoInn.innId} viewer={viewer} inns={inns} current={demoInn} onSwitchInn={setStoredInn} />;
   }
 
-  if (!current) {
-    return <InnPicker viewer={viewer} inns={inns} onSelect={(id) => setStoredInn(id)} />;
+  if (invite) {
+    return (
+      <InvitationGate
+        token={invite.token}
+        viewer={viewer}
+        onJoined={(innId) => {
+          openInn(innId);
+          onInviteDone();
+        }}
+        onDismiss={onInviteDone}
+      />
+    );
   }
-  return <Workspace key={current.innId} viewer={viewer} inns={inns} current={current} onSwitchInn={setStoredInn} />;
+  if (choosingInn || !current) {
+    return <InnPicker viewer={viewer} inns={inns} onSelect={openInn} />;
+  }
+  // Keyed by inn so a refused subscription for one property never lingers over another.
+  return (
+    <WorkspaceAccessBoundary
+      key={current.innId}
+      onReturn={() => {
+        setStoredInn("");
+        setChoosingInn(true);
+      }}
+    >
+      <Workspace viewer={viewer} inns={inns} current={current} onSwitchInn={openInn} />
+    </WorkspaceAccessBoundary>
+  );
 }
 
 function Workspace({
