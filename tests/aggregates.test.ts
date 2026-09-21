@@ -383,7 +383,10 @@ describe("stats aggregates: backfill", () => {
     for (let hops = 0; hops < 20 && !(await ready(t)); hops++) await settle(t);
     expect(await ready(t)).toBe(true);
     expect(await expectConsistent(t, owner, innId)).toEqual(after);
-  });
+    // Seeds 260 threads plus replies/corrections, walks them three times (batches, restart,
+    // self-driving runner) and interleaves live writes. ~3s locally, ~6s on GitHub runners,
+    // so it needs more than Vitest's 5s default.
+  }, 20_000);
 });
 
 describe("stats aggregates: app flows keep the component in step with the tables", () => {
