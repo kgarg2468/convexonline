@@ -20,7 +20,7 @@ AgentMail component archives accepted incoming deliveries, and the Firecrawl
 component maps and scrapes pages. Guarded outbound mail uses AgentMail's REST API.
 
 - [Live app](https://outgoing-zebra-720.convex.site)
-- [Demo video — 2 minutes 30 seconds](https://outgoing-zebra-720.convex.site/front-desk-demo.mp4)
+- [Demo video — 2 minutes 30 seconds](https://outgoing-zebra-720.convex.site/demo.html)
 - [Public repository](https://github.com/kgarg2468/convexonline)
 - [Walkthrough](walkthrough.md)
 - [Verification record](verification.md)

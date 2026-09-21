@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:21:00Z
+- **Last updated:** 2026-09-21T23:33:00Z
 
 ## Log
 
@@ -165,7 +165,12 @@ The original receipt checker failed on provider-added quoted history and brandin
 A continuation passed all 51 required checks. One explicitly approved follow-up was delivered by the scheduler; another was cancelled on an actual guest reply, with no send 30 seconds past due. Temporary staff access and claims were cleaned up. Gmail verification and additional inbox capacity remain external requirements; neither is claimed complete.
 Evidence: `docs/verification.md`, `docs/walkthrough.md`, `convex/ingest.ts`, `convex/inbound.ts`, `convex/corrections.ts`, `convex/followUps.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - a5a607f
 Added a 150.27-second narrated demo from actual production-run captures: source capture, grounded replies, shared presence, an owner website edit, affected-reply review, delivered correction, and approved follow-up delivery and cancellation. Test inbox addresses are redacted. The video distinguishes the real owned-inbox run from the anonymous simulated demo and describes authenticated app calls used for mail actions.
 The MP4 is H.264/AAC, 1280×900, about 4.6 MB. Duration, audio level and rendered frames were checked. Added a public submission overview and links to measured verification; no form or social post has been submitted.
-Evidence: `public/front-desk-demo.mp4`, `public/front-desk-demo-poster.png`, `docs/submission.md`. Video URL: https://outgoing-zebra-720.convex.site/front-desk-demo.mp4
+Evidence: `public/front-desk-demo.mp4`, `public/front-desk-demo-poster.png`, `docs/submission.md`. Video URL: https://outgoing-zebra-720.convex.site/demo.html
+
+### 2026-09-21 - working tree
+Published the reviewed MP4 and poster on Convex; the downloaded video matches the committed SHA-256 and remains 150.27 seconds. The app, health endpoint and poster return HTTP 200.
+The static host serves MP4 with a generic binary content type, so added a standalone viewer with native playback controls, an explicit video source type and a download fallback. Ten local Chromium checks passed, including metadata, playback, seeking to two minutes, and no console or page errors. Updated submission links to the viewer. Automated review identified the missing text alternative; the viewer now links the exact narration transcript. Production viewer playback is checked after deployment.
+Evidence: `public/demo.html`, `public/front-desk-demo.mp4`, `public/front-desk-demo-transcript.txt`, `docs/submission.md`.

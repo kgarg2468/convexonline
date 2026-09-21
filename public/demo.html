@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Front Desk demo video</title>
+    <link rel="icon" type="image/svg+xml" href="./frontdesk-mark.svg" />
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #fbf3e6;
+        color: #183c3a;
+        font: 17px/1.5 Georgia, "Times New Roman", serif;
+      }
+      main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+      h1 { font-size: 2rem; margin: 0 0 8px; color: #245b50; }
+      p { margin: 0 0 16px; }
+      .meta { color: #6f4510; font-size: 0.95rem; }
+      video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1280 / 900;
+        background: #183c3a;
+        border: 1px solid #c6e0d0;
+        border-radius: 8px;
+        margin: 0 0 20px;
+      }
+      nav a {
+        display: inline-block;
+        margin: 0 16px 8px 0;
+        color: #245b50;
+        font-weight: bold;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      nav a:focus-visible { outline: 3px solid #6f4510; outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Front Desk</h1>
+      <p>When a policy changes, Front Desk finds sent replies whose cited passages changed, and staff review corrections from one queue.</p>
+      <p class="meta">2:30 narrated walkthrough of actual screen captures from a fictional inn and real, owned test inboxes. The public app demo simulates email.</p>
+      <video controls preload="metadata" playsinline poster="./front-desk-demo-poster.png" aria-label="Front Desk demo video, 2 minutes 30 seconds">
+        <source src="./front-desk-demo.mp4" type="video/mp4" />
+        Your browser cannot play this video. <a href="./front-desk-demo.mp4" download>Download the MP4</a> instead.
+      </video>
+      <nav aria-label="Demo links">
+        <a href="./">Open the app</a>
+        <a href="https://github.com/kgarg2468/convexonline">GitHub repository</a>
+        <a href="./front-desk-demo.mp4" download="front-desk-demo.mp4">Download video (4.6 MB)</a>
+        <a href="./front-desk-demo-transcript.txt">Read the video transcript</a>
+      </nav>
+    </main>
+  </body>
+</html>

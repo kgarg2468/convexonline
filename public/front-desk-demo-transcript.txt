@@ -1,0 +1,52 @@
+Front Desk: correct the replies your website changed
+
+Transcript of the narrated video. Section headings match the on-screen scene labels.
+
+A policy changed. Three sent replies need another look.
+
+An inn changes its pet fee after answering guests. Front Desk finds the replies that cited the old policy, and helps staff correct them in the original email thread. Three replies need review. Three still hold.
+
+Rewind: the published fee was $25 per dog per night.
+
+These are captures from a real provider walkthrough using a fictional inn and owned test inboxes. The public anonymous demo is separate and simulates email. Before the change, the inn's website published a twenty five dollar pet fee.
+
+Firecrawl captures four versioned pages.
+
+Firecrawl captured four pages. Front Desk stores their versions, so an answer keeps the evidence that supported it when staff sent it. Saving website edits does not silently rewrite those sources.
+
+Guest email → grounded draft → independent verification
+
+A guest inquiry arrives through AgentMail. OpenAI drafts from the inn's sources. Mechanical checks verify each quote, then a separate model checks the answer. Staff inspect the evidence, claim the thread, and decide whether to send.
+
+Shared viewing. One staff member holds the claim.
+
+Invitations bring colleagues into the same inn. Live presence shows who is viewing a thread. Viewing alone grants no send authority; an active claim and server checks protect staff actions.
+
+The owner edits the public website on Convex.
+
+Now the owner changes the fee to forty dollars in the website editor. The edit is saved through the app. Both the public inn website and the staff workspace are hosted on Convex.
+
+Published: $40. A fresh crawl triggers re-checking.
+
+The public page now says forty dollars. A fresh Firecrawl capture creates new source versions and rechecks previously sent claims. In this run, three original replies were affected and three remained supported.
+
+Review evidence → approve exact correction → deliver
+
+Staff compare the old and current evidence. A correction grounded in the current page is independently checked, approved, and sent. We verified delivery in the guest's original provider thread. This walkthrough uses authenticated app calls for mail actions and records the resulting interface.
+
+Follow-ups need separate approval of text and time.
+
+Follow-ups require a separate approval. Staff see the exact message and scheduled time. A reminder by itself never authorizes an email.
+
+Convex schedules; guarded delivery sends once.
+
+Here the approved follow-up was delivered by the scheduler. We checked the actual message in the owned guest inbox.
+
+A guest reply cancels the pending follow-up.
+
+On another thread, the guest replied before the send time. Front Desk cancelled the approval, and the check past its due time confirmed that no follow-up was sent.
+
+Convex + Firecrawl + AgentMail + OpenAI
+
+Convex runs the frontend, backend, authentication, shared state and scheduled work. Firecrawl captures sources. AgentMail handles mail. OpenAI drafts and checks. Try the isolated demo, and find the public repository and measured verification results in the linked materials.
+
