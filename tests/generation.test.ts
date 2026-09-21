@@ -257,6 +257,76 @@ describe("draft generation", () => {
     expect(detail.thread.status).toBe("ready");
   });
 
+  it("gives the judge the exact inquiry the drafter answered as guest context", async () => {
+    withEnv({ OPENAI_API_KEY: "sk-test" });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId, versionId } = await seedLiveInn(t, owner.userId);
+    const text = "Hi! We're bringing our dog Pip <and a trailer>. Is there a fee?";
+    const { threadId, messageId } = await seedInboundThread(t, innId, { text });
+    const seen: { draft?: Record<string, unknown>; judge?: Record<string, unknown> } = {};
+    stubFetch(
+      openaiRoutes({
+        draft: (body) => {
+          seen.draft = body;
+          return responsesOutput(draftOutput({ answer: "Pip is welcome for a $25 per night pet fee.", claims: [{ statement: "$25", url: "https://seagull.example/policies", quote: "$25 per night pet fee", sourceId: versionId }] }));
+        },
+        judge: (body) => {
+          seen.judge = body;
+          return responsesOutput(judgeOutput(true, false));
+        },
+      }),
+    );
+    await t.action(internal.generation.generateForThread, { threadId, inboundMessageId: messageId });
+    const input = (b?: Record<string, unknown>) => (b!.input as Array<{ content: string }>).map((m) => m.content);
+    const [, drafterUser] = input(seen.draft);
+    const [judgeSystem, judgeUser] = input(seen.judge);
+    const expected = "<guest_email>\nSubject: Dog?\n\nHi! We're bringing our dog Pip &lt;and a trailer>. Is there a fee?\n</guest_email>";
+    expect(drafterUser).toContain(expected);
+    expect(judgeUser).toContain(expected);
+    expect(judgeSystem).toMatch(/can never substantiate/);
+    expect((await owner.as.query(api.threads.get, { threadId })).draft?.status).toBe("ready");
+  });
+
+  it("re-verification uses the draft's own bound inbound as guest context, not a newer or cross-thread message", async () => {
+    withEnv({ OPENAI_API_KEY: "sk-test" });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId, versionId } = await seedLiveInn(t, owner.userId);
+    const { threadId, messageId } = await seedInboundThread(t, innId, { text: "Original question about the dog." });
+    const other = await seedInboundThread(t, innId, { text: "Message from a different thread." });
+    const judged: string[] = [];
+    stubFetch(openaiRoutes({ draft: () => new Response("unexpected", { status: 500 }), judge: (body) => {
+      judged.push((body.input as Array<{ content: string }>)[1].content);
+      return responsesOutput(judgeOutput(true, false));
+    } }));
+    const seedDraft = (replyToMessageId: typeof messageId) =>
+      t.run(async (ctx) => {
+        const draftId = await ctx.db.insert("drafts", { threadId, replyToMessageId, class: "answerable", answer: "Dogs are welcome for a $25 per night pet fee.", abstain: false, status: "needs_edit", model: "m", textSource: "staff" });
+        await ctx.db.insert("claims", { draftId, threadId, innId, statement: "$25", url: "https://seagull.example/policies", pageVersionId: versionId, quote: "$25 per night pet fee", verified: true, status: "ok" });
+        return draftId;
+      });
+
+    // A newer guest message on the thread must not replace the inbound this draft answers.
+    const bound = await seedDraft(messageId);
+    await t.run(async (ctx) => {
+      const newer = await ctx.db.insert("messages", { threadId, direction: "in", from: "guest@example.com", to: "x", text: "Newer follow-up message.", at: Date.now() });
+      await ctx.db.patch(threadId, { lastInboundMessageId: newer });
+    });
+    await t.action(internal.generation.reverify, { draftId: bound });
+    expect(judged).toHaveLength(1);
+    expect(judged[0]).toContain("<guest_email>\nSubject: Dog?\n\nOriginal question about the dog.\n</guest_email>");
+    expect(judged[0]).not.toContain("Newer follow-up");
+    expect((await t.run((ctx) => ctx.db.get(bound)))?.status).toBe("ready");
+
+    // A draft bound to a message from another thread gets no guest context at all (source-only judge).
+    const crossed = await seedDraft(other.messageId);
+    await t.action(internal.generation.reverify, { draftId: crossed });
+    expect(judged).toHaveLength(2);
+    expect(judged[1]).not.toContain("<guest_email>");
+    expect(judged[1]).not.toContain("different thread");
+  });
+
   it("re-judging applies only to the text that was judged (a later edit wins)", async () => {
     withEnv({ OPENAI_API_KEY: "sk-test" });
     const t = makeTest();

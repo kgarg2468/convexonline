@@ -14,6 +14,14 @@ const MAX_PAGE_CHARS = 200_000;
 const MAX_TOTAL_CHARS = 600_000;
 const MAX_INQUIRY_CHARS = 20_000;
 
+/**
+ * The guest text the drafter sees and the judge is later shown as guest
+ * context: one builder so both stay byte-identical for the same inbound.
+ */
+function inquiryFor(subject: string, text: string): string {
+  return `Subject: ${subject}\n\n${text}`.slice(0, MAX_INQUIRY_CHARS);
+}
+
 export type Snapshot = {
   inn: { _id: Id<"inns">; isDemo: boolean; timezone: string };
   thread: { _id: Id<"threads">; subject: string; lastInboundMessageId: Id<"messages"> | null };
@@ -257,7 +265,7 @@ export const generateForThread = internalAction({
       return null;
     }
     const currentDate = currentDateIn(snap.inn.timezone);
-    const inquiry = `Subject: ${snap.thread.subject}\n\n${snap.inbound.text}`.slice(0, MAX_INQUIRY_CHARS);
+    const inquiry = inquiryFor(snap.thread.subject, snap.inbound.text);
     let generated;
     try {
       generated = await generateGroundedDraft({
@@ -292,6 +300,9 @@ export const generateForThread = internalAction({
           statements: okClaims.map((c) => ({ statement: c.statement, quote: c.quote, url: c.url })),
           currentDate,
           model: JUDGE_MODEL_DEFAULT,
+          // The exact text the drafter answered, so the judge can tell a
+          // faithful acknowledgment of the guest's own words from a claim.
+          guestContext: inquiry,
         });
         judge = { entailed: j.entailed, promised: j.promised };
         verdict = { entailed: j.entailed, promisedOutsideQuotes: j.promised, notes: j.notes };
@@ -356,6 +367,14 @@ export const draftForReverify = internalQuery({
       .query("claims")
       .withIndex("by_draft", (q) => q.eq("draftId", draftId))
       .collect();
+    // Guest context is the inbound this draft is bound to (the one the drafter
+    // answered), never the thread's newest message, and only if it really
+    // belongs to this thread. Otherwise the judge runs source-only.
+    const inbound = draft.replyToMessageId ? await ctx.db.get(draft.replyToMessageId) : null;
+    const guestContext =
+      inbound && inbound.threadId === draft.threadId && inbound.direction === "in"
+        ? inquiryFor(thread.subject, inbound.text)
+        : undefined;
     return {
       status: draft.status,
       answer: draft.answer,
@@ -363,6 +382,7 @@ export const draftForReverify = internalQuery({
       isDemo: inn.isDemo,
       timezone: inn.timezone,
       claims: claims.filter((c) => c.status === "ok").map((c) => ({ statement: c.statement, quote: c.quote, url: c.url })),
+      guestContext,
     };
   },
 });
@@ -418,6 +438,7 @@ export const reverify = internalAction({
         statements: snap.claims,
         currentDate: currentDateIn(snap.timezone),
         model: JUDGE_MODEL_DEFAULT,
+        guestContext: snap.guestContext,
       });
       await ctx.runMutation(internal.generation.applyReverify, {
         draftId,

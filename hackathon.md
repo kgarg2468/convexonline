@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T10:55:07Z
+- **Last updated:** 2026-09-21T16:22:37Z
 
 ## Log
 
@@ -40,8 +40,28 @@ Added isolated demo sends and a policy-change fixture with three affected replie
 The integration has 188 passing offline tests. All 16 browser scenarios pass against the production deployment, covering simulated replies, correction approval and delivery, staff facts, isolated sessions and mobile layouts. Production frontend and backend are deployed on Convex.
 Evidence: `convex/inbound.ts`, `convex/generation.ts`, `convex/ingest.ts`, `convex/outbox.ts`, `convex/corrections.ts`, `convex/demo.ts`, `tests/`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 0f55ba9
 Rejected scraped target error pages before storing source versions and preserved the current email turn when delayed older webhooks arrive. Added regression coverage; 192 offline tests pass.
 Production verification completed a real Firecrawl crawl, signed AgentMail inbound delivery, OpenAI draft and independent judge, staff-authorized send, and threaded reply between owned test inboxes. The run reused an existing project inbox because the provider account had no capacity for another inbox.
 An unsupported question correctly asked for a staff fact. Regeneration introduced an unsupported inference, which the judge blocked; removing that inference through staff editing passed re-verification. The second reply was left unsent.
 Evidence: `convex/providers/firecrawl.ts`, `convex/inbound.ts`, `tests/providers.test.ts`, `tests/ingest.test.ts`, `tests/webhook.test.ts`, `tests/send.test.ts`, `convex/generation.ts`, `convex/drafts.ts`.
+
+### 2026-09-21 - 0aef0be
+Property creation now rejects unusable website URLs and time zones before inserting records. HTTPS scheme matching accepts either case in the browser.
+Validation passed locally and in PR CI; the browser pattern was corrected after automated review.
+Evidence: `convex/inns.ts`, `src/workspace/onboarding/InnPicker.tsx`, `tests/access.test.ts`.
+
+### 2026-09-21 - 6e8ea99
+Email dispatch rechecks the reserving staff member's current authority and the captured inbox immediately before contacting AgentMail. Removed staff and changed inbox bindings cannot authorize a reserved send. Accepted deliveries retain their actual sender in history.
+Sixteen integration tests cover dispatch authority and changes during delivery. PR CI and automated review passed before merge.
+Evidence: `convex/outbox.ts`, `tests/dispatchAuthority.test.ts`.
+
+### 2026-09-21 - 26ca371
+Reply-parent lookup now uses an inn-scoped Message-ID index. Messages written by every app path carry the owning inn, and a batched internal migration fills that field on older rows.
+Automated review caught an unbounded scan; it was replaced with an indexed lookup. Tests cover foreign copies, duplicate IDs, and paginated, repeatable backfill.
+Evidence: `convex/inbound.ts`, `convex/schema.ts`, `convex/migrations.ts`, `tests/webhook.test.ts`, `tests/messageBackfill.test.ts`.
+
+### 2026-09-21 - deed589
+Owners can retry an incomplete guest inbox connection from Settings. Initial setup and repair require a configured provider and registered webhook, and readiness still comes from the server.
+Type checking and lint passed. Review identified and prompted the missing-webhook guard.
+Evidence: `src/workspace/settings/SettingsView.tsx`, `convex/inbox.ts`.
