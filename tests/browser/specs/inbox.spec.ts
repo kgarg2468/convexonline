@@ -5,6 +5,17 @@ test.describe("inbox", () => {
   test("claim → edit → explicit staff-authored simulated send, with delivery state from the outbox", async ({ page }) => {
     await enterDemo(page);
     await openInbox(page);
+
+    // Statistics strip from the seed: six replies were sent 14 minutes after
+    // their inquiry (convex/demo.ts), one thread is ready and one needs a
+    // staff fact. "Replies today" follows the inn's local calendar day on the
+    // real server clock, so only its shape (a count plus the zone) is checked;
+    // exact per-day send counts are covered by the backend aggregate tests.
+    const statsStrip = page.getByRole("list", { name: "Inbox statistics" });
+    await expect(statsStrip).toContainText("Median first response 14 min");
+    await expect(statsStrip).toContainText("2 open (1 need you, 1 ready)");
+    await expect(statsStrip).toContainText(/\d+ (reply|replies) today \(inn time, /);
+
     await openThread(page, THREADS.ready);
 
     // Unclaimed: read-only draft, no editor, send blocked and explained.
@@ -69,6 +80,13 @@ test.describe("inbox", () => {
     await expect(page.locator(".fd-msg--out")).toContainText("P.S. Smoke test edit.");
     // The thread's own status pill (the queue's filter has a hidden "Waiting on guest" option too).
     await expect(page.locator(".fd-thread__head").getByText("Waiting on guest", { exact: true })).toBeVisible();
+
+    // The strip follows the send: one fewer open thread, and the new first
+    // response (hours after a 3-hour-old inquiry) leaves the median of the six
+    // 14-minute seeds unchanged. "Replies today" keeps its shape.
+    await expect(statsStrip).toContainText(/\d+ (reply|replies) today \(inn time, /);
+    await expect(statsStrip).toContainText("Median first response 14 min");
+    await expect(statsStrip).toContainText("1 open (1 need you, 0 ready)");
   });
 
   test("citations show the verbatim quote, the source path and whether the source is still current", async ({ page }) => {

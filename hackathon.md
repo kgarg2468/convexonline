@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T20:38:26Z
+- **Last updated:** 2026-09-21T21:35:00Z
 
 ## Log
 
@@ -120,7 +120,14 @@ Added per-inn model budgets using the registered Convex rate-limiter component. 
 All 327 offline tests pass, including 13 actual-component budget tests. Root and standalone browser type checks, lint and the production build pass. CI and automated review passed; the frontend and backend are deployed on Convex. These tests mock provider transport.
 Evidence: `convex/modelBudget.ts`, `convex/generation.ts`, `convex/corrections.ts`, `tests/modelBudget.test.ts`, `src/workspace/inbox/ThreadDetail.tsx`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 380e2bd
 Added four inn-scoped aggregate instances for thread states, first-response times, sent replies and correction states. App mutations update them transactionally. A persistent, repeatable migration backfills 100 source rows per batch; statistics retain accurate table counts until every backfill finishes. “Sent today” now follows the inn's local calendar day and refreshes without requiring a database write.
 All 341 offline tests pass, including interleaved writes during backfill, tenant isolation, normal and correction sends, medians, and daylight-saving boundaries. Root and standalone browser types, lint and build pass. The prior rate-limit deployment also passed 28 production browser scenarios; two optional screenshot tests were skipped.
+CI and automated review passed, and both frontend and backend are deployed. Production backfill completed 1,672 threads, 1,304 sent replies and 171 corrections. A read-only audit found no count or namespace mismatches across all 207 stored inn namespaces, including isolated demo/test inns; the owned live inbox's statistics also matched its source rows. These counts describe verification data, not customer usage.
 Evidence: `convex/aggregates.ts`, `convex/functions.ts`, `convex/migrations.ts`, `convex/lib/localDay.ts`, `tests/aggregates.test.ts`, `tests/localDay.test.ts`.
+
+### 2026-09-21 - working tree
+Added an inbox statistics strip showing replies sent on the inn's local day, median first-response time and the open queue. Empty inns explicitly show no first responses yet; desktop and mobile layouts wrap the metrics.
+Root and browser type checks, lint and build pass. Twelve targeted browser scenarios pass against the production backend, including the queue changing after a simulated send, empty-inn statistics, owner website editing and mobile navigation. An initial run encountered a local network disconnect; the unchanged rerun passed all twelve scenarios.
+Automated review caught a live-midnight race in the browser count assertion. The browser now checks count rendering and the queue transition; controlled-clock backend tests retain exact daily-count coverage. All five targeted inbox browser flows pass after the fix.
+Evidence: `src/workspace/inbox/InboxStats.tsx`, `tests/browser/specs/inbox.spec.ts`, `tests/browser/specs/inn-website.spec.ts`.
