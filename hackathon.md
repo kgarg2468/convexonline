@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:30:00Z
+- **Last updated:** 2026-09-21T23:33:00Z
 
 ## Log
 
@@ -172,5 +172,5 @@ Evidence: `public/front-desk-demo.mp4`, `public/front-desk-demo-poster.png`, `do
 
 ### 2026-09-21 - working tree
 Published the reviewed MP4 and poster on Convex; the downloaded video matches the committed SHA-256 and remains 150.27 seconds. The app, health endpoint and poster return HTTP 200.
-The static host serves MP4 with a generic binary content type, so added a standalone viewer with native playback controls, an explicit video source type and a download fallback. Ten local Chromium checks passed, including metadata, playback, seeking to two minutes, and no console or page errors. Updated submission links to the viewer. Production viewer playback is checked after deployment.
-Evidence: `public/demo.html`, `public/front-desk-demo.mp4`, `docs/submission.md`.
+The static host serves MP4 with a generic binary content type, so added a standalone viewer with native playback controls, an explicit video source type and a download fallback. Ten local Chromium checks passed, including metadata, playback, seeking to two minutes, and no console or page errors. Updated submission links to the viewer. Automated review identified the missing text alternative; the viewer now links the exact narration transcript. Production viewer playback is checked after deployment.
+Evidence: `public/demo.html`, `public/front-desk-demo.mp4`, `public/front-desk-demo-transcript.txt`, `docs/submission.md`.
