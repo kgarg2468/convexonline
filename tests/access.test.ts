@@ -99,4 +99,79 @@ describe("inn creation", () => {
       /forbidden/,
     );
   });
+
+  it("refuses sites that ingestion could never crawl, without inserting anything", async () => {
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const rejected: Array<[string, RegExp]> = [
+      ["http://plain.example", /https:\/\//],
+      ["ftp://x.example", /https:\/\//],
+      ["https://user:pw@x.example", /username or password/],
+      ["https://localhost", /public https/],
+      ["https://intranet.local", /public https/],
+      ["https://127.0.0.1", /public https/],
+      ["https://10.0.0.5", /public https/],
+      ["https://192.168.1.1", /public https/],
+      ["https://[::1]", /public https/],
+      ["https://inn", /public https/],
+      ["   ", /required/],
+    ];
+    for (const [siteUrl, message] of rejected) {
+      const err = await owner.as.mutation(api.inns.create, { name: "X", siteUrl }).catch((e: unknown) => e);
+      expect(err, siteUrl).toBeInstanceOf(Error);
+      expect((err as Error).message, siteUrl).toMatch(/invalid/);
+      expect((err as Error).message, siteUrl).toMatch(message);
+    }
+    const inns = await t.run((ctx) => ctx.db.query("inns").collect());
+    const memberships = await t.run((ctx) => ctx.db.query("memberships").collect());
+    expect(inns).toEqual([]);
+    expect(memberships).toEqual([]);
+  });
+
+  it("refuses time zones that generation cannot format, without inserting anything", async () => {
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    for (const timezone of ["Mars/Olympus_Mons", "PST8PDT-ish", "not a zone", "America/Los Angeles"]) {
+      await expect(
+        owner.as.mutation(api.inns.create, { name: "X", siteUrl: "https://x.example", timezone }),
+      ).rejects.toThrow(/invalid.*not recognized/);
+    }
+    expect(await t.run((ctx) => ctx.db.query("inns").collect())).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query("memberships").collect())).toEqual([]);
+  });
+
+  it("keeps a valid IANA time zone and defaults a blank one", async () => {
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const explicit = await owner.as.mutation(api.inns.create, {
+      name: "East",
+      siteUrl: "https://east.example/",
+      timezone: " Europe/Lisbon ",
+    });
+    expect((await owner.as.query(api.inns.get, { innId: explicit })).inn.timezone).toBe("Europe/Lisbon");
+
+    const blank = await owner.as.mutation(api.inns.create, { name: "Blank", siteUrl: "https://blank.example", timezone: "  " });
+    expect((await owner.as.query(api.inns.get, { innId: blank })).inn.timezone).toBe("America/Los_Angeles");
+
+    const omitted = await owner.as.mutation(api.inns.create, { name: "Omitted", siteUrl: "https://omitted.example" });
+    expect((await owner.as.query(api.inns.get, { innId: omitted })).inn.timezone).toBe("America/Los_Angeles");
+
+    // Legitimate public https URLs with paths and ports survive unchanged in substance.
+    const withPath = await owner.as.mutation(api.inns.create, {
+      name: "Path",
+      siteUrl: "https://www.harbor-inn.example:8443/rooms?season=summer",
+    });
+    expect((await owner.as.query(api.inns.get, { innId: withPath })).inn.siteUrl).toBe(
+      "https://www.harbor-inn.example:8443/rooms?season=summer",
+    );
+    // The scheme is case-insensitive: the URL parser normalizes it, so the UI must not be stricter.
+    const upperScheme = await owner.as.mutation(api.inns.create, {
+      name: "Upper",
+      siteUrl: "HTTPS://Upper.Example/Rooms",
+    });
+    expect((await owner.as.query(api.inns.get, { innId: upperScheme })).inn.siteUrl).toBe(
+      "https://upper.example/Rooms",
+    );
+    expect(await t.run((ctx) => ctx.db.query("memberships").collect())).toHaveLength(5);
+  });
 });
