@@ -15,6 +15,7 @@
     "deploy": "npx convex deploy -y && npx @convex-dev/static-hosting upload --build --prod"
   },
   "dependencies": {
+    "@agentmail/convex": "0.1.0",
     "@auth/core": "^0.41.3",
     "@convex-dev/aggregate": "0.3.1",
     "@convex-dev/auth": "^0.0.95",

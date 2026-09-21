@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { bareAddress } from "./lib/inboundPayload";
 import { cancelFollowUps } from "./followUps";
+import { archiveInbound } from "./agentmailArchive";
 
 export type InboundOutcome = "stored" | "duplicate" | "unknown_inbox";
 
@@ -68,6 +69,9 @@ export const receive = internalMutation({
       providerMessageId: args.providerMessageId,
       receivedAt: Date.now(),
     });
+    // Durable component archive of this same delivery, in this transaction:
+    // only after the inn is known to own the inbox and the event is new here.
+    await archiveInbound(ctx, inn._id, args);
 
     const guestEmail = bareAddress(args.from);
     const snippet = args.text.replace(/\s+/g, " ").trim().slice(0, 200);

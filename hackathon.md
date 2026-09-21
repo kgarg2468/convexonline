@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T21:35:00Z
+- **Last updated:** 2026-09-21T21:38:22Z
 
 ## Log
 
@@ -126,8 +126,13 @@ All 341 offline tests pass, including interleaved writes during backfill, tenant
 CI and automated review passed, and both frontend and backend are deployed. Production backfill completed 1,672 threads, 1,304 sent replies and 171 corrections. A read-only audit found no count or namespace mismatches across all 207 stored inn namespaces, including isolated demo/test inns; the owned live inbox's statistics also matched its source rows. These counts describe verification data, not customer usage.
 Evidence: `convex/aggregates.ts`, `convex/functions.ts`, `convex/migrations.ts`, `convex/lib/localDay.ts`, `tests/aggregates.test.ts`, `tests/localDay.test.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 7410274
 Added an inbox statistics strip showing replies sent on the inn's local day, median first-response time and the open queue. Empty inns explicitly show no first responses yet; desktop and mobile layouts wrap the metrics.
 Root and browser type checks, lint and build pass. Twelve targeted browser scenarios pass against the production backend, including the queue changing after a simulated send, empty-inn statistics, owner website editing and mobile navigation. An initial run encountered a local network disconnect; the unchanged rerun passed all twelve scenarios.
-Automated review caught a live-midnight race in the browser count assertion. The browser now checks count rendering and the queue transition; controlled-clock backend tests retain exact daily-count coverage. All five targeted inbox browser flows pass after the fix.
+Automated review caught a live-midnight race in the browser count assertion. The browser now checks count rendering and the queue transition; controlled-clock backend tests retain exact daily-count coverage. All five targeted inbox browser flows pass after the fix. CI and follow-up automated review passed; the frontend is deployed on Convex.
 Evidence: `src/workspace/inbox/InboxStats.tsx`, `tests/browser/specs/inbox.spec.ts`, `tests/browser/specs/inn-website.spec.ts`.
+
+### 2026-09-21 - working tree
+Registered the AgentMail Convex component for durable inbound event and message archival, in the same transaction as the app receipt. Only verified deliveries for owned live inboxes are archived after tenant-scoped deduplication. Archive bodies and metadata are bounded; oversized provider identities use collision-resistant hashes while app reply identities remain unchanged. Provisioning and guarded sending retain the direct REST adapter.
+All 353 offline tests pass, including 12 archive tests exercising the actual component, signed webhooks, tenant isolation, duplicate deliveries, oversized identities and transaction rollback. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. Provider transport is mocked in these tests. The preceding inbox-statistics deployment passed 28 production browser scenarios, with two optional screenshot captures skipped.
+Evidence: `convex/agentmailArchive.ts`, `convex/inbound.ts`, `convex/convex.config.ts`, `tests/agentmailArchive.test.ts`.

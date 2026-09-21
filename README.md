@@ -18,6 +18,9 @@ frontend and backend are hosted on Convex.
   mode (see [HTTP routing](#http-routing)).
 - Convex Auth: password sign-in for staff, anonymous sign-in for the judge demo.
   Demo visitors get a private seeded inn and can never send live mail.
+- The AgentMail Convex component durably archives accepted inbound events and
+  messages in the same transaction as the app receipt. Inbox provisioning and
+  guarded outbound delivery use the direct AgentMail REST adapter.
 - React 19 + Vite + TypeScript frontend.
 - Vitest + `convex-test` for backend tests.
 - The Convex rate-limiter component shares an OpenAI operation budget across
@@ -61,7 +64,10 @@ separate from real staff accounts and never sends mail.
 1. AgentMail posts `message.received` to `/api/agentmail/webhook`. The raw body is
    verified against `AGENTMAIL_WEBHOOK_SECRET` (Standard Webhooks headers), the
    inbox id is mapped to its inn, and the event and message ids are deduped per
-   inn. The message joins its thread (provider thread id, then `In-Reply-To`),
+   inn. Accepted events are archived by `@agentmail/convex` with an inn-scoped
+   event identity and bounded metadata; unknown and demo inboxes are excluded.
+   The component archive is internal, with no public mail-reading endpoint.
+   The message joins its thread (provider thread id, then `In-Reply-To`),
    and advances the current turn only when it is newer. Older deliveries remain
    in history; newer deliveries supersede unsent drafts, cancel follow-ups, and
    schedule generation.
