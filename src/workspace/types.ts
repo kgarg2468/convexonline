@@ -293,6 +293,8 @@ export type Correction = {
 export type UnaffectedControl = {
   claimId: Id<"claims">;
   threadId: Id<"threads">;
+  /** The original sent reply of the claim's draft (never a corrective email); the strip counts distinct values. */
+  sentReplyId: Id<"sentReplies">;
   subject: string;
   statement: string;
   quote: string;

@@ -66,6 +66,60 @@ async function seedSentInn(t: T) {
   return { owner, ...inn, pet: { ...pet, ...petSent }, checkin: { ...checkin, ...checkinSent } };
 }
 
+/** Both quoted passages change: the fee and the check-in time. */
+const V4 = "# Policies\n\nDogs are welcome for a $40 per night pet fee.\n\nCheck-in is from 4:00 PM.\n";
+
+type Seeded = Awaited<ReturnType<typeof seedSentInn>>;
+type Ctx = Parameters<Parameters<T["run"]>[0]>[0];
+
+/** One more verified page claim on an existing (already sent) draft. */
+async function insertClaim(ctx: Ctx, s: Seeded, threadId: Id<"threads">, draftId: Id<"drafts">, quote: string) {
+  return await ctx.db.insert("claims", {
+    draftId,
+    threadId,
+    innId: s.innId,
+    statement: quote,
+    pageId: s.pageId,
+    pageVersionId: s.versionId,
+    url: "https://seagull.example/policies",
+    quote,
+    verified: true,
+    verifyMethod: "strict",
+    status: "ok",
+  });
+}
+
+/** A further sent reply in an existing thread, with one claim per quote. */
+async function seedReply(t: T, s: Seeded, threadId: Id<"threads">, messageId: Id<"messages">, answer: string, quotes: string[]) {
+  return await t.run(async (ctx) => {
+    const draftId = await ctx.db.insert("drafts", {
+      threadId,
+      replyToMessageId: messageId,
+      class: "answerable",
+      answer,
+      abstain: false,
+      status: "sent",
+      model: "test",
+      verifiedText: answer,
+      textSource: "model",
+    });
+    const claimIds = [];
+    for (const quote of quotes) claimIds.push(await insertClaim(ctx, s, threadId, draftId, quote));
+    const sentReplyId = await ctx.db.insert("sentReplies", {
+      threadId,
+      innId: s.innId,
+      draftId,
+      sentBy: s.owner.userId,
+      sentAt: Date.now(),
+      kind: "reply",
+      text: answer,
+      textSource: "model",
+      simulated: false,
+    });
+    return { draftId, claimIds, sentReplyId };
+  });
+}
+
 const pending = (_t: T, owner: Awaited<ReturnType<typeof signedInUser>>, innId: Id<"inns">) =>
   owner.as.query(api.corrections.list, { innId, status: "needs_review" });
 
@@ -388,6 +442,112 @@ describe("corrections on real inns", () => {
     await anon2.as.mutation(api.corrections.review, { correctionId: c2._id, decision: "approve", proposedText: "Fee is now $40." });
     await expect(anon2.as.mutation(api.corrections.send, { correctionId: c2._id })).rejects.toThrow(/live_mail_forbidden/);
     expect(await t2.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
+  });
+
+  it("review counts are per sent reply: two changed passages in one reply share one sentReplyId, a second reply in the same thread keeps its own", async () => {
+    withEnv({ OPENAI_API_KEY: undefined });
+    const t = makeTest();
+    const s = await seedSentInn(t);
+    // The pet thread gets a second reply that also quotes check-in, and the
+    // first reply gains a check-in claim: one thread, two sent replies.
+    const petCheckin = await t.run((ctx) => insertClaim(ctx, s, s.pet.threadId, s.pet.draftId, "Check-in is from 3:00 PM."));
+    const later = await seedReply(t, s, s.pet.threadId, s.pet.messageId, "Check-in is from 3:00 PM.", ["Check-in is from 3:00 PM."]);
+    expect(later.sentReplyId).not.toBe(s.pet.sentReplyId);
+
+    const result = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V4 });
+    // Four claims changed (fee + three check-ins) across three replies.
+    expect(result).toMatchObject({ affected: 4, unaffected: 0, affectedReplies: 3, unaffectedReplies: 0 });
+    const open = await pending(t, s.owner, s.innId);
+    expect(open).toHaveLength(4);
+    const byReply = new Map<string, Id<"claims">[]>();
+    for (const c of open) byReply.set(c.sentReplyId, [...(byReply.get(c.sentReplyId) ?? []), c.claimId]);
+    expect(byReply.size).toBe(3);
+    expect(byReply.get(s.pet.sentReplyId)?.sort()).toEqual([s.pet.claimId, petCheckin].sort());
+    expect(byReply.get(later.sentReplyId)).toEqual([later.claimIds[0]]);
+    expect(byReply.get(s.checkin.sentReplyId)).toEqual([s.checkin.claimId]);
+    // Both replies of the pet thread carry the same thread id: counting threads would report 2, not 3.
+    expect(new Set(open.map((c) => c.threadId)).size).toBe(2);
+    expect(await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId })).toEqual([]);
+  });
+
+  it("a sent reply with one vanished and one surviving quote is affected only, never a control, until every affected claim is corrected or restored", async () => {
+    withEnv({ OPENAI_API_KEY: undefined, AGENTMAIL_API_KEY: "am-test" });
+    const t = makeTest();
+    const s = await seedSentInn(t);
+    const petCheckin = await t.run((ctx) => insertClaim(ctx, s, s.pet.threadId, s.pet.draftId, "Check-in is from 3:00 PM."));
+    const later = await seedReply(t, s, s.pet.threadId, s.pet.messageId, "Check-in is from 3:00 PM.", ["Check-in is from 3:00 PM."]);
+    const controlsNow = async () => {
+      const controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
+      return { controls, replies: new Set(controls.map((c) => c.sentReplyId)) };
+    };
+
+    const result = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V2 });
+    // The first pet reply lost the fee but kept check-in: one affected reply, two control replies.
+    expect(result).toMatchObject({ affected: 1, unaffected: 3, affectedReplies: 1, unaffectedReplies: 2 });
+    const [c] = await pending(t, s.owner, s.innId);
+    expect(c.sentReplyId).toBe(s.pet.sentReplyId);
+    let { controls, replies } = await controlsNow();
+    // The surviving check-in claim of the affected reply is not a control row: its reply is under review.
+    expect(controls.map((x) => x.claimId)).not.toContain(petCheckin);
+    expect(controls.map((x) => x.claimId).sort()).toEqual([later.claimIds[0], s.checkin.claimId].sort());
+    expect([...replies].sort()).toEqual([later.sentReplyId, s.checkin.sentReplyId].sort());
+    // The later reply of the same thread is a control with its own id, so the
+    // thread appears on both sides only through distinct replies.
+    expect(controls.find((x) => x.threadId === s.pet.threadId)?.sentReplyId).toBe(later.sentReplyId);
+    // Version checks and quotes are unchanged by the reply-level contract.
+    for (const x of controls) expect(x.quote).toBe("Check-in is from 3:00 PM.");
+    const claims = await t.run((ctx) => ctx.db.query("claims").collect());
+    for (const id of [petCheckin, later.claimIds[0], s.checkin.claimId]) {
+      expect(claims.find((k) => k._id === id)).toMatchObject({ status: "ok", checkedAgainstVersionId: result.pageVersionId });
+    }
+
+    // Approved but unsent: the claim is still needs_review, so the reply stays out of the controls.
+    await s.owner.as.mutation(api.threads.claim, { threadId: s.pet.threadId });
+    await s.owner.as.mutation(api.corrections.setText, { correctionId: c._id, proposedText: "Our pet fee is now $40 per night.", evidenceQuote: "$40 per night pet fee" });
+    await s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "approve" });
+    ({ controls, replies } = await controlsNow());
+    expect(replies.has(s.pet.sentReplyId)).toBe(false);
+    expect(replies.size).toBe(2);
+
+    // Sent: the claim is corrected against the current version, so the whole
+    // reply is a control again, listed under its ORIGINAL sent reply id (the
+    // corrective email is not a new control).
+    const { calls } = stubFetch([agentmailReplyRoute(() => json(200, { message_id: "msg_corr_out" }))]);
+    await s.owner.as.mutation(api.corrections.send, { correctionId: c._id });
+    await settle(t);
+    expect(calls).toHaveLength(1);
+    const detail = await s.owner.as.query(api.threads.get, { threadId: s.pet.threadId });
+    const corrective = detail.sentReplies.find((r) => r.kind === "correction")!;
+    expect(corrective).toBeDefined();
+    ({ controls, replies } = await controlsNow());
+    expect([...replies].sort()).toEqual([s.pet.sentReplyId, later.sentReplyId, s.checkin.sentReplyId].sort());
+    expect(replies.has(corrective._id)).toBe(false);
+    const petRows = controls.filter((x) => x.sentReplyId === s.pet.sentReplyId);
+    expect(petRows.map((x) => x.claimId).sort()).toEqual([s.pet.claimId, petCheckin].sort());
+    expect(petRows.find((x) => x.claimId === s.pet.claimId)?.quote).toBe("$40 per night pet fee");
+    expect(petRows.find((x) => x.claimId === petCheckin)?.quote).toBe("Check-in is from 3:00 PM.");
+    expect(await pending(t, s.owner, s.innId)).toEqual([]);
+  });
+
+  it("a dismissed correction keeps its reply out of the controls until the passage is restored", async () => {
+    withEnv({ OPENAI_API_KEY: undefined });
+    const t = makeTest();
+    const s = await seedSentInn(t);
+    const petCheckin = await t.run((ctx) => insertClaim(ctx, s, s.pet.threadId, s.pet.draftId, "Check-in is from 3:00 PM."));
+    await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V2 });
+    const [c] = await pending(t, s.owner, s.innId);
+    await s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "dismiss" });
+    expect(await pending(t, s.owner, s.innId)).toEqual([]);
+    let controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
+    // Dismissing resolves nothing about the claim: the reply is neither under review nor "still true".
+    expect(controls.map((x) => x.sentReplyId)).toEqual([s.checkin.sentReplyId]);
+    expect(controls.map((x) => x.claimId)).not.toContain(petCheckin);
+
+    const restored = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V1 + "\n" });
+    expect(restored).toMatchObject({ affected: 0, unaffected: 3, affectedReplies: 0, unaffectedReplies: 2 });
+    controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
+    expect(new Set(controls.map((x) => x.sentReplyId))).toEqual(new Set([s.pet.sentReplyId, s.checkin.sentReplyId]));
+    expect(controls.filter((x) => x.sentReplyId === s.pet.sentReplyId).map((x) => x.claimId).sort()).toEqual([s.pet.claimId, petCheckin].sort());
   });
 
   it("unsent drafts and other pages never produce corrections", async () => {

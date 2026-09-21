@@ -69,6 +69,15 @@ export const list = query({
  * controls shown beside affected replies in the review screen. A corrected
  * claim counts when the passage its sent correction rests on still holds; the
  * quote shown is then that passage, the last thing the guest was told.
+ *
+ * Each row carries the *original* sent reply of its draft (the same
+ * `sentReplies.by_draft` first row `recheckSentClaim` uses, so a corrective
+ * email never counts as a new control for the claim it corrected), and the UI
+ * counts distinct replies from it. A reply is only a control as a whole: when
+ * any claim of the same draft is still `needs_review` (including one whose
+ * correction is approved or dismissed but not yet sent or restored), none of
+ * that draft's claims are listed, so the reply never shows as both affected
+ * and "still true".
  */
 export const unaffectedControls = query({
   args: { innId: v.id("inns") },
@@ -78,6 +87,28 @@ export const unaffectedControls = query({
       .query("pages")
       .withIndex("by_inn", (q) => q.eq("innId", innId))
       .collect();
+    // Per draft: the original sent reply id, or null when the reply is not a
+    // control (never sent, or a sibling claim is still under review).
+    const replyByDraft = new Map<Id<"drafts">, Id<"sentReplies"> | null>();
+    const controlReplyFor = async (draftId: Id<"drafts">) => {
+      const cached = replyByDraft.get(draftId);
+      if (cached !== undefined) return cached;
+      const reply = await ctx.db
+        .query("sentReplies")
+        .withIndex("by_draft", (q) => q.eq("draftId", draftId))
+        .first();
+      let result: Id<"sentReplies"> | null = null;
+      if (reply) {
+        const unresolved = await ctx.db
+          .query("claims")
+          .withIndex("by_draft", (q) => q.eq("draftId", draftId))
+          .filter((q) => q.eq(q.field("status"), "needs_review"))
+          .first();
+        if (!unresolved) result = reply._id;
+      }
+      replyByDraft.set(draftId, result);
+      return result;
+    };
     const out = [];
     for (const page of pages) {
       if (!page.lastVersionId) continue;
@@ -93,10 +124,13 @@ export const unaffectedControls = query({
           if (!sent?.evidenceQuote) continue;
           quote = sent.evidenceQuote;
         } else if (claim.status !== "ok") continue;
+        const sentReplyId = await controlReplyFor(claim.draftId);
+        if (!sentReplyId) continue;
         const thread = await ctx.db.get(claim.threadId);
         out.push({
           claimId: claim._id,
           threadId: claim.threadId,
+          sentReplyId,
           subject: thread?.subject ?? "",
           statement: claim.statement,
           quote,

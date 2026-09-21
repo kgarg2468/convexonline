@@ -36,8 +36,13 @@ export function CorrectionsView({
   const approved = corrections.filter((c) => c.status === "approved");
   const reviewed = corrections.filter((c) => c.status === "sent" || c.status === "dismissed" || c.status === "superseded");
   const pagesTouched = new Set(open.map((c) => c.pageUrl)).size;
-  // Controls are listed per claim; the strip counts replies (threads), matching the affected count.
-  const controlReplies = new Set(controls.map((c) => c.threadId)).size;
+  // Cards are listed per claim (one sent reply with several changed passages
+  // yields several cards), but the strip counts sent replies: distinct
+  // `sentReplyId` on every side, so affected, approved and control numbers
+  // are comparable. The passage count is shown only when it differs.
+  const openReplies = new Set(open.map((c) => c.sentReplyId)).size;
+  const approvedReplies = new Set(approved.map((c) => c.sentReplyId)).size;
+  const controlReplies = new Set(controls.map((c) => c.sentReplyId)).size;
   // Before the demo's page edit there is nothing to show; the hero explains
   // the walkthrough and carries the only "Change the policy page" action.
   const untouched = corrections.length === 0 && controls.length === 0;
@@ -61,15 +66,22 @@ export function CorrectionsView({
 
       <div className="fd-strip" role="status">
         <span>
-          <strong>{open.length}</strong> {open.length === 1 ? "reply needs" : "replies need"} review
+          <strong>{openReplies}</strong> {openReplies === 1 ? "reply needs" : "replies need"} review
+          {open.length > openReplies ? ` (${open.length} passages)` : null}
         </span>
         {approved.length > 0 ? (
           <span>
-            <strong>{approved.length}</strong> approved, not sent
+            <strong>{approvedReplies}</strong>{" "}
+            {approvedReplies === 1
+              ? "reply has an approved correction"
+              : "replies have approved corrections"}
+            , not sent
+            {approved.length > approvedReplies ? ` (${approved.length} passages)` : null}
           </span>
         ) : null}
         <span>
           <strong>{controlReplies}</strong> {controlReplies === 1 ? "reply" : "replies"} re-checked and still true
+          {controls.length > controlReplies ? ` (${controls.length} passages)` : null}
         </span>
         {open.length > 0 ? (
           <span>
