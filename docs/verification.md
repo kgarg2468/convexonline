@@ -85,6 +85,27 @@ answerable inquiries became ready; eight were held. Forty-six of 47 assertions
 passed. The remaining party-size expectation was not stated in the guest message
 and was not changed to make the test pass. No mail was sent by this experiment.
 
+## Published demo video
+
+The [video viewer](https://outgoing-zebra-720.convex.site/demo.html) serves a
+150.27-second H.264/AAC video at 1280×900, with a linked exact narration transcript.
+It uses narrated captures of the real fictional-inn run, with test inbox addresses
+redacted. The video is 4,643,513 bytes; its published download matches SHA-256
+`241dabc01dd744222732a0e77d16bea8c0fcbb4f3c099e7baf8801a5e958b3f4`.
+
+Production verification found and fixed seeking snapping back to zero. The MP4
+now resolves through an exact app route to managed Convex storage, which supports
+byte ranges. The viewer uses a versioned URL to bypass the older cached proxy
+response. All ten production Chromium checks passed: page and video availability,
+duration, dimensions, format support, absence of media errors, actual playback,
+seeking to 120 seconds and continuing playback, and no console or page errors.
+Playback was muted for the automated check; the AAC track and its non-silent
+audio levels were checked separately.
+
+These checks ran with backend revision `7653f22` and frontend revision `b2f6538`.
+The app health endpoint returned HTTP 200, and the published transcript matched
+the committed text. No hackathon form or social post has been submitted.
+
 ## Limits and remaining external checks
 
 - The anonymous public demo uses seeded sources, fixture-generated drafts and
