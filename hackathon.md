@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:42:00Z
+- **Last updated:** 2026-09-21T23:48:00Z
 
 ## Log
 
@@ -175,7 +175,11 @@ Published the reviewed MP4 and poster on Convex; the downloaded video matches th
 The static host serves MP4 with a generic binary content type, so added a standalone viewer with native playback controls, an explicit video source type and a download fallback. Ten local Chromium checks passed, including metadata, playback, seeking to two minutes, and no console or page errors. Updated submission links to the viewer. Automated review identified the missing text alternative; the viewer now links the exact narration transcript. Production viewer playback is checked after deployment.
 Evidence: `public/demo.html`, `public/front-desk-demo.mp4`, `public/front-desk-demo-transcript.txt`, `docs/submission.md`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - fcea99f
 Production viewer checks established playback but exposed seeking snapping back to the start. The static-hosting proxy omits range support; the underlying managed Convex storage URL correctly returns 206 responses for byte ranges.
 Added an exact route for the demo MP4 that resolves only that current public asset and redirects to its storage URL with no-store caching. Missing files return 404 without SPA fallback. Six actual-component regression tests cover route precedence, redirect behavior, replacement uploads, missing assets and unchanged root routes. All 386 offline tests, types, lint and build pass. Production seeking will be rechecked after deploying the reviewed route.
 Evidence: `convex/http.ts`, `tests/videoRouting.test.ts`.
+
+### 2026-09-21 - working tree
+Deployed the reviewed range-support route. A fresh MP4 request redirects to Convex storage and returns the requested 1,024-byte range with HTTP 206. An older cached response still serves the unversioned URL, so the viewer's source and download links now share a version query to bypass that response. The video and transcript bytes are unchanged.
+Evidence: `public/demo.html`, `convex/http.ts`.
