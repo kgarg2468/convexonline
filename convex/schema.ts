@@ -339,4 +339,22 @@ export default defineSchema({
     dueAt: v.number(),
     status: v.union(v.literal("scheduled"), v.literal("cancelled"), v.literal("due"), v.literal("sent")),
   }).index("by_thread", ["threadId"]),
+
+  /**
+   * One-use staff invitations. Only the SHA-256 of the capability token is
+   * stored; the raw token exists solely in the creating action's return value.
+   */
+  teamInvites: defineTable({
+    innId: v.id("inns"),
+    tokenHash: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedBy: v.optional(v.id("users")),
+    usedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    label: v.optional(v.string()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_inn_expiresAt", ["innId", "expiresAt"]),
 });

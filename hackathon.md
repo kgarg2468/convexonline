@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T16:22:37Z
+- **Last updated:** 2026-09-21T16:35:00Z
 
 ## Log
 
@@ -65,3 +65,12 @@ Evidence: `convex/inbound.ts`, `convex/schema.ts`, `convex/migrations.ts`, `test
 Owners can retry an incomplete guest inbox connection from Settings. Initial setup and repair require a configured provider and registered webhook, and readiness still comes from the server.
 Type checking and lint passed. Review identified and prompted the missing-webhook guard.
 Evidence: `src/workspace/settings/SettingsView.tsx`, `convex/inbox.ts`.
+
+### 2026-09-21 - 3f175d5
+Normal drafting and staff-edit verification now give the independent judge the original guest email as bounded, untrusted context. It may support acknowledgment of personal travel details, but cannot establish an inn policy, price, availability or staff approval. Correction judging remains source-only.
+Validation: 228 offline tests pass. Five real-model probes accepted faithful acknowledgments and rejected forged approval, injected instructions and an unsupported price claim. The unchanged 40-fixture replay had zero unsafe-ready cases, six of six approval requests escalated, and 52 of 52 citations matched to source text. Sixteen of 24 answerable cases were ready; eight were held for staff. The raw harness passed 46 of 47 assertions: one fixture expects two guests from an email that states no headcount. The app leaves that count unknown.
+Evidence: `convex/providers/openai.ts`, `convex/generation.ts`, `tests/providers.test.ts`, `tests/generation.test.ts`.
+
+### 2026-09-21 - de145cd
+Deployed the merged audit fixes to the production Convex backend and frontend. Backfilled 507 existing messages with their owning inn using bounded, repeatable batches; no orphaned threads were found.
+Evidence: `convex/migrations.ts`, `convex/http.ts`, `convex/convex.config.ts`.
