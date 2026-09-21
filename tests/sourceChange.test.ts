@@ -13,10 +13,14 @@ describe("source change re-verification", () => {
 
     const result = await visitor.as.mutation(api.demo.changePolicyPage, { innId });
     expect(result.changeStatus).toBe("changed");
-    // Pet fee ($25 → $40) and the check-in window moved: four sent claims cite them.
-    // Cancellation and the lockbox-after-8pm sentence share pages but also changed/held as designed.
-    expect(result.affected).toBeGreaterThanOrEqual(3);
-    expect(result.unaffected).toBeGreaterThanOrEqual(1);
+    // Only the pet fee moved ($25 → $40): three sent replies cited it, three sent
+    // replies cite passages of the same page that did not change.
+    expect(result.affected).toBe(3);
+    expect(result.affectedReplies).toBe(3);
+    expect(result.unaffectedReplies).toBe(3);
+    expect(result.unaffected).toBeGreaterThanOrEqual(3);
+    const status = await visitor.as.query(api.demo.status, { innId });
+    expect(status).toMatchObject({ policyVersion: "changed", affectedReplies: 3, unaffectedReplies: 3, pendingCorrections: 3 });
 
     const corrections = await visitor.as.query(api.corrections.list, { innId, status: "needs_review" });
     expect(corrections).toHaveLength(result.affected);
@@ -26,6 +30,13 @@ describe("source change re-verification", () => {
     }
     const petFee = corrections.find((c) => c.oldQuote.includes("$25 per night pet fee"));
     expect(petFee?.newPassage).toContain("$40 per night pet fee");
+    // Fixture proposals are labelled as such and rest on a passage of the new version.
+    expect(petFee?.textSource).toBe("fixture");
+    expect(petFee?.proposedText).toContain("$40 per night pet fee");
+    expect(petFee?.evidenceQuote).toContain("$40 per night pet fee");
+    expect(petFee?.isCurrent).toBe(true);
+    // Check-in did not change: the late-arrival reply is a control, not a correction.
+    expect(corrections.some((c) => c.oldQuote.includes("Check-in is from"))).toBe(false);
 
     // The cancellation sentence did not change: it is a control, not a correction.
     const controls = await visitor.as.query(api.corrections.unaffectedControls, { innId });
@@ -72,6 +83,10 @@ describe("source change re-verification", () => {
     await expect(other.as.mutation(api.corrections.review, { correctionId: first._id, decision: "dismiss" })).rejects.toThrow(
       /forbidden/,
     );
+    // Without any proposal text there is nothing to approve.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first._id, { proposedText: undefined, evidenceQuote: undefined, textSource: undefined });
+    });
     await expect(visitor.as.mutation(api.corrections.review, { correctionId: first._id, decision: "approve" })).rejects.toThrow(
       /invalid/,
     );

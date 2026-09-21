@@ -15,5 +15,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["tests", "convex"]
+  "include": ["tests", "convex"],
+  "exclude": ["tests/browser"]
 }

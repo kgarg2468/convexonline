@@ -25,6 +25,7 @@ async function summarize(ctx: QueryCtx, thread: Doc<"threads">, now: number) {
     status: thread.status,
     stay: thread.stay ?? null,
     lastInboundAt: thread.lastInboundAt,
+    lastInboundMessageId: thread.lastInboundMessageId ?? null,
     claim: active
       ? {
           userId: thread.claimedBy!,
@@ -57,6 +58,7 @@ export const queue = query({
   },
 });
 
+/** Full-text search over subject, guest email and snippet. */
 export const search = query({
   args: { innId: v.id("inns"), text: v.string() },
   handler: async (ctx, { innId, text }) => {
@@ -65,12 +67,60 @@ export const search = query({
     if (!trimmed) return [];
     const threads = await ctx.db
       .query("threads")
-      .withSearchIndex("search_threads", (q) => q.search("snippet", trimmed).eq("innId", innId))
+      .withSearchIndex("search_threads", (q) => q.search("searchableText", trimmed).eq("innId", innId))
       .take(25);
     const now = Date.now();
     const out = [];
     for (const thread of threads) out.push(await summarize(ctx, thread, now));
     return out;
+  },
+});
+
+/** Real counts over the inn's tables (no aggregate component). */
+export const stats = query({
+  args: { innId: v.id("inns") },
+  handler: async (ctx, { innId }) => {
+    await requireInnAccess(ctx, innId);
+    const threads = await ctx.db
+      .query("threads")
+      .withIndex("by_inn_lastInbound", (q) => q.eq("innId", innId))
+      .collect();
+    const count = (s: Doc<"threads">["status"]) => threads.filter((t) => t.status === s).length;
+    const dayStart = Date.now() - 24 * 60 * 60 * 1000;
+    let sentTotal = 0;
+    let sentToday = 0;
+    for (const t of threads) {
+      const replies = await ctx.db
+        .query("sentReplies")
+        .withIndex("by_thread", (q) => q.eq("threadId", t._id))
+        .collect();
+      sentTotal += replies.length;
+      sentToday += replies.filter((r) => r.sentAt >= dayStart).length;
+    }
+    const pending = await ctx.db
+      .query("corrections")
+      .withIndex("by_inn_status", (q) => q.eq("innId", innId).eq("status", "needs_review"))
+      .collect();
+    const responseTimes = threads
+      .map((t) => t.firstResponseMs)
+      .filter((x): x is number => typeof x === "number")
+      .sort((a, b) => a - b);
+    const median =
+      responseTimes.length === 0
+        ? null
+        : responseTimes.length % 2 === 1
+          ? responseTimes[(responseTimes.length - 1) / 2]
+          : (responseTimes[responseTimes.length / 2 - 1] + responseTimes[responseTimes.length / 2]) / 2;
+    return {
+      open: count("new") + count("drafting") + count("needs_staff") + count("ready"),
+      needsStaff: count("needs_staff"),
+      ready: count("ready"),
+      waitingGuest: count("waiting_guest"),
+      sentToday,
+      sentTotal,
+      pendingCorrections: pending.length,
+      medianFirstResponseMs: median,
+    };
   },
 });
 
@@ -109,6 +159,39 @@ export const get = query({
         .collect();
       corrections.push(...forReply);
     }
+    const outbox = await ctx.db
+      .query("outbox")
+      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+      .collect();
+    const followUps = await ctx.db
+      .query("followUps")
+      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+      .collect();
+    const followUp = followUps.filter((f) => f.status === "scheduled" || f.status === "due").at(-1) ?? null;
+    const claimsOut = [];
+    for (const c of claims) {
+      let currentSource = true;
+      if (c.pageId && c.pageVersionId) {
+        const page = await ctx.db.get(c.pageId);
+        currentSource = page?.lastVersionId === c.pageVersionId;
+      } else if (c.staffFactId) {
+        const fact = await ctx.db.get(c.staffFactId);
+        currentSource = fact !== null && fact.supersededBy === undefined;
+      }
+      claimsOut.push({
+        _id: c._id,
+        statement: c.statement,
+        url: c.url,
+        quote: c.quote,
+        verified: c.verified,
+        verifyMethod: c.verifyMethod ?? null,
+        status: c.status,
+        source: c.staffFactId ? ("fact" as const) : ("page" as const),
+        pageVersionId: c.pageVersionId ?? null,
+        staffFactId: c.staffFactId ?? null,
+        currentSource,
+      });
+    }
     return {
       thread: await summarize(ctx, thread, Date.now()),
       inn: { _id: inn._id, name: inn.name, isDemo: inn.isDemo },
@@ -130,25 +213,44 @@ export const get = query({
             status: draft.status,
             model: draft.model,
             judgeVerdict: draft.judgeVerdict ?? null,
+            verifiedText: draft.verifiedText ?? null,
+            statusReason: draft.statusReason ?? null,
+            textSource: draft.textSource ?? "model",
+            replyToMessageId: draft.replyToMessageId ?? null,
           }
         : null,
-      claims: claims.map((c) => ({
-        _id: c._id,
-        statement: c.statement,
-        url: c.url,
-        quote: c.quote,
-        verified: c.verified,
-        verifyMethod: c.verifyMethod ?? null,
-        status: c.status,
-      })),
+      claims: claimsOut,
       facts: facts.map((f) => ({ _id: f._id, question: f.question, answer: f.answer, authorName: f.authorName })),
-      sentReplies: sentReplies.map((r) => ({ _id: r._id, sentAt: r.sentAt })),
+      sentReplies: sentReplies.map((r) => ({
+        _id: r._id,
+        sentAt: r.sentAt,
+        kind: r.kind ?? "reply",
+        text: r.text ?? null,
+        textSource: r.textSource ?? null,
+        simulated: r.simulated ?? false,
+        outboxId: r.outboxId ?? null,
+        correctionId: r.correctionId ?? null,
+      })),
       corrections: corrections.map((c) => ({
         _id: c._id,
         status: c.status,
         oldQuote: c.oldQuote,
         newPassage: c.newPassage ?? null,
+        proposedText: c.proposedText ?? null,
       })),
+      outbox: outbox.map((o) => ({
+        _id: o._id,
+        kind: o.kind,
+        draftId: o.draftId ?? null,
+        correctionId: o.correctionId ?? null,
+        status: o.status,
+        errorKind: o.errorKind ?? null,
+        errorMessage: o.errorMessage ?? null,
+        reservedAt: o.reservedAt,
+        sentAt: o.sentAt ?? null,
+        simulated: o.simulated,
+      })),
+      followUp: followUp ? { dueAt: followUp.dueAt, status: followUp.status } : null,
     };
   },
 });

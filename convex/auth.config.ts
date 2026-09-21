@@ -1,19 +1,13 @@
 // Convex Auth issues RS256 JWTs with iss = CONVEX_SITE_URL and aud = "convex".
-// Because app HTTP routes are mounted under /api (see convex.config.ts), the
-// OIDC discovery document is not at the issuer root, so the JWKS URL is given
-// explicitly instead of relying on discovery.
-const siteUrl = process.env.CONVEX_SITE_URL;
-if (!siteUrl) {
-  throw new Error("CONVEX_SITE_URL is not set on this deployment");
-}
-
+// The standard provider entry resolves the signing keys through OIDC discovery
+// at `${CONVEX_SITE_URL}/.well-known/openid-configuration`, which convex/http.ts
+// serves at the deployment root (see convex.config.ts for why routes are root
+// mounted). Do not switch to a `customJwt` provider: Convex Auth tokens carry
+// no `kid` header and customJwt requires one ("JWT may be missing a kid").
 export default {
   providers: [
     {
-      type: "customJwt",
-      issuer: siteUrl,
-      jwks: `${siteUrl}/api/.well-known/jwks.json`,
-      algorithm: "RS256",
+      domain: process.env.CONVEX_SITE_URL,
       applicationID: "convex",
     },
   ],

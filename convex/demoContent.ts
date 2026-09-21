@@ -1,7 +1,9 @@
 /**
  * Canned content for the per-visitor demo inn. Everything here is fictional.
  * The policies page has two versions so a judge can trigger a source change:
- * the pet fee and the check-in window move, the cancellation rule does not.
+ * only the pet fee moves ($25 → $40, one dog per room). Check-in, cancellation
+ * and smoking stay word-for-word, so the three sent replies citing them are
+ * the unaffected controls beside the three replies that cited the fee.
  */
 
 export const DEMO_INN = {
@@ -33,7 +35,7 @@ export const POLICIES_V2 = `# Policies
 
 ## Check-in and check-out
 
-Check-in is from 4:00 PM to 9:00 PM. Check-out is by 11:00 AM. Please email us if you expect to arrive after 9:00 PM so we can leave a lockbox code.
+Check-in is from 3:00 PM to 8:00 PM. Check-out is by 11:00 AM. Please email us if you expect to arrive after 8:00 PM so we can leave a lockbox code.
 
 ## Pets
 
@@ -187,13 +189,19 @@ export const DEMO_THREADS: DemoThread[] = [
   {
     guestEmail: "lin.family@example.com",
     subject: "Breakfast and Wi-Fi?",
-    inbound: "Is breakfast included, and is there Wi-Fi in the rooms? Traveling with a laptop, sadly.",
+    inbound:
+      "Is breakfast included, and is there Wi-Fi in the rooms? Traveling with a laptop, sadly. Also, can I smoke on the balcony?",
     hoursAgo: 20,
     draft: {
       kind: "sent",
       answer:
-        "Hi! Yes on both. A full breakfast is served from 8:00 AM to 10:00 AM in the dining room, and every room has complimentary Wi-Fi.",
+        "Hi! Yes on both. A full breakfast is served from 8:00 AM to 10:00 AM in the dining room, and every room has complimentary Wi-Fi. The inn is entirely non-smoking, including balconies and the garden.",
       claims: [
+        {
+          statement: "Smoking is not allowed anywhere, including balconies.",
+          page: "policies",
+          quote: "The inn is entirely non-smoking, including balconies and the garden.",
+        },
         {
           statement: "Breakfast is served 8:00 to 10:00 AM.",
           page: "rooms",
@@ -203,6 +211,25 @@ export const DEMO_THREADS: DemoThread[] = [
           statement: "Rooms include complimentary Wi-Fi.",
           page: "rooms",
           quote: "All rooms include complimentary Wi-Fi",
+        },
+      ],
+    },
+  },
+  {
+    guestEmail: "kai.m@example.com",
+    subject: "Two small dogs?",
+    inbound: "We have two small terriers. Could both come along for a weekend in October, and what would it add to the bill?",
+    hoursAgo: 8,
+    stay: { checkIn: "2026-10-23", checkOut: "2026-10-25", party: 2, status: "inquiry" },
+    draft: {
+      kind: "sent",
+      answer:
+        "Hi Kai, well-behaved dogs are welcome in our Garden Rooms for a $25 per night pet fee. We only ask that they are not left unattended in the room. Happy to hold a Garden Room for October 23 to 25 if that works.",
+      claims: [
+        {
+          statement: "Dogs stay in the Garden Rooms for a $25 per night pet fee.",
+          page: "policies",
+          quote: "Well-behaved dogs are welcome in the Garden Rooms for a $25 per night pet fee",
         },
       ],
     },
@@ -246,5 +273,64 @@ export const DEMO_THREADS: DemoThread[] = [
       kind: "gap",
       gapQuestion: "Is the hot tub open in December, and is it shared or private?",
     },
+  },
+];
+
+/**
+ * Fixture correction proposals, keyed by the vanished quote. Each cites a
+ * passage of POLICIES_V2 verbatim; the demo verifies it before storing.
+ */
+export const DEMO_CORRECTION_FIXTURES: Array<{ oldQuoteIncludes: string; evidenceQuote: string; text: string }> = [
+  {
+    oldQuoteIncludes: "$25 per night pet fee",
+    evidenceQuote:
+      "Well-behaved dogs are welcome in the Garden Rooms for a **$40 per night pet fee**, limited to one dog per room.",
+    text:
+      "Hi, a quick correction to our earlier note: our pet fee has changed. Well-behaved dogs are welcome in the Garden Rooms for a $40 per night pet fee, limited to one dog per room. Sorry for the confusion, and do let us know if that changes your plans.",
+  },
+];
+
+/** Topics the demo can answer from fixtures when a visitor sends a simulated inquiry. */
+export const DEMO_INBOUND_FIXTURES: Array<{
+  pattern: RegExp;
+  page: "policies" | "rooms" | "rates";
+  statement: string;
+  quote: string;
+  answer: string;
+}> = [
+  {
+    pattern: /\b(dog|pet|puppy)\b/i,
+    page: "policies",
+    statement: "Well-behaved dogs are welcome in the Garden Rooms.",
+    quote: "Well-behaved dogs are welcome in the Garden Rooms",
+    answer: "Hi! Well-behaved dogs are welcome in the Garden Rooms. Let us know your dates and we'll hold one for you.",
+  },
+  {
+    pattern: /\b(check-?in|arriv)/i,
+    page: "policies",
+    statement: "Check-in runs from 3:00 PM to 8:00 PM.",
+    quote: "Check-in is from 3:00 PM to 8:00 PM.",
+    answer: "Hi! Check-in is from 3:00 PM to 8:00 PM. If you expect to arrive later, tell us and we'll leave a lockbox code.",
+  },
+  {
+    pattern: /\b(cancel|refund)/i,
+    page: "policies",
+    statement: "Cancellations at least 7 days before arrival are fully refunded.",
+    quote: "Reservations cancelled at least 7 days before arrival receive a full refund.",
+    answer: "Hi! Reservations cancelled at least 7 days before arrival receive a full refund; within 7 days the first night is forfeited.",
+  },
+  {
+    pattern: /\b(breakfast|wi-?fi)\b/i,
+    page: "rooms",
+    statement: "Breakfast is served 8:00 to 10:00 AM.",
+    quote: "A full breakfast is served from 8:00 AM to 10:00 AM in the dining room.",
+    answer: "Hi! A full breakfast is served from 8:00 AM to 10:00 AM in the dining room, and every room has complimentary Wi-Fi.",
+  },
+  {
+    pattern: /\b(rate|price|cost|how much)\b/i,
+    page: "rates",
+    statement: "Garden Rooms are $189 per night midweek.",
+    quote: "Garden Rooms are $189 per night midweek",
+    answer: "Hi! Garden Rooms are $189 per night midweek and $229 on Friday and Saturday; rates include breakfast and parking.",
   },
 ];

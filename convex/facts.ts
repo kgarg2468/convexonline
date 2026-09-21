@@ -1,6 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireInnAccess } from "./access";
+import { regenerateDemoDraftFromFact } from "./demo";
 import { factScope } from "./schema";
 
 export const list = query({
@@ -24,6 +26,11 @@ export const list = query({
   },
 });
 
+/**
+ * Records a staff answer. When it answers a thread's knowledge gap the thread
+ * is redrafted: real inns schedule the drafter with the new fact in scope;
+ * demo inns build a fixture draft that cites the fact verbatim.
+ */
 export const add = mutation({
   args: {
     innId: v.id("inns"),
@@ -33,7 +40,7 @@ export const add = mutation({
     threadId: v.optional(v.id("threads")),
   },
   handler: async (ctx, args) => {
-    const { user, membership } = await requireInnAccess(ctx, args.innId);
+    const { user, membership, inn } = await requireInnAccess(ctx, args.innId);
     const question = args.question.trim();
     const answer = args.answer.trim();
     if (!question || !answer || question.length > 2000 || answer.length > 5000) {
@@ -60,9 +67,18 @@ export const add = mutation({
     });
     if (args.threadId) {
       const thread = await ctx.db.get(args.threadId);
-      if (thread && thread.status === "needs_staff") {
-        // A knowledge gap was answered; the drafter re-runs in the next slice.
-        await ctx.db.patch(args.threadId, { status: "drafting" });
+      if (thread && (thread.status === "needs_staff" || thread.status === "new")) {
+        if (inn.isDemo) {
+          await regenerateDemoDraftFromFact(ctx, thread, factId);
+        } else if (thread.lastInboundMessageId) {
+          await ctx.db.patch(args.threadId, { status: "drafting", lastGenerationAt: Date.now() });
+          await ctx.scheduler.runAfter(0, internal.generation.generateForThread, {
+            threadId: args.threadId,
+            inboundMessageId: thread.lastInboundMessageId,
+          });
+        } else {
+          await ctx.db.patch(args.threadId, { status: "drafting" });
+        }
       }
     }
     return factId;
