@@ -351,14 +351,17 @@ export const generateProposal = internalAction({
       await apply({ reason: "drafter unavailable: OPENAI_API_KEY is not configured; write the correction" });
       return null;
     }
+    // Historical context only, so the drafter can tell which topic the guest
+    // was told about. Instructions live in the adapter's correction mode, not
+    // here: this block is untrusted data to the drafter and never evidence.
     const inquiry = [
       `Subject: Re: ${c.subject}`,
       "",
-      "We already told this guest:",
+      "Reply already sent to this guest:",
       c.sentText,
       "",
-      `The passage that supported "${c.statement}" was: "${c.oldQuote}". That passage is no longer on the page.`,
-      "Write a short, polite correction email telling the guest what changed, citing only the current page.",
+      `Passage of the old page that reply relied on (no longer on the page): "${c.oldQuote}"`,
+      `Statement it supported: "${c.statement}"`,
     ].join("\n");
     const currentDate = currentDateIn(c.timezone);
     try {
@@ -368,6 +371,7 @@ export const generateProposal = internalAction({
         pages: [{ url: c.page.url, versionId: c.page.versionId, markdown: c.page.markdown }],
         facts: [],
         currentDate,
+        mode: "correction",
         model: DRAFT_MODEL_DEFAULT,
       });
       const grounded = groundClaims(generated.claims, [
