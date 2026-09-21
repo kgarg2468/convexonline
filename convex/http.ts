@@ -89,6 +89,36 @@ http.route({
 //   /.well-known/openid-configuration and /.well-known/jwks.json
 auth.addHttpRoutes(http);
 
+/**
+ * Demo video: GET /front-desk-demo.mp4 redirects to the asset's own storage URL.
+ *
+ * Native video seeking needs HTTP range requests. The static catch-all below
+ * proxies component storage with a plain fetch and answers 200 without
+ * Content-Length or Accept-Ranges, so `<video>` cannot seek (the timeline
+ * snaps back to 0). Convex storage URLs honor Range directly (206 + Content-Range),
+ * so this exact route resolves the current managed asset for this one literal
+ * path and sends the browser there. Only this path is ever resolved (no path,
+ * query, or header input) and only a public static-hosting asset, never app
+ * storage. `no-store` keeps the redirect pointing at the current deployment's
+ * file after an upload replaces and cleans up the old one.
+ */
+const DEMO_VIDEO_PATH = "/front-desk-demo.mp4";
+http.route({
+  path: DEMO_VIDEO_PATH,
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const asset = await ctx.runQuery(components.staticHosting.lib.resolveAssetForHttp, {
+      path: DEMO_VIDEO_PATH,
+      spaFallback: false,
+    });
+    if (!asset?.storageUrl) return new Response(NOT_FOUND_BODY, { status: 404, headers: TEXT_HEADERS });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: asset.storageUrl, "Cache-Control": "no-store" },
+    });
+  }),
+});
+
 // Static SPA: catch-all for everything not matched by an exact route above.
 registerStaticRoutes(http, components.staticHosting);
 

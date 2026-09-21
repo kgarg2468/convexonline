@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:33:00Z
+- **Last updated:** 2026-09-21T23:42:00Z
 
 ## Log
 
@@ -170,7 +170,12 @@ Added a 150.27-second narrated demo from actual production-run captures: source 
 The MP4 is H.264/AAC, 1280×900, about 4.6 MB. Duration, audio level and rendered frames were checked. Added a public submission overview and links to measured verification; no form or social post has been submitted.
 Evidence: `public/front-desk-demo.mp4`, `public/front-desk-demo-poster.png`, `docs/submission.md`. Video URL: https://outgoing-zebra-720.convex.site/demo.html
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 47566d3
 Published the reviewed MP4 and poster on Convex; the downloaded video matches the committed SHA-256 and remains 150.27 seconds. The app, health endpoint and poster return HTTP 200.
 The static host serves MP4 with a generic binary content type, so added a standalone viewer with native playback controls, an explicit video source type and a download fallback. Ten local Chromium checks passed, including metadata, playback, seeking to two minutes, and no console or page errors. Updated submission links to the viewer. Automated review identified the missing text alternative; the viewer now links the exact narration transcript. Production viewer playback is checked after deployment.
 Evidence: `public/demo.html`, `public/front-desk-demo.mp4`, `public/front-desk-demo-transcript.txt`, `docs/submission.md`.
+
+### 2026-09-21 - working tree
+Production viewer checks established playback but exposed seeking snapping back to the start. The static-hosting proxy omits range support; the underlying managed Convex storage URL correctly returns 206 responses for byte ranges.
+Added an exact route for the demo MP4 that resolves only that current public asset and redirects to its storage URL with no-store caching. Missing files return 404 without SPA fallback. Six actual-component regression tests cover route precedence, redirect behavior, replacement uploads, missing assets and unchanged root routes. All 386 offline tests, types, lint and build pass. Production seeking will be rechecked after deploying the reviewed route.
+Evidence: `convex/http.ts`, `tests/videoRouting.test.ts`.

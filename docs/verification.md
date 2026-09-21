@@ -7,7 +7,7 @@ experiments and tests with mocked provider transport.
 
 ## Automated regression checks
 
-- 380 offline tests passed across 32 files, with root and browser TypeScript
+- 386 offline tests passed across 33 files, with root and browser TypeScript
   checks, lint and the production build passing. Provider transport is mocked
   in the offline suite; component tests exercise the actual registered packages.
 - All 29 browser scenarios passed against the deployed app. Two optional
