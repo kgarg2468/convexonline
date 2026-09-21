@@ -1,0 +1,76 @@
+# Deployed smoke verification (manual).
+#
+# This workflow does NOT test the PR head. It drives a Front Desk that is
+# already deployed at `base_url` through a real browser and checks the judge
+# path: sign-in screen -> anonymous demo -> isolated sessions -> claim/edit ->
+# staff-authored simulated send -> gap fact -> regenerated draft -> policy
+# change (3 affected + 3 controls) -> claim/approve/send correction -> restore
+# -> simulated inquiry -> settings -> mobile. Screenshot capture is opt-in
+# (SCREENSHOTS=1) and skipped here.
+# Dispatch it by hand after `npm run deploy` has finished. Root PR CI (ci.yml)
+# stays independent and never runs this.
+name: Browser smoke (deployed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Origin of the deployed app to smoke-test (no trailing slash)"
+        required: true
+        default: "https://outgoing-zebra-720.convex.site"
+        type: string
+
+concurrency:
+  group: browser-smoke-${{ inputs.base_url }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Playwright against ${{ inputs.base_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tests/browser
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+
+      # The browser package is standalone so the root install never carries
+      # Playwright or browser binaries.
+      - name: Install test package
+        run: npm ci
+
+      # The specs are typechecked by the package's own tsconfig (the root
+      # tsconfig.test.json excludes tests/browser, since the root install never
+      # carries @playwright/test).
+      - name: Typecheck specs
+        run: npm run typecheck
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          CI: "1"
+        run: npx playwright test
+
+      - name: Upload traces and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-smoke-artifacts
+          path: |
+            tests/browser/test-results
+            tests/browser/playwright-report
+          if-no-files-found: ignore
+          retention-days: 3
