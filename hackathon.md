@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:20:00Z
+- **Last updated:** 2026-09-21T23:21:00Z
 
 ## Log
 
@@ -159,8 +159,13 @@ Replayed all 40 original grounding fixtures through the completed generation pip
 There were zero unsafe-ready outcomes, 51 independently verified quotes and six of six approval-only requests escalated. Sixteen of 24 answerable inquiries became ready; two were held by verification and six deferred. Stay extraction matched five of six original expectations. The sole failing assertion expects a party size not stated in the guest message; it remains unchanged and documented. All other 46 assertions passed. The published aggregate report preserves exact revision, hashes, methodology and limitations.
 Evidence: `docs/grounding-evaluation.md`, `convex/generation.ts`, `convex/providers/openai.ts`, `convex/modelBudget.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - d538ebf
 Verified the production fictional-inn loop: two real Firecrawl component crawls, six signed inbound deliveries archived by the AgentMail component, six model-grounded staff sends, an owner website edit from a $25 to $40 fee, exactly three affected replies and three unchanged replies, and a delivered correction in the original provider thread. Two staff sessions saw each other's presence.
 The original receipt checker failed on provider-added quoted history and branding. Its failed report remains unchanged. A separate read-only recheck passed all 29 checks using exact message identities, threading and new content, allowing only the observed fixed branding suffix. No original message was resent.
 A continuation passed all 51 required checks. One explicitly approved follow-up was delivered by the scheduler; another was cancelled on an actual guest reply, with no send 30 seconds past due. Temporary staff access and claims were cleaned up. Gmail verification and additional inbox capacity remain external requirements; neither is claimed complete.
 Evidence: `docs/verification.md`, `docs/walkthrough.md`, `convex/ingest.ts`, `convex/inbound.ts`, `convex/corrections.ts`, `convex/followUps.ts`.
+
+### 2026-09-21 - working tree
+Added a 150.27-second narrated demo from actual production-run captures: source capture, grounded replies, shared presence, an owner website edit, affected-reply review, delivered correction, and approved follow-up delivery and cancellation. Test inbox addresses are redacted. The video distinguishes the real owned-inbox run from the anonymous simulated demo and describes authenticated app calls used for mail actions.
+The MP4 is H.264/AAC, 1280×900, about 4.6 MB. Duration, audio level and rendered frames were checked. Added a public submission overview and links to measured verification; no form or social post has been submitted.
+Evidence: `public/front-desk-demo.mp4`, `public/front-desk-demo-poster.png`, `docs/submission.md`. Video URL: https://outgoing-zebra-720.convex.site/front-desk-demo.mp4

@@ -11,6 +11,13 @@ to explore an isolated workspace with simulated email, then change the demo poli
 to review three affected replies alongside three unaffected replies. Both the
 frontend and backend are hosted on Convex.
 
+[Watch the 2:30 demo video](https://outgoing-zebra-720.convex.site/front-desk-demo.mp4)
+or read the [submission overview](docs/submission.md). The video uses narrated
+captures from the real fictional-inn provider run; the public anonymous demo
+simulates email.
+
+[![Front Desk policy-change review](public/front-desk-demo-poster.png)](https://outgoing-zebra-720.convex.site/front-desk-demo.mp4)
+
 The [walkthrough](docs/walkthrough.md) covers the isolated demo and the live
 fictional-inn workflow, including staff invitations and approved follow-ups.
 The [verification record](docs/verification.md) documents actual provider delivery,
