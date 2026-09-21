@@ -1,6 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { liveMailDecision, requireInnAccess, requireUser } from "./access";
+import { readEnv } from "./lib/env";
+import { deploymentOriginOf, isOnDeploymentOrigin } from "./lib/innWebsiteHtml";
 import { assertPublicHttpsUrl } from "./providers/firecrawl";
 
 export const DEFAULT_TIMEZONE = "America/Los_Angeles";
@@ -100,6 +102,15 @@ export const create = mutation({
     // so refuse anything else here rather than creating an inn that can never
     // be crawled. Same rules, friendlier wording.
     const siteUrl = parseSiteUrl(args.siteUrl);
+    // This deployment's own origin is reserved for hosted fictional inns, whose
+    // URL is derived server-side (innWebsites.createFictional). Pointing an
+    // ordinary inn at it would let a crawl read the app or another inn's site.
+    if (isOnDeploymentOrigin(siteUrl.toString(), deploymentOriginOf(readEnv("CONVEX_SITE_URL")))) {
+      throw new ConvexError({
+        code: "hosted_origin",
+        message: "That address belongs to this service, not to an external property website. To run a fictional inn here, create a fictional inn instead.",
+      });
+    }
     const timezone = parseTimezone(args.timezone);
     const innId = await ctx.db.insert("inns", {
       name,

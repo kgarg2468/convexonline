@@ -5,6 +5,7 @@ import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { readEnv } from "./lib/env";
 import { parseWebhookBody } from "./lib/inboundPayload";
+import { HOSTED_PATH_PREFIX, NOT_FOUND_BODY, parseHostedPath, renderHostedPage } from "./lib/innWebsiteHtml";
 import { readSignatureHeaders, verifyWebhookSignature } from "./lib/webhookSignature";
 
 // The app owns the HTTP root (see convex.config.ts). Exact routes are
@@ -50,6 +51,36 @@ http.route({
     if (parsed.kind === "ignored_event") return json(200, { ok: true, outcome: "ignored_event" });
     const result = await ctx.runMutation(internal.inbound.receive, parsed.event);
     return json(200, { ok: true, outcome: result.outcome });
+  }),
+});
+
+/**
+ * Hosted fictional inn websites: GET /inn/<innId>/{,policies,rooms,notices}.
+ * A prefix route, so it wins over the static catch-all below but never touches
+ * the exact root routes (auth well-known, /api/*). Everything is rendered from
+ * the inn's structured content document with escaping; there is no user HTML.
+ * `no-store` keeps crawlers (and Firecrawl) from reusing a stale body.
+ */
+const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
+const TEXT_HEADERS = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
+
+http.route({
+  pathPrefix: HOSTED_PATH_PREFIX,
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const notFound = () => new Response(NOT_FOUND_BODY, { status: 404, headers: TEXT_HEADERS });
+    let pathname: string;
+    try {
+      pathname = new URL(request.url).pathname;
+    } catch {
+      return notFound();
+    }
+    const parsed = parseHostedPath(pathname);
+    if (!parsed) return notFound();
+    const content = await ctx.runQuery(internal.innWebsites.publicContent, { innId: parsed.innId });
+    if (!content) return notFound();
+    const html = renderHostedPage({ innId: parsed.innId, page: parsed.page, content });
+    return new Response(html, { status: 200, headers: HTML_HEADERS });
   }),
 });
 

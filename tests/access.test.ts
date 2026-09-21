@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../convex/_generated/api";
+import { withEnv } from "./integrationSetup";
 import { addStaff, makeTest, seedInn, seedThread, signedInUser } from "./setup";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("authentication", () => {
   it("rejects unauthenticated access to every staff query and mutation", async () => {
@@ -126,6 +131,34 @@ describe("inn creation", () => {
     const memberships = await t.run((ctx) => ctx.db.query("memberships").collect());
     expect(inns).toEqual([]);
     expect(memberships).toEqual([]);
+  });
+
+  it("refuses any address on this deployment's own origin, pointing at fictional inn creation, without inserting anything", async () => {
+    withEnv({ CONVEX_SITE_URL: "https://some.convex.site" });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const hosted = await signedInUser(t, { name: "Hosted owner" });
+    const { innId: victim } = await hosted.as.mutation(api.innWebsites.createFictional, { name: "Victim Inn" });
+    const rejected = [
+      `https://some.convex.site/inn/${victim}/`,
+      "https://some.convex.site/",
+      "https://some.convex.site",
+      "https://some.convex.site/inns/abc/threads",
+      `https://some.convex.site/inn/${victim}/?utm=1#top`,
+      "HTTPS://SOME.CONVEX.SITE:443/inn/x/",
+      `https://some.convex.site/inn%2F${victim}/`,
+    ];
+    for (const siteUrl of rejected) {
+      const err = await owner.as.mutation(api.inns.create, { name: "X", siteUrl }).catch((e: unknown) => e);
+      expect(err, siteUrl).toBeInstanceOf(Error);
+      expect((err as Error).message, siteUrl).toMatch(/hosted_origin/);
+      expect((err as Error).message, siteUrl).toMatch(/create a fictional inn/);
+    }
+    expect(await t.run((ctx) => ctx.db.query("inns").collect())).toHaveLength(1);
+    expect(await t.run((ctx) => ctx.db.query("memberships").collect())).toHaveLength(1);
+    // A lookalike host is a different origin and stays an ordinary external site.
+    const lookalike = await owner.as.mutation(api.inns.create, { name: "Lookalike", siteUrl: `https://some.convex.site.example/inn/${victim}/` });
+    expect((await owner.as.query(api.inns.get, { innId: lookalike })).inn.siteUrl).toBe(`https://some.convex.site.example/inn/${victim}/`);
   });
 
   it("refuses time zones that generation cannot format, without inserting anything", async () => {

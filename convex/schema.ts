@@ -105,6 +105,29 @@ export default defineSchema({
     .index("by_createdBy", ["createdBy"])
     .index("by_inboxId", ["inboxId"]),
 
+  /**
+   * Editable content of a fictional inn website served by this deployment at
+   * `/inn/<innId>/`. One document per inn; only inns created through
+   * `innWebsites.createFictional` have one, and only such inns are ever
+   * rendered. Bounded plain text and small integers, never HTML.
+   */
+  innWebsites: defineTable({
+    innId: v.id("inns"),
+    publicName: v.string(),
+    intro: v.string(),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    petFeePerDogPerNight: v.number(),
+    maxDogs: v.number(),
+    petPolicy: v.string(),
+    breakfastHours: v.string(),
+    wifi: v.string(),
+    roomsDescription: v.string(),
+    notice: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+  }).index("by_inn", ["innId"]),
+
   crawlRuns: defineTable({
     innId: v.id("inns"),
     userId: v.optional(v.id("users")),

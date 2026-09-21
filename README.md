@@ -35,6 +35,7 @@ frontend and backend are hosted on Convex.
 | `convex/ingest.ts`, `pages.ts`, `crons.ts` | Site crawl (≤10 pages), page versions + sent-claim re-verification, hourly rescrape of watched pages |
 | `convex/inbox.ts`, `integrations.ts`, `followUps.ts` | Inbox provisioning (server-controlled ids, appended to the product webhook), key-presence + readiness booleans, reminders and staff-approved follow-up emails |
 | `convex/teams.ts`, `presence.ts` | One-use staff invitations, membership removal, authenticated thread presence |
+| `convex/innWebsites.ts`, `lib/innWebsiteHtml.ts` | Owner-edited fictional inn websites, rendered as public HTML on Convex; edits become knowledge only after a crawl |
 | `convex/threads.ts`, `facts.ts`, `inns.ts` | Staff workspace API (queue, detail, search, stats, staff facts) |
 | `convex/demo.ts`, `demoContent.ts` | Per-visitor demo inn, fixture drafter, simulated sends, scripted policy change (3 affected / 3 control replies) |
 | `src/` | App shell: sign-in, queue, thread detail, corrections review |
@@ -133,12 +134,13 @@ GET/PATCH and is never logged, stored or sent to a client.
 The app owns the HTTP root of `<deployment>.convex.site`; the static-hosting
 component is installed without an `httpPrefix` (`convex/convex.config.ts`) and
 its catch-all is registered from `convex/http.ts` with `registerStaticRoutes`
-after every exact route. Exact routes always win over the catch-all.
+after the app routes. Exact routes and the more specific hosted-inn prefix win over the catch-all.
 
 | Path | Owner |
 |---|---|
 | `/.well-known/openid-configuration`, `/.well-known/jwks.json` | Convex Auth (`auth.addHttpRoutes`), must stay at the root |
 | `/api/health`, `POST /api/agentmail/webhook` and future product endpoints | App routes, always under an explicit `/api/...` path |
+| `/inn/<innId>/`, `/inn/<innId>/policies`, `/inn/<innId>/rooms`, `/inn/<innId>/notices` | Public fictional inn pages; bounded owner-authored content, escaped HTML and `no-store` responses |
 | everything else (`/`, `/inns/...`, hashed assets) | Static SPA catch-all (`/*`) |
 
 Add new product HTTP endpoints as exact `/api/...` routes in `convex/http.ts`

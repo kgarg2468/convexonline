@@ -281,7 +281,7 @@ describe("firecrawl.scrapePage", () => {
     },
   };
 
-  it("posts markdown + git-diff changeTracking with onlyMainContent", async () => {
+  it("posts markdown + git-diff changeTracking with onlyMainContent and always-fresh maxAge", async () => {
     const { fetch, calls } = mockFetch(200, ok);
     const r = await scrapePage({ apiKey: "fc_key", url: "https://inn.example/policies", tag: "inn1", fetchImpl: fetch });
     expect(calls[0].url).toBe("https://api.firecrawl.dev/v2/scrape");
@@ -290,7 +290,11 @@ describe("firecrawl.scrapePage", () => {
       url: "https://inn.example/policies",
       formats: ["markdown", { type: "changeTracking", modes: ["git-diff"], tag: "inn1" }],
       onlyMainContent: true,
+      maxAge: 0,
     });
+    // Regression: without an explicit maxAge Firecrawl's default cache window
+    // (172800000 ms) can return a two-day-old body, hiding source changes.
+    expect(bodyOf(calls[0]).maxAge).toBe(0);
     expect(r).toEqual({
       url: "https://inn.example/policies",
       markdown: ok.data.markdown,
