@@ -11,6 +11,7 @@ import { Shell, HeaderTitle } from "./shell/Shell";
 import { DemoActions } from "./shell/DemoActions";
 import { CorrectionsView } from "./corrections/CorrectionsView";
 import { InboxView } from "./inbox/InboxView";
+import { InboxStats } from "./inbox/InboxStats";
 import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
@@ -296,14 +297,15 @@ function Workspace({
       case "inbox":
         return (
           <>
-            <HeaderTitle
-              title="Inbox"
-              sub={
-                stats
-                  ? `${stats.open} open · ${stats.needsStaff} need you · ${stats.ready} ready · ${stats.sentToday} sent today`
-                  : detail?.inn.inboxAddress ?? (current.isDemo ? "Seeded guest threads" : "No inbox set up yet")
-              }
-            />
+            <div style={{ minWidth: 0 }}>
+              <HeaderTitle
+                title="Inbox"
+                sub={
+                  stats ? undefined : detail?.inn.inboxAddress ?? (current.isDemo ? "Seeded guest threads" : "No inbox set up yet")
+                }
+              />
+              {stats ? <InboxStats stats={stats} timezone={detail?.inn.timezone} /> : null}
+            </div>
             <div className="fd-header__actions">
               {current.isDemo ? (
                 <DemoActions

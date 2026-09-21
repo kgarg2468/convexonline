@@ -5,6 +5,17 @@ test.describe("inbox", () => {
   test("claim → edit → explicit staff-authored simulated send, with delivery state from the outbox", async ({ page }) => {
     await enterDemo(page);
     await openInbox(page);
+
+    // Statistics strip from the seed: six replies were sent 14 minutes after
+    // their inquiry (convex/demo.ts), one thread is ready and one needs a
+    // staff fact. "Replies today" depends on the inn's clock at run time, so
+    // it is read now and checked as a delta after the send below.
+    const statsStrip = page.getByRole("list", { name: "Inbox statistics" });
+    await expect(statsStrip).toContainText("Median first response 14 min");
+    await expect(statsStrip).toContainText("2 open (1 need you, 1 ready)");
+    await expect(statsStrip).toContainText(/\d+ (reply|replies) today \(inn time, /);
+    const repliesBefore = Number((await statsStrip.innerText()).match(/(\d+) (?:reply|replies) today/)![1]);
+
     await openThread(page, THREADS.ready);
 
     // Unclaimed: read-only draft, no editor, send blocked and explained.
@@ -69,6 +80,14 @@ test.describe("inbox", () => {
     await expect(page.locator(".fd-msg--out")).toContainText("P.S. Smoke test edit.");
     // The thread's own status pill (the queue's filter has a hidden "Waiting on guest" option too).
     await expect(page.locator(".fd-thread__head").getByText("Waiting on guest", { exact: true })).toBeVisible();
+
+    // The strip follows the send: one more reply today, one fewer open thread.
+    // The new first response (hours after a 3-hour-old inquiry) leaves the
+    // median of the six 14-minute seeds unchanged.
+    const repliesAfter = repliesBefore + 1;
+    await expect(statsStrip).toContainText(`${repliesAfter} ${repliesAfter === 1 ? "reply" : "replies"} today`);
+    await expect(statsStrip).toContainText("Median first response 14 min");
+    await expect(statsStrip).toContainText("1 open (1 need you, 0 ready)");
   });
 
   test("citations show the verbatim quote, the source path and whether the source is still current", async ({ page }) => {

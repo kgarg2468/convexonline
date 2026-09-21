@@ -423,6 +423,12 @@ test.describe("hosted fictional inn website", () => {
     await page.goto("/");
     await signUp(page, owner);
     await createExternalProperty(page, property);
+    // A brand-new inn: honest zero counts and no median rather than "0 min".
+    const statsStrip = page.getByRole("list", { name: "Inbox statistics" });
+    await expect(statsStrip).toContainText("0 replies today");
+    await expect(statsStrip).toContainText("No first responses yet");
+    await expect(statsStrip).toContainText("0 open");
+    await expect(statsStrip).not.toContainText("0 min");
     await openSettings(page);
     await expect(page.getByRole("heading", { level: 2, name: "Property" })).toBeVisible();
     await expect(page.getByRole("link", { name: "https://example.com/" })).toBeVisible();
