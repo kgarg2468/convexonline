@@ -11,6 +11,12 @@ to explore an isolated workspace with simulated email, then change the demo poli
 to review three affected replies alongside three unaffected replies. Both the
 frontend and backend are hosted on Convex.
 
+The [40-case grounding evaluation](docs/grounding-evaluation.md) records real
+OpenAI calls through the app's generation pipeline. No unanswerable or
+approval-only inquiry became ready; 16 of 24 answerable inquiries became ready
+and eight were held. This is a small regression set, not a claim of perfect
+answering or 40 production email deliveries.
+
 ## Stack
 
 - Convex backend and realtime queries; the SPA is served from the same
