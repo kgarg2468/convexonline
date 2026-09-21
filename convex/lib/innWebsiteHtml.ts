@@ -207,6 +207,50 @@ export function isOwnHostedSite(siteUrl: string, innId: string): boolean {
 }
 
 /**
+ * Canonical origin (`https://host[:port]`) of the deployment's site URL, or
+ * null when it is absent or unparseable. No placeholder is ever substituted:
+ * without a known origin nothing can be recognised as "on this deployment".
+ */
+export function deploymentOriginOf(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.origin === "null" ? null : u.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when `url` lives on the deployment origin. Compares parsed origins, so
+ * scheme/host case, default ports, query strings, fragments and encoded paths
+ * cannot disguise a deployment URL as an external site.
+ */
+export function isOnDeploymentOrigin(url: string, deploymentOrigin: string | null): boolean {
+  if (deploymentOrigin === null) return false;
+  try {
+    return new URL(url).origin === deploymentOrigin;
+  } catch {
+    return false;
+  }
+}
+
+export type HostedSiteScope = "external" | "own" | "invalid";
+
+/**
+ * How ingestion must treat an inn's `siteUrl`:
+ * - "own": exactly `/inn/<innId>/` for this inn (crawl stays inside that subtree);
+ * - "invalid": on the deployment origin but not this inn's own hosted root
+ *   (the app root, another inn's site, a sub-page, query/hash variants);
+ *   nothing may be crawled or stored for it;
+ * - "external": any other origin, crawled with the ordinary same-origin rule.
+ */
+export function hostedSiteScope(siteUrl: string, innId: string, deploymentOrigin: string | null): HostedSiteScope {
+  if (isOwnHostedSite(siteUrl, innId)) return "own";
+  return isOnDeploymentOrigin(siteUrl, deploymentOrigin) ? "invalid" : "external";
+}
+
+/**
  * True when `url` is the hosted site root of `innId` or a descendant of it on
  * the same origin. Compared segment by segment on the raw path, so
  * `/inn/<id>x`, `/inn/<id>%2Ffoo` and `/inn/other` never match. A path that

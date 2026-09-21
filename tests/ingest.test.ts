@@ -336,6 +336,81 @@ describe("hosted fictional inn crawl scope", () => {
     const external = await seedInn(t, owner.userId);
     await t.mutation(internal.ingest.storePage, { innId: external, url: "https://inn.example/anything/at/all", markdown: "# ok\n\nbody" });
     expect(await t.run((ctx) => ctx.db.query("pages").withIndex("by_inn", (q) => q.eq("innId", external)).collect())).toHaveLength(1);
+    // ...but it can never store a page served by this deployment.
+    await expect(t.mutation(internal.ingest.storePage, { innId: external, url: `${HOST}/inn/${innId}/policies`, markdown: "# x\n\nbody" })).rejects.toThrow(/outside this inn/);
+    expect(await t.run((ctx) => ctx.db.query("pages").withIndex("by_inn", (q) => q.eq("innId", external)).collect())).toHaveLength(1);
+  });
+
+  it("a legacy inn whose site is another hosted inn, the app root or a hosted sub-page is refused before any provider call", async () => {
+    withEnv({ FIRECRAWL_API_KEY: "fc-test", CONVEX_SITE_URL: HOST });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId: victim } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Victim Inn" });
+    // Bypasses inns.create's guard the way an old record would: written straight to the table.
+    const legacy = await seedInn(t, owner.userId, "Legacy");
+    const { calls } = stubFetch(firecrawlRoutes({}, []));
+    const foreignSites = [
+      `${HOST}/inn/${victim}/`,
+      `${HOST}/inn/${victim}`,
+      `${HOST}/`,
+      `${HOST}/inns/${victim}/threads`,
+      `${HOST}/inn/${legacy}/policies`,
+      `${HOST}/inn/${legacy}/?utm=1`,
+      `${HOST}/inn/${legacy}/#top`,
+      `HTTPS://SOME.CONVEX.SITE:443/inn/${victim}/`,
+    ];
+    for (const siteUrl of foreignSites) {
+      await t.run((ctx) => ctx.db.patch(legacy, { siteUrl, lastCrawlStartedAt: undefined }));
+      await expect(owner.as.action(api.ingest.crawlSite, { innId: legacy }), siteUrl).rejects.toThrow(/foreign_hosted_site/);
+      // storePage is the only writer of source pages and refuses the same records outright.
+      await expect(t.mutation(internal.ingest.storePage, { innId: legacy, url: `${HOST}/inn/${victim}/policies`, markdown: "# x\n\nbody" }), siteUrl).rejects.toThrow(/not this inn's own hosted website/);
+    }
+    expect(calls).toEqual([]);
+    expect(await owner.as.query(api.ingest.runs, { innId: legacy })).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query("pages").collect())).toEqual([]);
+    // The same URLs on a lookalike host are ordinary external sites and reach the provider as before.
+    await t.run((ctx) => ctx.db.patch(legacy, { siteUrl: `https://some.convex.site.example/inn/${victim}/`, lastCrawlStartedAt: undefined }));
+    await expect(owner.as.action(api.ingest.crawlSite, { innId: legacy })).resolves.toMatchObject({ pagesStored: 0 });
+    expect(calls.filter((c) => c.url.endsWith("/v2/map"))).toHaveLength(1);
+  });
+
+  it("the cron skips a legacy foreign-site inn and a hosted inn's foreign page rows without fetching them", async () => {
+    withEnv({ FIRECRAWL_API_KEY: "fc-test", CONVEX_SITE_URL: HOST });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId: hosted } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Hosted Inn" });
+    const { innId: other } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Other Inn" });
+    const legacy = await seedInn(t, owner.userId, "Legacy");
+    await t.run((ctx) => ctx.db.patch(legacy, { siteUrl: `${HOST}/inn/${other}/` }));
+    const external = await seedInn(t, owner.userId, "External");
+    const watched = async (innId: typeof hosted, url: string) =>
+      t.run(async (ctx) => {
+        const id = await ctx.db.insert("pages", { innId, url, title: "t", kind: "policies", watched: true });
+        const v = await ctx.db.insert("pageVersions", { pageId: id, markdown: "old", hash: "h", scrapedAt: 0, changeStatus: "new" });
+        await ctx.db.patch(id, { lastVersionId: v });
+        return id;
+      });
+    const ownPage = await watched(hosted, `${HOST}/inn/${hosted}/policies`);
+    await watched(hosted, `${HOST}/inn/${other}/policies`);
+    await watched(hosted, `${HOST}/`);
+    await watched(hosted, `${HOST}/inn/${hosted}%2Fpolicies`);
+    await watched(legacy, `${HOST}/inn/${other}/policies`);
+    await watched(external, `${HOST}/inn/${hosted}/policies`);
+    const externalPage = await watched(external, "https://inn.example/policies");
+
+    const due = await t.query(internal.ingest.duePages, { before: Date.now(), limit: 50 });
+    expect(due.sort((a, b) => a.url.localeCompare(b.url))).toEqual([
+      { innId: external, url: "https://inn.example/policies" },
+      { innId: hosted, url: `${HOST}/inn/${hosted}/policies` },
+    ]);
+
+    const { calls } = stubFetch(firecrawlRoutes({ [`${HOST}/inn/${hosted}/policies`]: "# Policies\n\nnew", "https://inn.example/policies": "# P\n\nnew" }, []));
+    const r = await t.action(internal.ingest.rescrapeDue, {});
+    expect(r.scraped).toBe(2);
+    expect(calls.map((c) => (c.body as { url: string }).url).sort()).toEqual(["https://inn.example/policies", `${HOST}/inn/${hosted}/policies`]);
+    expect((await t.run((ctx) => ctx.db.get(ownPage)))?.lastCheckedAt).toBeGreaterThan(0);
+    expect((await t.run((ctx) => ctx.db.get(externalPage)))?.lastCheckedAt).toBeGreaterThan(0);
+    expect(await owner.as.query(api.ingest.runs, { innId: legacy })).toEqual([]);
   });
 });
 

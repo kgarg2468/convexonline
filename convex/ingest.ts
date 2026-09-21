@@ -5,7 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireInnAccess } from "./access";
 import { readEnv } from "./lib/env";
 import { describeError } from "./lib/errors";
-import { hostedPageUrls, isOwnHostedSite, isWithinHostedSite, parseHostedSiteUrl } from "./lib/innWebsiteHtml";
+import { deploymentOriginOf, hostedPageUrls, hostedSiteScope, isOnDeploymentOrigin, isWithinHostedSite, parseHostedSiteUrl } from "./lib/innWebsiteHtml";
 import { classifyPage, isWatchedKind, selectPages, titleFromMarkdown, MAX_PAGE_CHARS, MAX_PAGES, MAX_TOTAL_CHARS } from "./lib/siteSelection";
 import { isPublicHttpsUrl, mapSite, scrapePage } from "./providers/firecrawl";
 import { recordPageVersion } from "./pages";
@@ -14,6 +14,26 @@ export const INN_COOLDOWN_MS = 10 * 60 * 1000;
 export const USER_RUNS_PER_HOUR = 6;
 const RESCRAPE_MIN_AGE_MS = 55 * 60 * 1000;
 const RESCRAPE_BATCH = 20;
+
+/** The origin this deployment serves hosted inn sites from (null when unset: nothing is recognised as hosted). */
+function deploymentOrigin(): string | null {
+  return deploymentOriginOf(readEnv("CONVEX_SITE_URL"));
+}
+
+const FOREIGN_SITE_MESSAGE = "The inn site is on this deployment but is not this inn's own hosted website";
+
+/**
+ * Why `url` may not be stored or re-read for this inn, or null when it may.
+ * A hosted inn stays inside its own /inn/<id>/ subtree; an inn whose site is
+ * on the deployment origin without being its own hosted root gets nothing at
+ * all; an external inn never stores a deployment-origin page.
+ */
+function pageScopeProblem(inn: { _id: Id<"inns">; siteUrl: string }, url: string, origin: string | null): string | null {
+  const scope = hostedSiteScope(inn.siteUrl, inn._id, origin);
+  if (scope === "invalid") return FOREIGN_SITE_MESSAGE;
+  if (scope === "own") return isWithinHostedSite(url, inn.siteUrl) ? null : "page is outside this inn's hosted site";
+  return isOnDeploymentOrigin(url, origin) ? "page is outside this inn's hosted site" : null;
+}
 
 export const runs = query({
   args: { innId: v.id("inns") },
@@ -52,6 +72,11 @@ export const beginRun = internalMutation({
     }
     if (!isPublicHttpsUrl(inn.siteUrl)) {
       throw new ConvexError({ code: "invalid_site_url", message: "The inn site must be a public https URL" });
+    }
+    // Refused before any cooldown, budget or provider spend: a legacy record
+    // pointing at the app or another inn's hosted site must never be crawled.
+    if (hostedSiteScope(inn.siteUrl, innId, deploymentOrigin()) === "invalid") {
+      throw new ConvexError({ code: "foreign_hosted_site", message: FOREIGN_SITE_MESSAGE });
     }
     const now = Date.now();
     if (inn.lastCrawlStartedAt !== undefined && now - inn.lastCrawlStartedAt < INN_COOLDOWN_MS) {
@@ -111,9 +136,8 @@ export const storePage = internalMutation({
     if (!inn || inn.isDemo) throw new ConvexError({ code: "invalid", message: "not a real inn" });
     // A hosted fictional inn shares its origin with the app and every other
     // hosted inn; only its own /inn/<id>/ subtree may ever be stored under it.
-    if (isOwnHostedSite(inn.siteUrl, innId) && !isWithinHostedSite(url, inn.siteUrl)) {
-      throw new ConvexError({ code: "invalid", message: "page is outside this inn's hosted site" });
-    }
+    const problem = pageScopeProblem(inn, url, deploymentOrigin());
+    if (problem) throw new ConvexError({ code: "invalid", message: problem });
     let page = await ctx.db
       .query("pages")
       .withIndex("by_inn_url", (q) => q.eq("innId", innId).eq("url", url))
@@ -167,10 +191,17 @@ export const crawlSite = action({
       await ctx.runMutation(internal.ingest.finishRun, { runId, status: "failed", pagesStored: 0, pagesSkipped: 0, reason: "FIRECRAWL_API_KEY is not configured" });
       throw new ConvexError({ code: "firecrawl_unavailable", message: "Site crawling is not configured on this deployment" });
     }
+    // beginRun already refused a foreign deployment-origin site; re-check here so
+    // the selection below can never fall back to the broad same-origin rule for one.
+    const scope = hostedSiteScope(siteUrl, innId, deploymentOrigin());
+    if (scope === "invalid") {
+      await ctx.runMutation(internal.ingest.finishRun, { runId, status: "failed", pagesStored: 0, pagesSkipped: 0, reason: FOREIGN_SITE_MESSAGE });
+      throw new ConvexError({ code: "foreign_hosted_site", message: FOREIGN_SITE_MESSAGE });
+    }
     let urls: string[];
     try {
       const map = await mapSite({ apiKey, url: siteUrl, limit: 50 });
-      if (isOwnHostedSite(siteUrl, innId)) {
+      if (scope === "own") {
         // Hosted fictional site: the map is same-origin with the whole app and
         // every other hosted inn, so keep only this inn's own /inn/<id>/
         // subtree. The four canonical pages are seeded in case the map did
@@ -220,8 +251,12 @@ export const duePages = internalQuery({
     const inns = await ctx.db.query("inns").collect();
     const out: Array<{ innId: Id<"inns">; url: string }> = [];
     const perInn = new Map<string, number>();
+    const origin = deploymentOrigin();
     for (const inn of inns) {
       if (inn.isDemo || !isPublicHttpsUrl(inn.siteUrl)) continue;
+      // Decided here, before any provider fetch: a foreign deployment-origin
+      // site is skipped whole, and a hosted inn only re-reads its own subtree.
+      if (hostedSiteScope(inn.siteUrl, inn._id, origin) === "invalid") continue;
       const pages = await ctx.db
         .query("pages")
         .withIndex("by_inn", (q) => q.eq("innId", inn._id))
@@ -230,6 +265,7 @@ export const duePages = internalQuery({
         if (!page.watched || !page.lastVersionId) continue;
         if ((page.lastCheckedAt ?? 0) > before) continue;
         if (!isPublicHttpsUrl(page.url)) continue;
+        if (pageScopeProblem(inn, page.url, origin) !== null) continue;
         const count = perInn.get(inn._id) ?? 0;
         if (count >= MAX_PAGES) continue;
         perInn.set(inn._id, count + 1);

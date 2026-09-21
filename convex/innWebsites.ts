@@ -165,8 +165,9 @@ export const update = mutation({
     const site = await websiteFor(ctx, innId);
     if (!site) throw new ConvexError({ code: "no_website", message: "This inn has no hosted website" });
     const next = validated(content);
-    await ctx.db.patch(site._id, { ...next, updatedAt: Date.now(), updatedBy: user._id });
-    return { updatedAt: Date.now() };
+    const updatedAt = Date.now();
+    await ctx.db.patch(site._id, { ...next, updatedAt, updatedBy: user._id });
+    return { updatedAt };
   },
 });
 

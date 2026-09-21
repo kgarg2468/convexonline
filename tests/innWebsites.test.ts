@@ -3,8 +3,11 @@ import { api, internal } from "../convex/_generated/api";
 import http from "../convex/http";
 import {
   defaultWebsiteContent,
+  deploymentOriginOf,
   escapeHtml,
   hostedPageUrls,
+  hostedSiteScope,
+  isOnDeploymentOrigin,
   isOwnHostedSite,
   isWithinHostedSite,
   normalizeWebsiteContent,
@@ -88,6 +91,35 @@ describe("innWebsiteHtml (pure)", () => {
     expect(isWithinHostedSite(`${SITE_URL}/inns/${id}/threads`, site)).toBe(false);
     expect(isWithinHostedSite(`https://evil.example/inn/${id}/`, site)).toBe(false);
     expect(isWithinHostedSite(`${SITE_URL}/inn/${id}/`, "https://seagull.example/")).toBe(false);
+  });
+
+  it("classifies a site url against the deployment origin by parsed origin, never by string prefix", () => {
+    const id = "jd7abc123def456";
+    const origin = deploymentOriginOf(SITE_URL);
+    expect(origin).toBe(SITE_URL);
+    expect(deploymentOriginOf(`${SITE_URL}/some/path?x=1#y`)).toBe(SITE_URL);
+    expect(deploymentOriginOf(undefined)).toBeNull();
+    expect(deploymentOriginOf("")).toBeNull();
+    expect(deploymentOriginOf("not a url")).toBeNull();
+    // Scheme and host case, default port, query, hash and encoded paths all resolve to the same origin.
+    for (const url of [`${SITE_URL}/`, "HTTPS://SOME.CONVEX.SITE:443/inn/x", `${SITE_URL}/inn/${id}/?q=1#f`, `${SITE_URL}/inn%2F${id}/`]) {
+      expect(isOnDeploymentOrigin(url, origin), url).toBe(true);
+    }
+    for (const url of ["https://some.convex.site.example/", "https://evil.example/some.convex.site/", "http://some.convex.site/", "nope"]) {
+      expect(isOnDeploymentOrigin(url, origin), url).toBe(false);
+    }
+    expect(isOnDeploymentOrigin(`${SITE_URL}/`, null)).toBe(false);
+
+    expect(hostedSiteScope(`${SITE_URL}/inn/${id}/`, id, origin)).toBe("own");
+    expect(hostedSiteScope(`${SITE_URL}/inn/${id}`, id, origin)).toBe("own");
+    for (const bad of [`${SITE_URL}/`, `${SITE_URL}/inn/other123/`, `${SITE_URL}/inn/${id}/policies`, `${SITE_URL}/inn/${id}/?q=1`, `${SITE_URL}/inn/${id}/#top`, `${SITE_URL}/inn/${id}x/`, `${SITE_URL}/inns/${id}/threads`]) {
+      expect(hostedSiteScope(bad, id, origin), bad).toBe("invalid");
+    }
+    expect(hostedSiteScope("https://seagull.example/", id, origin)).toBe("external");
+    expect(hostedSiteScope(`https://some.convex.site.example/inn/${id}/`, "other", origin)).toBe("external");
+    // Without a configured origin nothing is recognised as hosted, except this inn's own id-matching site.
+    expect(hostedSiteScope(`${SITE_URL}/inn/other123/`, id, null)).toBe("external");
+    expect(hostedSiteScope(`${SITE_URL}/inn/${id}/`, id, null)).toBe("own");
   });
 
   it("escapes every dynamic value and links only inside the inn prefix", () => {
@@ -195,9 +227,14 @@ describe("innWebsites editing authority", () => {
     // Nothing above changed the document.
     expect((await owner.as.query(api.innWebsites.editor, { innId }))!.content).toEqual(base);
 
-    await owner.as.mutation(api.innWebsites.update, { innId, content: edited });
-    expect((await owner.as.query(api.innWebsites.editor, { innId }))!.content.petFeePerDogPerNight).toBe(40);
-    expect(await t.run((ctx) => ctx.db.query("innWebsites").collect())).toHaveLength(1);
+    const saved = await owner.as.mutation(api.innWebsites.update, { innId, content: edited });
+    const afterSave = (await owner.as.query(api.innWebsites.editor, { innId }))!;
+    expect(afterSave.content.petFeePerDogPerNight).toBe(40);
+    // The returned timestamp is the one stored, not a second clock read.
+    expect(saved.updatedAt).toBe(afterSave.updatedAt);
+    const rows = await t.run((ctx) => ctx.db.query("innWebsites").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].updatedAt).toBe(saved.updatedAt);
   });
 
   it("rejects invalid content and never writes a partial save", async () => {
