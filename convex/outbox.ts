@@ -7,6 +7,8 @@ import { readEnv } from "./lib/env";
 import { describeError } from "./lib/errors";
 import { isClaimActive } from "./lib/claimLocks";
 import { isCorrectionTextApproved } from "./lib/sendGuards";
+import { canUseLiveMail } from "./lib/tenant";
+import { membershipFor } from "./access";
 import { replyToMessage } from "./providers/agentmail";
 import { scheduleFollowUp } from "./followUps";
 import { recheckSentClaim } from "./pages";
@@ -148,6 +150,25 @@ async function preflight(ctx: MutationCtx, row: Doc<"outbox">, now: number): Pro
   return null;
 }
 
+/**
+ * Live sending authority is decided again at dispatch, not only at
+ * reservation: the reserving user may have been removed or downgraded, the inn
+ * may have become demo, or its inbox may have been rebound in between. Uses the
+ * same rule as the reservation (`canUseLiveMail`) so there is one permission
+ * model. Only real rows reach here; a missing inn is left to the inbox check.
+ */
+async function dispatchAuthorityProblem(ctx: MutationCtx, row: Doc<"outbox">, inn: Doc<"inns">): Promise<string | null> {
+  const thread = await ctx.db.get(row.threadId);
+  if (!thread || thread.innId !== inn._id) return "thread no longer belongs to this inn";
+  const user = await ctx.db.get(row.reservedBy);
+  if (!user) return "the reserving user no longer exists";
+  const membership = await membershipFor(ctx, inn._id, user._id);
+  const decision = canUseLiveMail(user, inn, membership);
+  if (!decision.allowed) return `the reserving user lost live mail authority before dispatch (${decision.reason})`;
+  if (row.providerInboxId !== undefined && inn.inboxId !== row.providerInboxId) return "the inn's inbox changed before dispatch";
+  return null;
+}
+
 export const beginSend = internalMutation({
   args: { outboxId: v.id("outbox") },
   handler: async (ctx, { outboxId }) => {
@@ -163,6 +184,13 @@ export const beginSend = internalMutation({
       return { ok: false as const, reason: "simulated rows never dispatch" };
     }
     const inn = await ctx.db.get(row.innId);
+    if (inn) {
+      const lost = await dispatchAuthorityProblem(ctx, row, inn);
+      if (lost) {
+        await ctx.db.patch(outboxId, { status: "failed", errorKind: "precondition", errorMessage: lost });
+        return { ok: false as const, reason: lost };
+      }
+    }
     const inboxId = row.providerInboxId ?? inn?.inboxId;
     if (!inn || inn.isDemo || !inboxId) {
       await ctx.db.patch(outboxId, { status: "failed", errorKind: "inbox_not_configured", errorMessage: "no inbox bound to this inn" });
@@ -188,11 +216,21 @@ export async function commitDelivery(
   const inn = await ctx.db.get(row.innId);
   const inbound = await ctx.db.get(row.replyToMessageId);
   if (!thread || !inn) throw new ConvexError({ code: "invalid", message: "thread missing at commit" });
+  // A real delivery went out through the inbox captured at reservation. The
+  // inn may have been rebound while the provider call was in flight, so the
+  // sender is taken from that captured inbox, not from the inn as it is now.
+  // Demo and simulated rows have no captured inbox and keep the inn fallback.
+  const sentFrom =
+    row.providerInboxId === undefined
+      ? (inn.inboxAddress ?? inn.inboxId ?? `${inn.name} (demo)`)
+      : inn.inboxId === row.providerInboxId
+        ? (inn.inboxAddress ?? row.providerInboxId)
+        : row.providerInboxId;
   const messageId = await ctx.db.insert("messages", {
     threadId: row.threadId,
     direction: "out",
     agentmailMessageId: delivered.providerMessageId,
-    from: inn.inboxAddress ?? inn.inboxId ?? `${inn.name} (demo)`,
+    from: sentFrom,
     to: thread.guestEmail,
     text: row.text,
     at: now,
