@@ -6,6 +6,7 @@ import { Empty, Notice, Pill, Spinner } from "../lib/ui";
 import { useAsyncAction, useNow } from "../lib/hooks";
 import { STATUS_LABEL, formatDate, formatStamp, formatWhen, guestName } from "../lib/format";
 import { DraftPanel } from "./DraftPanel";
+import { FollowUpPanel } from "./FollowUpPanel";
 import { GapForm } from "./GapForm";
 import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
@@ -55,6 +56,9 @@ export function ThreadDetail({
   // the current draft's (earlier drafts, or rows written without a draftId).
   // The current draft's own rows are shown inside the draft panel.
   const correctionOutbox = detail.outbox.filter((o) => o.kind === "correction");
+  // Approved follow-up deliveries are their own group: they never count as
+  // reply deliveries and are shown inside the follow-up panel.
+  const followUpOutbox = detail.outbox.filter((o) => o.kind === "follow_up");
   const earlierReplyOutbox = otherReplyOutbox(detail.outbox, draft && !draft.abstain ? draft._id : null);
   const isDemo = detail.inn.isDemo;
   const canRegenerate =
@@ -103,8 +107,8 @@ export function ThreadDetail({
         {detail.followUp ? (
           <div style={{ marginBottom: 14 }}>
             <Notice tone="info">
-              Follow-up {detail.followUp.status === "due" ? "is due" : "scheduled for"} {formatStamp(detail.followUp.dueAt)} if the guest
-              has not replied.
+              Reminder {detail.followUp.status === "due" ? "is due" : "set for"} {formatStamp(detail.followUp.dueAt)} if the guest has not
+              replied. The reminder only flags the thread for staff; it never emails the guest.
             </Notice>
           </div>
         ) : null}
@@ -185,6 +189,10 @@ export function ThreadDetail({
               : "No draft yet. Drafting runs on the server after a guest message arrives."}
           </Notice>
         )}
+
+        <div style={{ marginTop: 14 }}>
+          <FollowUpPanel threadId={threadId} viewerId={viewerId} canAct={mine} isDemo={isDemo} outbox={followUpOutbox} />
+        </div>
 
         {earlierReplyOutbox.length > 0 ? (
           <div style={{ marginTop: 14 }}>
