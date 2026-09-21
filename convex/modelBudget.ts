@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { HOUR, MINUTE, RateLimiter, calculateRateLimit } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
+import { internalMutation } from "./functions";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 

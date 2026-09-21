@@ -15,7 +15,7 @@ import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
-import { useStoredState } from "./lib/hooks";
+import { useNow, useStoredState } from "./lib/hooks";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
 import "./workspace.css";
@@ -264,7 +264,10 @@ function Workspace({
   const openCorrections = useQuery(api.corrections.list, { innId, status: "needs_review" }) as
     | Correction[]
     | undefined;
-  const stats = useQuery(api.threads.stats, { innId }) as ThreadStats | undefined;
+  // The minute nonce re-subscribes the stats query as the inn's local day
+  // rolls over (no row changes then); the server decides the actual cutoff.
+  const statsMinute = Math.floor(useNow(15_000) / 60_000);
+  const stats = useQuery(api.threads.stats, { innId, clock: statsMinute }) as ThreadStats | undefined;
   // Judges land on the policy-change review; staff land on the inbox.
   const [view, setView] = useState<WorkspaceView>(current.isDemo ? "corrections" : "inbox");
   const [selectedThread, setSelectedThread] = useState<Id<"threads"> | null>(null);

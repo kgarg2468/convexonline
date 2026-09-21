@@ -2,6 +2,7 @@ import { defineApp } from "convex/server";
 import staticHosting from "@convex-dev/static-hosting/convex.config";
 import presence from "@convex-dev/presence/convex.config";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config";
+import aggregate from "@convex-dev/aggregate/convex.config";
 
 // App-owned root routing: convex/http.ts owns "/" so Convex Auth's OIDC
 // discovery + JWKS stay at the standard root paths, and the static SPA is
@@ -15,5 +16,11 @@ app.use(presence);
 // Per-inn OpenAI operation budget (convex/modelBudget.ts). The component has
 // no HTTP routes and no public entry points; only internal mutations call it.
 app.use(rateLimiter);
+// Per-inn counts behind threads.stats (convex/aggregates.ts). One component
+// instance per (table, sort key); every instance is namespaced by inn id.
+app.use(aggregate, { name: "threadStatusCounts" });
+app.use(aggregate, { name: "threadFirstResponseTimes" });
+app.use(aggregate, { name: "sentRepliesBySentAt" });
+app.use(aggregate, { name: "correctionStatusCounts" });
 
 export default app;

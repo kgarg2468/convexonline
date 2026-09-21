@@ -9,6 +9,7 @@
  */
 
 import type * as access from "../access.js";
+import type * as aggregates from "../aggregates.js";
 import type * as auth from "../auth.js";
 import type * as corrections from "../corrections.js";
 import type * as crons from "../crons.js";
@@ -17,6 +18,7 @@ import type * as demoContent from "../demoContent.js";
 import type * as drafts from "../drafts.js";
 import type * as facts from "../facts.js";
 import type * as followUps from "../followUps.js";
+import type * as functions from "../functions.js";
 import type * as generation from "../generation.js";
 import type * as http from "../http.js";
 import type * as inbound from "../inbound.js";
@@ -32,6 +34,7 @@ import type * as lib_grounding from "../lib/grounding.js";
 import type * as lib_inboundPayload from "../lib/inboundPayload.js";
 import type * as lib_inboxWebhook from "../lib/inboxWebhook.js";
 import type * as lib_innWebsiteHtml from "../lib/innWebsiteHtml.js";
+import type * as lib_localDay from "../lib/localDay.js";
 import type * as lib_presenceTiming from "../lib/presenceTiming.js";
 import type * as lib_quotes from "../lib/quotes.js";
 import type * as lib_sendGuards from "../lib/sendGuards.js";
@@ -61,6 +64,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   access: typeof access;
+  aggregates: typeof aggregates;
   auth: typeof auth;
   corrections: typeof corrections;
   crons: typeof crons;
@@ -69,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   drafts: typeof drafts;
   facts: typeof facts;
   followUps: typeof followUps;
+  functions: typeof functions;
   generation: typeof generation;
   http: typeof http;
   inbound: typeof inbound;
@@ -84,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundPayload": typeof lib_inboundPayload;
   "lib/inboxWebhook": typeof lib_inboxWebhook;
   "lib/innWebsiteHtml": typeof lib_innWebsiteHtml;
+  "lib/localDay": typeof lib_localDay;
   "lib/presenceTiming": typeof lib_presenceTiming;
   "lib/quotes": typeof lib_quotes;
   "lib/sendGuards": typeof lib_sendGuards;
@@ -136,4 +142,8 @@ export declare const components: {
   staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
   presence: import("@convex-dev/presence/_generated/component.js").ComponentApi<"presence">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  threadStatusCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"threadStatusCounts">;
+  threadFirstResponseTimes: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"threadFirstResponseTimes">;
+  sentRepliesBySentAt: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"sentRepliesBySentAt">;
+  correctionStatusCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"correctionStatusCounts">;
 };

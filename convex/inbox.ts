@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import { action, internalAction, internalMutation } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
+import { internalMutation } from "./functions";
 import { internal } from "./_generated/api";
 import { requireLiveMailAccess } from "./access";
 import { readEnv } from "./lib/env";

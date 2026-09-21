@@ -3,8 +3,18 @@ import { api, internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { signWebhook, verifyWebhookSignature } from "../convex/lib/webhookSignature";
 import { parseWebhookBody } from "../convex/lib/inboundPayload";
+import { triggers } from "../convex/aggregates";
 import { makeTest, signedInUser } from "./setup";
 import { seedLiveInn, TEST_SECRET, withEnv, settle } from "./integrationSetup";
+
+type RunCtx = Parameters<Parameters<ReturnType<typeof makeTest>["run"]>[0]>[0];
+/**
+ * The app's writer for fixture edits to rows the aggregates already track.
+ * `t.run` hands out the raw db; a raw status change on a thread the webhook
+ * created would leave the component at the old key, a state no app mutation
+ * can produce because every one of them wraps its db with these triggers.
+ */
+const appDb = (ctx: RunCtx) => triggers.wrapDB(ctx).db;
 
 // The app owns the HTTP root (convex.config.ts has no httpPrefix), so the
 // product route is registered under an explicit /api path.
@@ -226,8 +236,8 @@ describe("POST /api/agentmail/webhook", () => {
     });
 
     /** A stored copy of the shared parent under `innId`, on its own thread. Mirrors what inbound.receive writes. */
-    async function insertParentCopy(ctx: Parameters<Parameters<ReturnType<typeof makeTest>["run"]>[0]>[0], innId: Id<"inns">, inbox: string, tag: string) {
-      const threadId = await ctx.db.insert("threads", {
+    async function insertParentCopy(ctx: RunCtx, innId: Id<"inns">, inbox: string, tag: string) {
+      const threadId = await appDb(ctx).insert("threads", {
         innId,
         agentmailThreadId: `thr_${tag}`,
         guestEmail: "dana@example.com",
@@ -423,7 +433,7 @@ describe("POST /api/agentmail/webhook", () => {
         verifiedText: "Yes",
       });
       await ctx.db.insert("followUps", { threadId: thread._id, dueAt: Date.now() + 1000, status: "scheduled" });
-      await ctx.db.patch(thread._id, { status: "ready" });
+      await appDb(ctx).patch(thread._id, { status: "ready" });
       return id;
     });
     const res = await signedPost(
@@ -474,7 +484,7 @@ describe("POST /api/agentmail/webhook", () => {
         verifiedText: "Yes",
       });
       await ctx.db.insert("followUps", { threadId: thread._id, dueAt: Date.now() + 1000, status: "scheduled" });
-      await ctx.db.patch(thread._id, { status: "ready" });
+      await appDb(ctx).patch(thread._id, { status: "ready" });
       return id;
     });
     const generationsBefore = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((s) => s.name === "generation:generateForThread").length;
