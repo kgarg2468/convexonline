@@ -100,32 +100,33 @@ function parseChangeStatus(x: unknown): ChangeStatus {
   return x === "new" || x === "same" || x === "changed" || x === "removed" ? x : "unknown";
 }
 
-export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult> {
-  const apiKey = requireNonEmpty("firecrawl", "apiKey", args.apiKey);
-  const target = assertPublicHttpsUrl(requireNonEmpty("firecrawl", "url", args.url));
-  const fetchImpl = args.fetchImpl ?? (globalThis.fetch as FetchLike);
+/**
+ * The scrape request options every transport sends: markdown plus git-diff
+ * changeTracking (scoped by `tag`), main content only, and `maxAge: 0`.
+ * maxAge: 0 forces a fresh fetch. Firecrawl's default (172800000 ms, two
+ * days) may serve a cached body, which would hide source changes from the
+ * rescrape loop.
+ */
+export function scrapeRequestOptions(tag?: string): {
+  formats: ["markdown", { type: "changeTracking"; modes: string[]; tag?: string }];
+  onlyMainContent: true;
+  maxAge: 0;
+} {
+  const changeTracking: { type: "changeTracking"; modes: string[]; tag?: string } = { type: "changeTracking", modes: ["git-diff"] };
+  if (tag) changeTracking.tag = tag;
+  return { formats: ["markdown", changeTracking], onlyMainContent: true, maxAge: 0 };
+}
 
-  const changeTracking: Record<string, unknown> = { type: "changeTracking", modes: ["git-diff"] };
-  if (args.tag) changeTracking.tag = args.tag;
-  const res = await postJson(
-    "firecrawl",
-    fetchImpl,
-    `${args.baseUrl ?? FIRECRAWL_BASE_URL}/v2/scrape`,
-    apiKey,
-    // maxAge: 0 forces a fresh fetch. Firecrawl's default (172800000 ms, two
-    // days) may serve a cached body, which would hide source changes from the
-    // rescrape loop.
-    { url: target.toString(), formats: ["markdown", changeTracking], onlyMainContent: true, maxAge: 0 },
-    args.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
-    /* ambiguousOnFailure */ false,
-  );
-  if (!res.ok) throw httpError("firecrawl", res.status, false);
-
-  const body = res.json;
+/**
+ * Validates a Firecrawl scrape document (`data` of the /v2/scrape envelope)
+ * for `target` and shapes it into a ScrapePageResult. Shared by the direct
+ * adapter and the component transport so both apply exactly the same guards.
+ * `status` is the provider's own HTTP status, recorded on rejections.
+ */
+export function parseScrapeDocument(data: unknown, target: URL, status?: number): ScrapePageResult {
   const invalid = (why: string) =>
-    new ProviderError({ provider: "firecrawl", kind: "invalid_response", status: res.status, message: why, retryable: false });
-  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) throw invalid("scrape response not successful");
-  const data = body.data;
+    new ProviderError({ provider: "firecrawl", kind: "invalid_response", status, message: why, retryable: false });
+  if (!isRecord(data)) throw invalid("scrape response not successful");
   const markdown = typeof data.markdown === "string" ? data.markdown : "";
   if (markdown.trim().length === 0) throw invalid("scrape returned empty markdown");
 
@@ -143,7 +144,7 @@ export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult
     throw new ProviderError({
       provider: "firecrawl",
       kind: "invalid_response",
-      status: res.status,
+      status,
       message: `target page responded with HTTP ${targetStatus}`,
       retryable: targetStatus === 429 || targetStatus >= 500,
     });
@@ -164,6 +165,29 @@ export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult
   return result;
 }
 
+export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult> {
+  const apiKey = requireNonEmpty("firecrawl", "apiKey", args.apiKey);
+  const target = assertPublicHttpsUrl(requireNonEmpty("firecrawl", "url", args.url));
+  const fetchImpl = args.fetchImpl ?? (globalThis.fetch as FetchLike);
+
+  const res = await postJson(
+    "firecrawl",
+    fetchImpl,
+    `${args.baseUrl ?? FIRECRAWL_BASE_URL}/v2/scrape`,
+    apiKey,
+    { url: target.toString(), ...scrapeRequestOptions(args.tag) },
+    args.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
+    /* ambiguousOnFailure */ false,
+  );
+  if (!res.ok) throw httpError("firecrawl", res.status, false);
+
+  const body = res.json;
+  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+    throw new ProviderError({ provider: "firecrawl", kind: "invalid_response", status: res.status, message: "scrape response not successful", retryable: false });
+  }
+  return parseScrapeDocument(body.data, target, res.status);
+}
+
 // ---- mapSite ----------------------------------------------------------------
 
 export type MapSiteArgs = {
@@ -177,10 +201,45 @@ export type MapSiteArgs = {
 
 export type MapSiteResult = { origin: string; urls: string[] };
 
+/** Clamps a requested map size to [1, FIRECRAWL_MAX_MAP_URLS]. */
+export function mapLimit(limit?: number): number {
+  return Math.max(1, Math.min(limit ?? FIRECRAWL_MAX_MAP_URLS, FIRECRAWL_MAX_MAP_URLS));
+}
+
+/**
+ * Validates the `links` of a /v2/map response and keeps only public https
+ * URLs on `target`'s origin, deduplicated without fragments and capped at
+ * `limit`. Shared by the direct adapter and the component transport so both
+ * apply exactly the same guards. `status` is the provider's own HTTP status.
+ */
+export function parseMapLinks(links: unknown, target: URL, limit: number, status?: number): MapSiteResult {
+  if (!Array.isArray(links)) {
+    throw new ProviderError({
+      provider: "firecrawl",
+      kind: "invalid_response",
+      status,
+      message: "map response not successful",
+      retryable: false,
+    });
+  }
+  const seen = new Set<string>();
+  for (const link of links) {
+    // v2 returns either strings or {url,title,description}.
+    const raw = typeof link === "string" ? link : isRecord(link) ? optionalString(link.url) : undefined;
+    if (!raw || !isPublicHttpsUrl(raw)) continue;
+    const u = new URL(raw);
+    if (u.origin !== target.origin) continue;
+    u.hash = "";
+    seen.add(u.toString());
+    if (seen.size >= limit) break;
+  }
+  return { origin: target.origin, urls: [...seen] };
+}
+
 export async function mapSite(args: MapSiteArgs): Promise<MapSiteResult> {
   const apiKey = requireNonEmpty("firecrawl", "apiKey", args.apiKey);
   const target = assertPublicHttpsUrl(requireNonEmpty("firecrawl", "url", args.url));
-  const limit = Math.max(1, Math.min(args.limit ?? FIRECRAWL_MAX_MAP_URLS, FIRECRAWL_MAX_MAP_URLS));
+  const limit = mapLimit(args.limit);
   const fetchImpl = args.fetchImpl ?? (globalThis.fetch as FetchLike);
 
   const res = await postJson(
@@ -195,7 +254,7 @@ export async function mapSite(args: MapSiteArgs): Promise<MapSiteResult> {
   if (!res.ok) throw httpError("firecrawl", res.status, false);
 
   const body = res.json;
-  if (!isRecord(body) || body.success !== true || !Array.isArray(body.links)) {
+  if (!isRecord(body) || body.success !== true) {
     throw new ProviderError({
       provider: "firecrawl",
       kind: "invalid_response",
@@ -204,16 +263,5 @@ export async function mapSite(args: MapSiteArgs): Promise<MapSiteResult> {
       retryable: false,
     });
   }
-  const seen = new Set<string>();
-  for (const link of body.links) {
-    // v2 returns either strings or {url,title,description}.
-    const raw = typeof link === "string" ? link : isRecord(link) ? optionalString(link.url) : undefined;
-    if (!raw || !isPublicHttpsUrl(raw)) continue;
-    const u = new URL(raw);
-    if (u.origin !== target.origin) continue;
-    u.hash = "";
-    seen.add(u.toString());
-    if (seen.size >= limit) break;
-  }
-  return { origin: target.origin, urls: [...seen] };
+  return parseMapLinks(body.links, target, limit, res.status);
 }

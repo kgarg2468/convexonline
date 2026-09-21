@@ -18,6 +18,7 @@ import type * as demo from "../demo.js";
 import type * as demoContent from "../demoContent.js";
 import type * as drafts from "../drafts.js";
 import type * as facts from "../facts.js";
+import type * as firecrawlClient from "../firecrawlClient.js";
 import type * as followUps from "../followUps.js";
 import type * as functions from "../functions.js";
 import type * as generation from "../generation.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   demoContent: typeof demoContent;
   drafts: typeof drafts;
   facts: typeof facts;
+  firecrawlClient: typeof firecrawlClient;
   followUps: typeof followUps;
   functions: typeof functions;
   generation: typeof generation;
@@ -149,4 +151,5 @@ export declare const components: {
   sentRepliesBySentAt: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"sentRepliesBySentAt">;
   correctionStatusCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"correctionStatusCounts">;
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
+  firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
 };

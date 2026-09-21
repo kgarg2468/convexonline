@@ -3,6 +3,7 @@ import presenceComponent from "@convex-dev/presence/test";
 import rateLimiterComponent from "@convex-dev/rate-limiter/test";
 import aggregateComponent from "@convex-dev/aggregate/test";
 import agentmailComponent from "@agentmail/convex/test";
+import firecrawlComponent from "@firecrawl/firecrawl-convex/test";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -34,6 +35,11 @@ export function makeTest() {
   // Its nested workpools are not registered: the archive path configures no
   // callbacks and never sends, so nothing is ever enqueued on them.
   t.registerComponent("agentmail", agentmailComponent.schema, agentmailModules);
+  // The real Firecrawl component, as mounted in convex.config.ts, so every
+  // crawl maps and scrapes through the published package's actions. Its
+  // generated env reads process.env, so tests set FIRECRAWL_API_KEY the same
+  // way they do for the direct adapters and stub the outgoing fetch.
+  firecrawlComponent.register(t);
   return t;
 }
 
