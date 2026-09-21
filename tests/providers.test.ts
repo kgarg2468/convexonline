@@ -553,6 +553,69 @@ describe("openai.generateGroundedDraft", () => {
     expect(r.claims[0].quote).toBe("Check-in is at 3 pm.");
   });
 
+  it("accepts a quote copied with < escaped as &lt;, returned unchanged", async () => {
+    const page = { url: "https://inn.example/policies", versionId: "v1", markdown: "# Policies\nGuests < 12 stay free." };
+    const escaped = {
+      ...goodDraft,
+      answer: "Guests under 12 stay free.",
+      claims: [{ statement: "Kids under 12 free", url: page.url, quote: "Guests &lt; 12 stay free.", sourceId: "v1" }],
+    };
+    const { fetch, calls } = mockFetch(200, responsesBody(escaped));
+    const r = await generateGroundedDraft(draftArgs(fetch, { pages: [page] }));
+    expect(bodyOf(calls[0]).input[1].content).toContain("Guests &lt; 12 stay free.");
+    expect(r.claims[0].quote).toBe("Guests &lt; 12 stay free.");
+  });
+
+  it("accepts a quote from a source that already contains &lt; literally", async () => {
+    const page = { url: "https://inn.example/policies", versionId: "v1", markdown: "Guests &lt; 12 stay free." };
+    const escaped = {
+      ...goodDraft,
+      answer: "Guests under 12 stay free.",
+      claims: [{ statement: "Kids under 12 free", url: page.url, quote: "Guests &lt; 12 stay free.", sourceId: "v1" }],
+    };
+    const r = await generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(escaped)).fetch, { pages: [page] }));
+    expect(r.claims[0].quote).toBe("Guests &lt; 12 stay free.");
+  });
+
+  it("rejects an invented quote even when it uses entities", async () => {
+    const page = { url: "https://inn.example/policies", versionId: "v1", markdown: "# Policies\nGuests < 12 stay free." };
+    for (const quote of ["Guests &lt; 18 stay free.", "Guests &gt; 12 stay free.", "Guests &amp;lt; 12 stay free."]) {
+      const forged = { ...goodDraft, claims: [{ ...goodDraft.claims[0], quote }] };
+      await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(forged)).fetch, { pages: [page] })), {
+        kind: "invalid_response",
+      });
+    }
+  });
+
+  it("shows staff facts as question/answer and verifies quotes against the answer only", async () => {
+    const { fetch, calls } = mockFetch(200, responsesBody(goodDraft));
+    await generateGroundedDraft(draftArgs(fetch));
+    expect(bodyOf(calls[0]).input[1].content).toContain("<question>Do you allow dogs?</question>\n<answer>Yes, small ones.</answer>");
+    expect(bodyOf(calls[0]).input[0].content).toMatch(/quote only from the text inside <answer>/);
+
+    const fromQuestion = {
+      ...goodDraft,
+      claims: [{ statement: "Dogs allowed", url: "staff:f1", quote: "Do you allow dogs?", sourceId: "f1" }],
+    };
+    await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(fromQuestion)).fetch)), {
+      kind: "invalid_response",
+    });
+    const withPrefix = {
+      ...goodDraft,
+      claims: [{ statement: "Dogs allowed", url: "staff:f1", quote: "A: Yes, small ones.", sourceId: "f1" }],
+    };
+    await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(withPrefix)).fetch)), {
+      kind: "invalid_response",
+    });
+
+    const fromAnswer = {
+      ...goodDraft,
+      claims: [{ statement: "Small dogs allowed", url: "staff:f1", quote: "small ones", sourceId: "f1" }],
+    };
+    const r = await generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(fromAnswer)).fetch));
+    expect(r.claims[0].quote).toBe("small ones");
+  });
+
   it("accepts an abstaining draft with no claims", async () => {
     const abstain = { ...goodDraft, class: "needs_staff_fact", answer: "", abstain: true, gapQuestion: "Is there parking?", claims: [] };
     expect(await generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(abstain)).fetch))).toEqual(abstain);
