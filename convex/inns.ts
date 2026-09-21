@@ -1,6 +1,37 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { liveMailDecision, requireInnAccess, requireUser } from "./access";
+import { assertPublicHttpsUrl } from "./providers/firecrawl";
+
+export const DEFAULT_TIMEZONE = "America/Los_Angeles";
+
+const invalid = (message: string) => new ConvexError({ code: "invalid", message });
+
+/** Maps assertPublicHttpsUrl's internal reasons to copy a receptionist can act on. */
+function parseSiteUrl(raw: string): URL {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) throw invalid("Website is required");
+  try {
+    return assertPublicHttpsUrl(trimmed);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : "";
+    if (why.includes("unparseable")) throw invalid("Website must be a valid URL, including https://");
+    if (why.includes("scheme")) throw invalid("Website must start with https://");
+    if (why.includes("credentials")) throw invalid("Website must not include a username or password");
+    throw invalid("Website must be a public https address (not localhost, a private network, or a bare IP)");
+  }
+}
+
+/** Accepts only IANA zones that Intl.DateTimeFormat can render; blank falls back to the default. */
+function parseTimezone(raw: string | undefined): string {
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed.length === 0) return DEFAULT_TIMEZONE;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).resolvedOptions().timeZone;
+  } catch {
+    throw invalid(`Time zone "${trimmed}" is not recognized; use an IANA name like America/New_York`);
+  }
+}
 
 export const mine = query({
   args: {},
@@ -65,19 +96,15 @@ export const create = mutation({
     if (name.length === 0 || name.length > 120) {
       throw new ConvexError({ code: "invalid", message: "Inn name is required" });
     }
-    let siteUrl: URL;
-    try {
-      siteUrl = new URL(args.siteUrl.trim());
-    } catch {
-      throw new ConvexError({ code: "invalid", message: "Site URL must be a valid URL" });
-    }
-    if (siteUrl.protocol !== "https:" && siteUrl.protocol !== "http:") {
-      throw new ConvexError({ code: "invalid", message: "Site URL must use http or https" });
-    }
+    // Ingestion only ever fetches public https URLs (see providers/firecrawl),
+    // so refuse anything else here rather than creating an inn that can never
+    // be crawled. Same rules, friendlier wording.
+    const siteUrl = parseSiteUrl(args.siteUrl);
+    const timezone = parseTimezone(args.timezone);
     const innId = await ctx.db.insert("inns", {
       name,
       siteUrl: siteUrl.toString(),
-      timezone: args.timezone?.trim() || "America/Los_Angeles",
+      timezone,
       isDemo: false,
       createdBy: user._id,
     });

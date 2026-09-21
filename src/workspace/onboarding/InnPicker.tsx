@@ -95,22 +95,29 @@ export function InnPicker({
             <Field
               label="Website"
               htmlFor="fd-inn-url"
-              hint="Replies are drafted only from what this site says. Include https://."
+              hint="Replies are drafted only from what this site says. Must be a public site starting with https://."
             >
               <input
                 id="fd-inn-url"
                 className="fd-input"
                 type="url"
                 required
+                pattern="https://.*"
+                title="Must start with https://"
                 placeholder="https://"
                 value={siteUrl}
                 onChange={(e) => setSiteUrl(e.target.value)}
               />
             </Field>
-            <Field label="Time zone" htmlFor="fd-inn-tz" hint="Used for arrival and follow-up times.">
+            <Field
+              label="Time zone"
+              htmlFor="fd-inn-tz"
+              hint="Used for arrival and follow-up times. An IANA name like America/New_York; leave blank for America/Los_Angeles."
+            >
               <input
                 id="fd-inn-tz"
                 className="fd-input"
+                placeholder="America/Los_Angeles"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
               />
