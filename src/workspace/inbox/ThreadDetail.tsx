@@ -182,7 +182,17 @@ export function ThreadDetail({
 
         {draft && !draft.abstain ? (
           <DraftPanel detail={detail} canEdit={mine} liveMail={liveMail} />
-        ) : draft ? null : (
+        ) : draft ? (
+          // An abstained draft with no gap question is a drafting failure
+          // (no key, budget used up, provider error): show why, never a
+          // made-up question, so staff know to redraft or answer by hand.
+          draft.statusReason && !draft.gapQuestion && draft.status !== "sent" && draft.status !== "superseded" ? (
+            <Notice tone="caution">
+              No reply was drafted: {draft.statusReason}.
+              {canRegenerate ? " Use “Redraft from the latest message” below to try again." : ""}
+            </Notice>
+          ) : null
+        ) : (
           <Notice tone="info">
             {thread.status === "drafting"
               ? "Drafting is running on the server. The reply appears here when it finishes."

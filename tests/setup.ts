@@ -1,5 +1,6 @@
 import { convexTest } from "convex-test";
 import presenceComponent from "@convex-dev/presence/test";
+import rateLimiterComponent from "@convex-dev/rate-limiter/test";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -10,6 +11,9 @@ export function makeTest() {
   // The real presence component (and its nested batch worker), as mounted in
   // convex.config.ts, so presence tests exercise the published package.
   presenceComponent.register(t);
+  // The real rate limiter component (and its nested batch worker) behind the
+  // per-inn model budget, so throttle tests exercise the published package.
+  rateLimiterComponent.register(t);
   return t;
 }
 

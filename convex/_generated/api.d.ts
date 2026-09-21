@@ -40,6 +40,7 @@ import type * as lib_sourceChange from "../lib/sourceChange.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as lib_webhookSignature from "../lib/webhookSignature.js";
 import type * as migrations from "../migrations.js";
+import type * as modelBudget from "../modelBudget.js";
 import type * as outbox from "../outbox.js";
 import type * as pages from "../pages.js";
 import type * as presence from "../presence.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tenant": typeof lib_tenant;
   "lib/webhookSignature": typeof lib_webhookSignature;
   migrations: typeof migrations;
+  modelBudget: typeof modelBudget;
   outbox: typeof outbox;
   pages: typeof pages;
   presence: typeof presence;
@@ -133,4 +135,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
   presence: import("@convex-dev/presence/_generated/component.js").ComponentApi<"presence">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

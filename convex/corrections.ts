@@ -351,6 +351,16 @@ export const generateProposal = internalAction({
       await apply({ reason: "drafter unavailable: OPENAI_API_KEY is not configured; write the correction" });
       return null;
     }
+    // A generated correction (draft + judge) is one budget operation for the
+    // inn that owns the page; a denial leaves the proposal empty with the
+    // retry time so staff can write it or regenerate later.
+    const budget = await ctx.runMutation(internal.modelBudget.reserve, {
+      scope: { kind: "correction", correctionId, newVersionId: c.page.versionId },
+    });
+    if (!budget.ok) {
+      if (budget.kind === "throttled") await apply({ reason: `drafting paused: ${budget.reason}; write the correction or regenerate later` });
+      return null;
+    }
     // Historical context only, so the drafter can tell which topic the guest
     // was told about. Instructions live in the adapter's correction mode, not
     // here: this block is untrusted data to the drafter and never evidence.

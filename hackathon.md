@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/kgarg2468/convexonline
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://outgoing-zebra-720.convex.cloud
-- **Components:** @convex-dev/static-hosting, @convex-dev/presence
+- **Components:** @convex-dev/static-hosting, @convex-dev/presence, @convex-dev/rate-limiter
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, realtime queries, full-text search, scheduled functions, crons
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T19:49:17Z
+- **Last updated:** 2026-09-21T20:16:11Z
 
 ## Log
 
@@ -109,3 +109,13 @@ Evidence: `convex/innWebsites.ts`, `convex/lib/innWebsiteHtml.ts`, `convex/inges
 Added fictional-inn onboarding and the owner website editor, with public-page links and a read-only staff view. Draft edits survive updates from another session; concurrent changes are disclosed and pending controls are locked.
 Three website browser scenarios pass, including two-session draft preservation, discard, overwrite and pending-state checks. The earlier full 27-test browser suite also passed. CI and automated follow-up review passed; the frontend is deployed on Convex. These checks publish actual website HTML without calling mail, crawl or model providers.
 Evidence: `src/workspace/onboarding/InnPicker.tsx`, `src/workspace/settings/InnWebsiteEditor.tsx`, `tests/browser/specs/inn-website.spec.ts`.
+
+### 2026-09-21 - 2c6981f
+Live correction probes exposed unsupported historical statements in generated notices. A server-selected drafting mode now states current published terms without repeating old values; the independent judge remains source-only. Automated review added a guard that holds non-answerable classifications for staff even when their quotes verify.
+All 314 offline tests, CI and follow-up review passed. Three live OpenAI correction cases—pet fee, checkout time and breakfast hours—passed with verified new-value quotes and accepted independent verdicts. These probes ran the real model adapters with an isolated test database and sent no mail. The backend is deployed on Convex.
+Evidence: `convex/corrections.ts`, `convex/providers/openai.ts`, `tests/corrections.test.ts`, `tests/providers.test.ts`.
+
+### 2026-09-21 - working tree
+Added per-inn model budgets using the registered Convex rate-limiter component. Normal drafts, staff-edit verification and correction proposals share atomic burst and hourly limits. Denied operations show an inn-local retry time; incoming mail remains stored and no automatic model retry is scheduled. Demo, stale, missing-key and empty-source draft work consumes no budget.
+All 327 offline tests pass, including 13 actual-component budget tests. Root and standalone browser type checks, lint and the production build pass. These tests mock provider transport.
+Evidence: `convex/modelBudget.ts`, `convex/generation.ts`, `convex/corrections.ts`, `tests/modelBudget.test.ts`, `src/workspace/inbox/ThreadDetail.tsx`.
