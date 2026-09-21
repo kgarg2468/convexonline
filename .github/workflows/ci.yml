@@ -24,15 +24,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tests/browser/package-lock.json
 
       - name: Install
         run: npm ci
+
+      # tests/browser is a standalone package excluded from the root tsconfig,
+      # so it needs its own install and typecheck. No browsers are installed
+      # and no live tests run here; see browser-smoke.yml for that.
+      - name: Install browser test package
+        run: npm ci --prefix tests/browser
 
       - name: Lint
         run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Typecheck browser tests
+        run: npm run typecheck --prefix tests/browser
 
       - name: Test
         run: npm test

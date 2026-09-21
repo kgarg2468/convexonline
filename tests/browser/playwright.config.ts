@@ -13,7 +13,10 @@ import { fileURLToPath } from "node:url";
  *
  * Every test gets a fresh browser context (Playwright default), so every test
  * enters the demo as a brand-new anonymous visitor with its own seeded inn.
- * No staff credentials are used anywhere.
+ * No pre-existing staff credentials are used anywhere: teams.spec.ts creates
+ * throwaway staff accounts at run time (unique example.invalid addresses and
+ * randomly generated passwords) and never reads credentials from the
+ * environment or a file.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");

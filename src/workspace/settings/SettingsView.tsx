@@ -5,10 +5,11 @@ import type { InnDetail, IntegrationStatus, Viewer } from "../types";
 import { ExternalLink, Notice, Pill } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { LIVE_MAIL_REASON } from "../lib/format";
+import { TeamSettings } from "./TeamSettings";
 
 /** Real values only: what the server knows about this inn, its staff and its providers. */
 export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDetail }) {
-  const { inn, staff, liveMail, role } = detail;
+  const { inn, liveMail, role } = detail;
   const integrations = useQuery(api.integrations.status, { innId: inn._id }) as IntegrationStatus | undefined;
   const provision = useAction(api.inbox.provision);
   const action = useAsyncAction();
@@ -199,23 +200,7 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
         </p>
       </div>
 
-      <div className="fd-section">
-        <p className="fd-section__title">Staff</p>
-        <ul className="fd-staff">
-          {staff.map((s) => (
-            <li key={s.userId}>
-              <span>
-                {s.name}
-                {s.userId === viewer._id ? <span className="fd-muted"> (you)</span> : null}
-              </span>
-              <span className="fd-muted">{s.role}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="fd-muted fd-small" style={{ marginTop: 8 }}>
-          Your role: {role}. Inviting staff is not available yet.
-        </p>
-      </div>
+      <TeamSettings viewer={viewer} detail={detail} />
     </div>
   );
 }
