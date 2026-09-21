@@ -94,6 +94,25 @@ const CODE_MESSAGE: Record<string, string> = {
   invalid: "The server rejected that request.",
 };
 
+/**
+ * `invalid` and `claimed` errors come from our own validated backend with a
+ * short, staff-facing message ("Time zone "X" is not recognized; …"). Keep it
+ * when it is a bounded single-line sentence; otherwise fall back to the
+ * generic one so a raw payload or stack trace never reaches the screen.
+ */
+const MAX_SERVER_MESSAGE = 300;
+function boundedServerMessage(message: string | undefined): string | undefined {
+  if (typeof message !== "string") return undefined;
+  const text = message.trim();
+  if (text.length === 0 || text.length > MAX_SERVER_MESSAGE) return undefined;
+  // Newlines and other control characters mean a stack trace or raw payload, not a sentence.
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < 32 || c === 127) return undefined;
+  }
+  return text;
+}
+
 /** Turns a thrown Convex error into a sentence staff can act on. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ConvexError) {
@@ -101,9 +120,17 @@ export function errorMessage(error: unknown): string {
     if (typeof data === "string") return data;
     switch (data.code) {
       case "claimed": {
-        const who = data.heldByName ? `${data.heldByName} is` : "Another staff member is";
-        const until = data.expiresAt ? ` until ${absolute.format(data.expiresAt)}` : "";
-        return `${who} working on this thread${until}.`;
+        // The server says exactly what is wrong when it can (e.g. "Claim the
+        // thread before approving a follow-up"); that beats guessing.
+        const explicit = boundedServerMessage(data.message);
+        if (explicit) return explicit;
+        if (data.heldByName) {
+          const until = data.expiresAt ? ` until ${absolute.format(data.expiresAt)}` : "";
+          return `${data.heldByName} is working on this thread${until}.`;
+        }
+        // No holder metadata: usually the caller's own claim expired or was
+        // never taken, so "another staff member" would be false.
+        return "You need an active claim on this thread to continue.";
       }
       case "unauthenticated":
         return "Your session ended. Sign in again.";
@@ -119,6 +146,7 @@ export function errorMessage(error: unknown): string {
         const known = data.code ? CODE_MESSAGE[data.code] : undefined;
         if (known && data.code === "crawl_failed" && data.message) return `${known} ${data.message}`;
         if (known && data.code === "provision_failed" && data.message) return `${known} ${data.message}`;
+        if (data.code === "invalid") return boundedServerMessage(data.message) ?? known!;
         return known ?? data.message ?? "Something went wrong.";
       }
     }

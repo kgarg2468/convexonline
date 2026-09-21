@@ -413,16 +413,42 @@ test.describe("hosted fictional inn website", () => {
     }
   });
 
-  test("an external property keeps the existing flow and shows no website editor", async ({ page }) => {
+  test("an external property keeps the existing flow, says why the server refused a bad time zone, and shows no website editor", async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const owner = account("owner");
     const property = `Inn ${randomUUID().slice(0, 6)}`;
+    const badZone = `Nowhere/${randomUUID().slice(0, 6)}`;
 
     await page.goto("/");
     await signUp(page, owner);
+
+    // The server refuses an unknown IANA zone. The staff-facing notice is the
+    // server's own sentence, naming the value typed, not a generic rejection.
+    await expect(page.getByText("Set up your first property.")).toBeVisible();
+    await page.getByLabel("Property name").fill(property);
+    await page.getByLabel("Website").fill("https://example.com/");
+    await page.getByLabel("Time zone").fill(badZone);
+    await page.getByRole("button", { name: "Create property" }).click();
+    const notice = page.getByRole("alert").filter({ hasText: badZone });
+    await expect(notice).toBeVisible({ timeout: 30_000 });
+    await expect(notice).toContainText("is not recognized");
+    await expect(notice).toContainText("America/New_York");
+    await expect(notice).not.toContainText("The server rejected that request");
+    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toHaveCount(0);
+    // The form is still there with what was typed, so it can simply be corrected.
+    await expect(page.getByLabel("Property name")).toHaveValue(property);
+    await expect(page.getByLabel("Website")).toHaveValue("https://example.com/");
+    await expect(page.getByRole("button", { name: "Create property" })).toBeEnabled();
+    await page.screenshot({ path: test.info().outputPath("external-bad-timezone.png"), fullPage: true });
+
+    // A valid zone: the pre-existing create flow goes through and the inn carries it.
+    await page.getByLabel("Time zone").fill("America/New_York");
     await createExternalProperty(page, property);
+    await expect(page.getByRole("navigation", { name: "Workspace" })).toContainText(property);
     // A brand-new inn: honest zero counts and no median rather than "0 min".
     const statsStrip = page.getByRole("list", { name: "Inbox statistics" });
     await expect(statsStrip).toContainText("0 replies today");
@@ -432,6 +458,7 @@ test.describe("hosted fictional inn website", () => {
     await openSettings(page);
     await expect(page.getByRole("heading", { level: 2, name: "Property" })).toBeVisible();
     await expect(page.getByRole("link", { name: "https://example.com/" })).toBeVisible();
+    await expect(page.getByRole("definition").filter({ hasText: "America/New_York" })).toBeVisible();
     // Give the reactive queries a moment to settle, then assert the section never appeared.
     await expect(page.getByRole("list", { name: "Team members" })).toContainText(owner.name);
     await expect(page.getByRole("region", { name: "Public website" })).toHaveCount(0);

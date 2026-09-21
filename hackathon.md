@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T21:38:22Z
+- **Last updated:** 2026-09-21T21:45:32Z
 
 ## Log
 
@@ -132,7 +132,12 @@ Root and browser type checks, lint and build pass. Twelve targeted browser scena
 Automated review caught a live-midnight race in the browser count assertion. The browser now checks count rendering and the queue transition; controlled-clock backend tests retain exact daily-count coverage. All five targeted inbox browser flows pass after the fix. CI and follow-up automated review passed; the frontend is deployed on Convex.
 Evidence: `src/workspace/inbox/InboxStats.tsx`, `tests/browser/specs/inbox.spec.ts`, `tests/browser/specs/inn-website.spec.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - c237533
 Registered the AgentMail Convex component for durable inbound event and message archival, in the same transaction as the app receipt. Only verified deliveries for owned live inboxes are archived after tenant-scoped deduplication. Archive bodies and metadata are bounded; oversized provider identities use collision-resistant hashes while app reply identities remain unchanged. Provisioning and guarded sending retain the direct REST adapter.
-All 353 offline tests pass, including 12 archive tests exercising the actual component, signed webhooks, tenant isolation, duplicate deliveries, oversized identities and transaction rollback. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. Provider transport is mocked in these tests. The preceding inbox-statistics deployment passed 28 production browser scenarios, with two optional screenshot captures skipped.
+All 353 offline tests pass, including 12 archive tests exercising the actual component, signed webhooks, tenant isolation, duplicate deliveries, oversized identities and transaction rollback. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. Provider transport is mocked in these tests. CI and automated review passed, and the backend is deployed on Convex. The preceding inbox-statistics deployment passed 28 production browser scenarios, with two optional screenshot captures skipped.
 Evidence: `convex/agentmailArchive.ts`, `convex/inbound.ts`, `convex/convex.config.ts`, `tests/agentmailArchive.test.ts`.
+
+### 2026-09-21 - working tree
+Improved staff-facing validation and claim feedback. Known validation failures show the backend's bounded explanation; a missing active claim no longer incorrectly blames another staff member. Named claim holders and explicit server guidance remain visible.
+All 353 offline tests, root and browser types, lint and build pass. Three website browser flows pass against production, including submitting an invalid time zone, reading the precise error and successfully correcting the same form.
+Evidence: `src/workspace/lib/format.ts`, `tests/browser/specs/inn-website.spec.ts`.
