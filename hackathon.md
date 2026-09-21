@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T18:10:23Z
+- **Last updated:** 2026-09-21T18:32:00Z
 
 ## Log
 
@@ -94,3 +94,8 @@ Evidence: `convex/presence.ts`, `convex/convex.config.ts`, `src/workspace/inbox/
 Added explicitly approved, scheduled follow-up emails through the guarded outbox. Existing reminders never authorize mail. Guest replies, closure, inbox changes and ended memberships prevent dispatch; unknown provider outcomes are not retried. Approval is tied to the original membership, so removing and re-inviting staff cannot revive it.
 Twenty-four integration tests cover scheduling, cancellation races, duplicate workers, simulated delivery and batched cleanup of 205 approvals. All 287 tests, CI and automated review passed; the backend is deployed on Convex. Provider transport is mocked in these tests; live follow-up delivery is not yet verified.
 Evidence: `convex/followUps.ts`, `convex/outbox.ts`, `convex/teams.ts`, `tests/followUpEmails.test.ts`.
+
+### 2026-09-21 - 4cd82d2
+Added explicit follow-up approval, rescheduling and cancellation controls, with exact message text, approval history and delivery status. Reminder-only notices remain separate. The picker shows the selected date's time-zone offset and rejects local times skipped by daylight saving.
+All 25 desktop/mobile browser tests passed against the production backend, including three new follow-up scenarios. CI and automated review passed; the frontend is deployed on Convex. These browser checks use simulated delivery.
+Evidence: `src/workspace/inbox/FollowUpPanel.tsx`, `src/workspace/inbox/ThreadDetail.tsx`, `tests/browser/specs/followups.spec.ts`.

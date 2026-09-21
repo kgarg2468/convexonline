@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireInnAccess } from "./access";
 import { readEnv } from "./lib/env";
 import { describeError } from "./lib/errors";
+import { hostedPageUrls, isOwnHostedSite, isWithinHostedSite, parseHostedSiteUrl } from "./lib/innWebsiteHtml";
 import { classifyPage, isWatchedKind, selectPages, titleFromMarkdown, MAX_PAGE_CHARS, MAX_PAGES, MAX_TOTAL_CHARS } from "./lib/siteSelection";
 import { isPublicHttpsUrl, mapSite, scrapePage } from "./providers/firecrawl";
 import { recordPageVersion } from "./pages";
@@ -108,6 +109,11 @@ export const storePage = internalMutation({
   handler: async (ctx, { innId, url, markdown, diffText }) => {
     const inn = await ctx.db.get(innId);
     if (!inn || inn.isDemo) throw new ConvexError({ code: "invalid", message: "not a real inn" });
+    // A hosted fictional inn shares its origin with the app and every other
+    // hosted inn; only its own /inn/<id>/ subtree may ever be stored under it.
+    if (isOwnHostedSite(inn.siteUrl, innId) && !isWithinHostedSite(url, inn.siteUrl)) {
+      throw new ConvexError({ code: "invalid", message: "page is outside this inn's hosted site" });
+    }
     let page = await ctx.db
       .query("pages")
       .withIndex("by_inn_url", (q) => q.eq("innId", innId).eq("url", url))
@@ -164,7 +170,16 @@ export const crawlSite = action({
     let urls: string[];
     try {
       const map = await mapSite({ apiKey, url: siteUrl, limit: 50 });
-      urls = selectPages(siteUrl, map.urls, MAX_PAGES);
+      if (isOwnHostedSite(siteUrl, innId)) {
+        // Hosted fictional site: the map is same-origin with the whole app and
+        // every other hosted inn, so keep only this inn's own /inn/<id>/
+        // subtree. The four canonical pages are seeded in case the map did
+        // not discover the sub-site; they are still fetched by the real scrape.
+        const hosted = parseHostedSiteUrl(siteUrl)!;
+        urls = selectPages(siteUrl, [...hostedPageUrls(siteUrl), ...map.urls], MAX_PAGES, { withinPath: `/inn/${hosted.innId}` });
+      } else {
+        urls = selectPages(siteUrl, map.urls, MAX_PAGES);
+      }
     } catch (e) {
       const err = describeError(e);
       await ctx.runMutation(internal.ingest.finishRun, { runId, status: "failed", pagesStored: 0, pagesSkipped: 0, reason: `map failed: ${err.message}` });

@@ -46,8 +46,27 @@ function normalizeUrl(raw: string): string | null {
   }
 }
 
+export type SelectPagesOptions = {
+  /**
+   * Hosted-site scoping: keep only URLs whose raw path segments start with
+   * these segments (the inn's own `/inn/<id>` prefix). Compared per segment,
+   * so `/inn/<id>x` and `/inn/<id>%2F..` never match; segments needing
+   * decoding are rejected. Same-origin alone is not enough when every hosted
+   * inn shares the deployment origin.
+   */
+  withinPath?: string;
+};
+
+function withinPathSegments(pathname: string, prefix: string): boolean {
+  const want = prefix.split("/").filter(Boolean);
+  const have = pathname.split("/").filter(Boolean);
+  if (have.length < want.length) return false;
+  for (let i = 0; i < want.length; i++) if (have[i] !== want[i]) return false;
+  return have.every((s) => !s.includes("%") && s !== "." && s !== "..");
+}
+
 /** Same-origin https URLs, home page first, then by kind priority and path depth. */
-export function selectPages(siteUrl: string, candidates: string[], max = MAX_PAGES): string[] {
+export function selectPages(siteUrl: string, candidates: string[], max = MAX_PAGES, opts: SelectPagesOptions = {}): string[] {
   const home = normalizeUrl(siteUrl);
   if (!home) return [];
   const origin = new URL(home).origin;
@@ -58,6 +77,7 @@ export function selectPages(siteUrl: string, candidates: string[], max = MAX_PAG
     if (!url || seen.has(url)) continue;
     const parsed = new URL(url);
     if (parsed.origin !== origin) continue;
+    if (opts.withinPath !== undefined && !withinPathSegments(parsed.pathname, opts.withinPath)) continue;
     if (/\.(pdf|jpe?g|png|gif|svg|webp|zip|mp4|css|js|xml)$/i.test(parsed.pathname)) continue;
     seen.add(url);
     const kind = classifyPage(url);

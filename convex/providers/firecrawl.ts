@@ -112,7 +112,10 @@ export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult
     fetchImpl,
     `${args.baseUrl ?? FIRECRAWL_BASE_URL}/v2/scrape`,
     apiKey,
-    { url: target.toString(), formats: ["markdown", changeTracking], onlyMainContent: true },
+    // maxAge: 0 forces a fresh fetch. Firecrawl's default (172800000 ms, two
+    // days) may serve a cached body, which would hide source changes from the
+    // rescrape loop.
+    { url: target.toString(), formats: ["markdown", changeTracking], onlyMainContent: true, maxAge: 0 },
     args.timeoutMs ?? FIRECRAWL_DEFAULT_TIMEOUT_MS,
     /* ambiguousOnFailure */ false,
   );

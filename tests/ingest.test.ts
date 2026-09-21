@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
+import { hostedPageUrls } from "../convex/lib/innWebsiteHtml";
 import { classifyPage, selectPages, MAX_PAGES } from "../convex/lib/siteSelection";
 import { makeTest, seedInn, signedInUser } from "./setup";
 import { json, seedLiveInn, settle, stubFetch, withEnv, type Route } from "./integrationSetup";
@@ -173,6 +174,168 @@ describe("crawlSite", () => {
     const [c] = await owner.as.query(api.corrections.list, { innId, status: "needs_review" });
     expect(c).toMatchObject({ threadId: thread, oldQuote: "$25 per night pet fee", isCurrent: true });
     expect(c.statusReason).toMatch(/OPENAI_API_KEY/);
+  });
+});
+
+describe("hosted fictional inn crawl scope", () => {
+  const HOST = "https://some.convex.site";
+
+  /** What Firecrawl would hand back for our own rendered HTML: tags stripped, text kept. */
+  const htmlToMarkdown = (html: string) =>
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, "# $1\n\n")
+      .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, "## $1\n\n")
+      .replace(/<\/p>|<\/dd>/gi, "\n\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+  /** Renders the inn's own four pages through the real HTTP route, keyed by every URL form the crawl may use. */
+  async function renderOwnPages(t: ReturnType<typeof makeTest>, siteUrl: string) {
+    const pages: Record<string, string> = {};
+    for (const url of hostedPageUrls(siteUrl)) {
+      const res = await t.fetch(new URL(url).pathname);
+      expect(res.status).toBe(200);
+      const markdown = htmlToMarkdown(await res.text());
+      pages[url] = markdown;
+      pages[url.replace(/\/$/, "")] = markdown;
+    }
+    return pages;
+  }
+
+  it("selectPages with a hosted path scope keeps only the inn's own subtree, by segment", () => {
+    const id = "jd7abc123def456";
+    const site = `${HOST}/inn/${id}/`;
+    const picked = selectPages(
+      site,
+      [
+        `${HOST}/`,
+        `${HOST}/inns/${id}/threads`,
+        `${HOST}/inn/other123/policies`,
+        `${HOST}/inn/${id}x/policies`,
+        `${HOST}/inn/${id}%2Fpolicies`,
+        `${HOST}/inn/${id}/rooms/`,
+        `${HOST}/inn/${id}/policies?utm=1#x`,
+        `${HOST}/inn/${id}/../other/policies`,
+        `https://evil.example/inn/${id}/policies`,
+      ],
+      MAX_PAGES,
+      { withinPath: `/inn/${id}` },
+    );
+    expect(picked).toEqual([`${HOST}/inn/${id}`, `${HOST}/inn/${id}/policies`, `${HOST}/inn/${id}/rooms`]);
+    // Without a scope the same-origin rule is unchanged for external sites.
+    expect(selectPages(`${HOST}/inn/${id}/`, [`${HOST}/inn/other123/policies`])).toContain(`${HOST}/inn/other123/policies`);
+  });
+
+  it("crawls only the inn's own hosted pages through the real map, scrape and store pipeline", async () => {
+    withEnv({ FIRECRAWL_API_KEY: "fc-test", CONVEX_SITE_URL: HOST });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId, siteUrl } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Harbor Light Inn" });
+    const { innId: otherId } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Other Inn" });
+    const own = await renderOwnPages(t, siteUrl);
+    const foreign: Record<string, string> = {
+      [`${HOST}/`]: "# Front Desk app\n\nSign in.",
+      [`${HOST}/inns/${innId}/threads`]: "# Staff threads\n\nguest@example.com",
+      [`${HOST}/inn/${otherId}/policies`]: "# Other Inn\n\nDogs $99.",
+      [`${HOST}/inn/${innId}x/policies`]: "# Lookalike\n\nnope",
+      [`${HOST}/inn/${innId}%2Fpolicies`]: "# Encoded\n\nnope",
+    };
+    // The map does not even list our own sub-pages: the canonical seeds must still be scraped.
+    const { calls } = stubFetch(firecrawlRoutes({ ...own, ...foreign }, Object.keys(foreign)));
+
+    const result = await owner.as.action(api.ingest.crawlSite, { innId });
+    expect(result).toMatchObject({ pagesStored: 4, pagesSkipped: 0, affectedClaims: 0 });
+    expect(calls.filter((c) => c.url.endsWith("/v2/map"))).toHaveLength(1);
+    const scraped = calls.filter((c) => c.url.endsWith("/v2/scrape")).map((c) => (c.body as { url: string }).url);
+    expect(scraped.sort()).toEqual([`${HOST}/inn/${innId}`, `${HOST}/inn/${innId}/notices`, `${HOST}/inn/${innId}/policies`, `${HOST}/inn/${innId}/rooms`]);
+    expect(scraped.every((u) => u.startsWith(`${HOST}/inn/${innId}`) && !u.startsWith(`${HOST}/inn/${innId}x`))).toBe(true);
+    expect(calls.filter((c) => c.url.endsWith("/v2/scrape")).every((c) => (c.body as { maxAge: number }).maxAge === 0)).toBe(true);
+
+    const stored = await owner.as.query(api.pages.list, { innId });
+    expect(stored.map((p) => p.url).sort()).toEqual(scraped.sort());
+    const policies = stored.find((p) => p.url.endsWith("/policies"))!;
+    expect(policies).toMatchObject({ kind: "policies", watched: true });
+    const version = await owner.as.query(api.pages.getVersion, { pageVersionId: policies.lastVersion!._id });
+    expect(version.markdown).toContain("Dogs are welcome for a fee of $25 per dog per night");
+    expect(version.markdown).toContain("Check-in begins at 3:00 PM.");
+    expect(version.markdown).not.toContain("guest@example.com");
+    // The other hosted inn got nothing from this crawl.
+    expect(await owner.as.query(api.pages.list, { innId: otherId })).toEqual([]);
+  });
+
+  it("source versions change only through a crawl: an edit alone changes nothing, the next crawl opens exactly the affected correction", async () => {
+    withEnv({ FIRECRAWL_API_KEY: "fc-test", CONVEX_SITE_URL: HOST, OPENAI_API_KEY: undefined });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId, siteUrl } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Harbor Light Inn" });
+    stubFetch(firecrawlRoutes(await renderOwnPages(t, siteUrl), []));
+    expect(await owner.as.action(api.ingest.crawlSite, { innId })).toMatchObject({ pagesStored: 4 });
+    const policies = (await owner.as.query(api.pages.list, { innId })).find((p) => p.url.endsWith("/policies"))!;
+    const firstVersionId = policies.lastVersion!._id;
+
+    // Two sent claims on the policies page: one about the fee (will change), one about check-in (control).
+    const { affectedThread } = await t.run(async (ctx) => {
+      const mk = async (quote: string, subject: string) => {
+        const threadId = await ctx.db.insert("threads", { innId, guestEmail: "g@x.com", subject, snippet: subject, status: "waiting_guest", lastInboundAt: Date.now() });
+        const draftId = await ctx.db.insert("drafts", { threadId, class: "answerable", answer: quote, abstain: false, status: "sent", model: "m" });
+        await ctx.db.insert("claims", { draftId, threadId, innId, statement: quote, pageId: policies._id, pageVersionId: firstVersionId, url: policies.url, quote, verified: true, status: "ok" });
+        await ctx.db.insert("sentReplies", { threadId, innId, draftId, sentBy: owner.userId, sentAt: Date.now(), kind: "reply", text: quote });
+        return threadId;
+      };
+      return { affectedThread: await mk("$25 per dog per night", "Dog fee"), controlThread: await mk("Check-in begins at 3:00 PM.", "Arrival") };
+    });
+
+    const base = (await owner.as.query(api.innWebsites.editor, { innId }))!.content;
+    await owner.as.mutation(api.innWebsites.update, { innId, content: { ...base, petFeePerDogPerNight: 40 } });
+    await settle(t);
+    // The edit is live on the site but no source version moved and no correction exists.
+    expect(await (await t.fetch(`/inn/${innId}/policies`)).text()).toContain("$40 per dog per night");
+    expect((await owner.as.query(api.pages.list, { innId })).find((p) => p.url.endsWith("/policies"))!.lastVersion!._id).toBe(firstVersionId);
+    expect(await t.run((ctx) => ctx.db.query("pageVersions").collect())).toHaveLength(4);
+    expect(await owner.as.query(api.corrections.list, { innId, status: "needs_review" })).toEqual([]);
+
+    // The next real crawl reads the new page and re-verifies the sent claims.
+    await t.run((ctx) => ctx.db.patch(innId, { lastCrawlStartedAt: undefined }));
+    stubFetch(firecrawlRoutes(await renderOwnPages(t, siteUrl), []));
+    const second = await owner.as.action(api.ingest.crawlSite, { innId });
+    expect(second).toMatchObject({ pagesStored: 4, affectedClaims: 1 });
+    await settle(t);
+    const after = (await owner.as.query(api.pages.list, { innId })).find((p) => p.url.endsWith("/policies"))!;
+    expect(after.lastVersion!._id).not.toBe(firstVersionId);
+    expect(after.lastVersion).toMatchObject({ changeStatus: "changed" });
+    const corrections = await owner.as.query(api.corrections.list, { innId, status: "needs_review" });
+    expect(corrections).toHaveLength(1);
+    expect(corrections[0]).toMatchObject({ threadId: affectedThread, oldQuote: "$25 per dog per night" });
+    const claims = await t.run((ctx) => ctx.db.query("claims").collect());
+    expect(claims.map((c) => [c.quote, c.status]).sort()).toEqual([
+      ["$25 per dog per night", "needs_review"],
+      ["Check-in begins at 3:00 PM.", "ok"],
+    ]);
+  });
+
+  it("storePage refuses a url outside the hosted subtree and leaves external inns unchanged", async () => {
+    withEnv({ CONVEX_SITE_URL: HOST });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId } = await owner.as.mutation(api.innWebsites.createFictional, { name: "Harbor Light Inn" });
+    for (const url of [`${HOST}/`, `${HOST}/inn/other123/policies`, `${HOST}/inn/${innId}x/policies`, `${HOST}/inn/${innId}%2Fpolicies`, `https://evil.example/inn/${innId}/`]) {
+      await expect(t.mutation(internal.ingest.storePage, { innId, url, markdown: "# x\n\nbody" }), url).rejects.toThrow(/outside this inn/);
+    }
+    expect(await t.run((ctx) => ctx.db.query("pages").collect())).toEqual([]);
+    await t.mutation(internal.ingest.storePage, { innId, url: `${HOST}/inn/${innId}/policies`, markdown: "# Policies\n\nbody" });
+    expect((await t.run((ctx) => ctx.db.query("pages").collect())).map((p) => p.url)).toEqual([`${HOST}/inn/${innId}/policies`]);
+    // An ordinary external inn keeps the same-origin rule.
+    const external = await seedInn(t, owner.userId);
+    await t.mutation(internal.ingest.storePage, { innId: external, url: "https://inn.example/anything/at/all", markdown: "# ok\n\nbody" });
+    expect(await t.run((ctx) => ctx.db.query("pages").withIndex("by_inn", (q) => q.eq("innId", external)).collect())).toHaveLength(1);
   });
 });
 
