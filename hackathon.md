@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T17:38:01Z
+- **Last updated:** 2026-09-21T18:10:23Z
 
 ## Log
 
@@ -89,3 +89,8 @@ Evidence: `src/workspace/settings/TeamSettings.tsx`, `src/workspace/onboarding/I
 Added thread viewers using the registered Convex presence component. Reads and heartbeats check current membership, user identities come from auth, and removed staff disappear immediately. Multiple tabs count as one viewer; silent sessions expire after 25 seconds.
 Eight tests exercise the actual component, including its expiry worker, tenant isolation and member removal. All 263 offline tests, CI and automated review passed. The frontend and backend are deployed on production Convex. A live two-staff browser check also verified mutual presence, exclusive claims and immediate removal; both test memberships were cleaned up.
 Evidence: `convex/presence.ts`, `convex/convex.config.ts`, `src/workspace/inbox/ThreadPresence.tsx`, `tests/presence.test.ts`.
+
+### 2026-09-21 - 1f11cde
+Added explicitly approved, scheduled follow-up emails through the guarded outbox. Existing reminders never authorize mail. Guest replies, closure, inbox changes and ended memberships prevent dispatch; unknown provider outcomes are not retried. Approval is tied to the original membership, so removing and re-inviting staff cannot revive it.
+Twenty-four integration tests cover scheduling, cancellation races, duplicate workers, simulated delivery and batched cleanup of 205 approvals. All 287 tests, CI and automated review passed; the backend is deployed on Convex. Provider transport is mocked in these tests; live follow-up delivery is not yet verified.
+Evidence: `convex/followUps.ts`, `convex/outbox.ts`, `convex/teams.ts`, `tests/followUpEmails.test.ts`.

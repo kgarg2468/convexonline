@@ -33,7 +33,7 @@ frontend and backend are hosted on Convex.
 | `convex/inbound.ts`, `generation.ts` | Inbound dedupe/threading and the draft → quote verification → judge pipeline (stale completions are discarded) |
 | `convex/drafts.ts`, `outbox.ts`, `corrections.ts` | Transactional send reservations, single-dispatch delivery, correction proposals/approval/sends |
 | `convex/ingest.ts`, `pages.ts`, `crons.ts` | Site crawl (≤10 pages), page versions + sent-claim re-verification, hourly rescrape of watched pages |
-| `convex/inbox.ts`, `integrations.ts`, `followUps.ts` | Inbox provisioning (server-controlled ids, appended to the product webhook), key-presence + readiness booleans, bounded follow-up reminders |
+| `convex/inbox.ts`, `integrations.ts`, `followUps.ts` | Inbox provisioning (server-controlled ids, appended to the product webhook), key-presence + readiness booleans, reminders and staff-approved follow-up emails |
 | `convex/teams.ts`, `presence.ts` | One-use staff invitations, membership removal, authenticated thread presence |
 | `convex/threads.ts`, `facts.ts`, `inns.ts` | Staff workspace API (queue, detail, search, stats, staff facts) |
 | `convex/demo.ts`, `demoContent.ts` | Per-visitor demo inn, fixture drafter, simulated sends, scripted policy change (3 affected / 3 control replies) |
@@ -48,8 +48,8 @@ explicitly joins the named property. Links expire after seven days; owners can
 revoke open links and remove staff. Removed staff lose workspace access and their
 thread claims are released. Thread detail also shows current viewers using the
 Convex presence component; viewing does not grant the claim lock. Sessions expire
-within 25 seconds of leaving or hiding the thread. The anonymous demo remains separate from real staff
-accounts and never sends mail.
+within 25 seconds of leaving or hiding the thread. The anonymous demo remains
+separate from real staff accounts and never sends mail.
 
 ## Email loop
 
@@ -81,6 +81,21 @@ accounts and never sends mail.
 
 Demo inns run the same guards with a fixture drafter and simulated sends; no
 provider is ever called for demo data and demo users never gain live authority.
+
+## Follow-up emails
+
+After replying to an open stay inquiry, claim the thread and review the full
+message in **Follow-up email**. Choose a send time and explicitly approve it.
+Times use your browser's time zone; the shown UTC offset follows the chosen date.
+The default is 48 hours, with a range of one minute to 30 days. A reminder by
+itself never authorizes email.
+
+Cancel or reschedule while it is scheduled. A queued follow-up can still be
+canceled until dispatch starts. A new guest reply, a closed thread, an inbox
+change, or ended staff membership prevents sending. Re-inviting staff does
+not restore their old approvals. Once a message is with the provider it cannot
+be recalled; an unknown outcome stays blocked from automatic retry. Demo
+follow-ups are clearly labeled simulated and never contact a mail provider.
 
 ## Inbox setup (one webhook per deployment)
 
