@@ -76,12 +76,21 @@ export const receive = internalMutation({
       .withIndex("by_inn_agentmail_thread", (q) => q.eq("innId", inn._id).eq("agentmailThreadId", args.providerThreadId))
       .first();
     if (!thread && args.inReplyTo) {
+      // The same RFC message can be stored under several inns (a guest mails
+      // many properties at once, or a message is copied between inboxes), so the
+      // In-Reply-To parent is resolved directly inside the receiving inn via
+      // the (innId, rfcMessageId) index. One bounded read: foreign copies of
+      // the id are never visited, however many there are. Rows stored before
+      // `innId` existed are invisible here until `migrations.backfillMessageInnIds`
+      // has run; the thread's inn is still re-checked defensively.
       const parent = await ctx.db
         .query("messages")
-        .withIndex("by_rfc_message_id", (q) => q.eq("rfcMessageId", args.inReplyTo))
+        .withIndex("by_inn_rfc_message_id", (q) => q.eq("innId", inn._id).eq("rfcMessageId", args.inReplyTo))
         .first();
-      const parentThread = parent ? await ctx.db.get(parent.threadId) : null;
-      if (parentThread && parentThread.innId === inn._id) thread = parentThread;
+      if (parent) {
+        const parentThread = await ctx.db.get(parent.threadId);
+        if (parentThread && parentThread.innId === inn._id) thread = parentThread;
+      }
     }
     const receivedAt = Math.min(args.receivedAt, Date.now());
     let threadId: Id<"threads">;
@@ -101,6 +110,7 @@ export const receive = internalMutation({
     }
     const messageId = await ctx.db.insert("messages", {
       threadId,
+      innId: inn._id,
       direction: "in",
       agentmailMessageId: args.providerMessageId,
       rfcMessageId: args.rfcMessageId,

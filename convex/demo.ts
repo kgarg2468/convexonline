@@ -107,6 +107,7 @@ export const enter = mutation({
       });
       const inboundId = await ctx.db.insert("messages", {
         threadId,
+        innId,
         direction: "in",
         from: spec.guestEmail,
         to: DEMO_INBOX,
@@ -161,6 +162,7 @@ export const enter = mutation({
         const sentAt = inboundAt + 14 * 60 * 1000;
         const messageId = await ctx.db.insert("messages", {
           threadId,
+          innId,
           direction: "out",
           from: DEMO_INBOX,
           to: spec.guestEmail,
@@ -403,6 +405,7 @@ export const simulateInbound = mutation({
     });
     const inboundId = await ctx.db.insert("messages", {
       threadId,
+      innId,
       direction: "in",
       from: email,
       to: DEMO_INBOX,

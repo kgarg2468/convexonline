@@ -228,6 +228,7 @@ export async function commitDelivery(
         : row.providerInboxId;
   const messageId = await ctx.db.insert("messages", {
     threadId: row.threadId,
+    innId: thread.innId,
     direction: "out",
     agentmailMessageId: delivered.providerMessageId,
     from: sentFrom,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import { signWebhook, verifyWebhookSignature } from "../convex/lib/webhookSignature";
 import { parseWebhookBody } from "../convex/lib/inboundPayload";
 import { makeTest, signedInUser } from "./setup";
@@ -162,6 +163,243 @@ describe("POST /api/agentmail/webhook", () => {
     expect(await a.as.query(api.threads.queue, { innId: innA.innId })).toHaveLength(1);
     expect(await b.as.query(api.threads.queue, { innId: innB.innId })).toHaveLength(1);
     await expect(b.as.query(api.threads.queue, { innId: innA.innId })).rejects.toThrow(/forbidden/);
+  });
+
+  describe("In-Reply-To fallback resolves the parent inside the receiving inn", () => {
+    const SHARED_RFC = "<shared-original@mail.example>";
+    const REPLY_RFC = "<reply@mail.example>";
+    const original = (inbox: string, eventId: string, threadId: string) =>
+      received({ event_id: eventId }, { inbox_id: inbox, to: inbox, thread_id: threadId, headers: { "message-id": SHARED_RFC } });
+    // The guest's reply comes back under a provider thread id nobody has seen, so
+    // only the In-Reply-To header can attach it to its parent.
+    const reply = (inbox: string, eventId: string) =>
+      received(
+        { event_id: eventId },
+        {
+          inbox_id: inbox,
+          to: inbox,
+          message_id: "<m2@x>",
+          thread_id: "thr_reply_unknown",
+          in_reply_to: SHARED_RFC,
+          headers: { "message-id": REPLY_RFC },
+          text: "Also, what time is check-in?",
+          extracted_text: "Also, what time is check-in?",
+          timestamp: "2026-09-21T10:05:00.000Z",
+        },
+      );
+
+    it("a reply at B joins B's copy of the parent even though A stored the same RFC id first", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const a = await signedInUser(t, { name: "A" });
+      const b = await signedInUser(t, { name: "B" });
+      const innA = await seedLiveInn(t, a.userId, { inboxId: "a@agentmail.to" });
+      const innB = await seedLiveInn(t, b.userId, { inboxId: "b@agentmail.to" });
+      // A's copy is inserted first, so a global first() on the RFC index would find A's parent.
+      expect(await (await signedPost(t, original("a@agentmail.to", "evt_a", "thr_a"), "r1")).json()).toEqual({ ok: true, outcome: "stored" });
+      expect(await (await signedPost(t, original("b@agentmail.to", "evt_b", "thr_b"), "r2")).json()).toEqual({ ok: true, outcome: "stored" });
+      const [threadA] = await a.as.query(api.threads.queue, { innId: innA.innId });
+      const [threadB] = await b.as.query(api.threads.queue, { innId: innB.innId });
+      const aBefore = await a.as.query(api.threads.get, { threadId: threadA._id });
+
+      expect(await (await signedPost(t, reply("b@agentmail.to", "evt_b_reply"), "r3")).json()).toEqual({ ok: true, outcome: "stored" });
+
+      // B has exactly one thread and the reply landed in it.
+      const queueB = await b.as.query(api.threads.queue, { innId: innB.innId });
+      expect(queueB).toHaveLength(1);
+      expect(queueB[0]._id).toBe(threadB._id);
+      const messagesB = await t.run((ctx) => ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", threadB._id)).collect());
+      expect(messagesB).toHaveLength(2);
+      expect(messagesB.map((m) => m.rfcMessageId).sort()).toEqual([REPLY_RFC, SHARED_RFC].sort());
+      const detailB = await b.as.query(api.threads.get, { threadId: threadB._id });
+      expect(detailB.thread.lastInboundMessageId).toBe(messagesB.find((m) => m.rfcMessageId === REPLY_RFC)?._id);
+      // A is untouched: still one thread, one message, same turn.
+      expect(await a.as.query(api.threads.queue, { innId: innA.innId })).toHaveLength(1);
+      const aAfter = await a.as.query(api.threads.get, { threadId: threadA._id });
+      expect(aAfter.messages).toHaveLength(1);
+      expect(aAfter.thread.lastInboundMessageId).toBe(aBefore.thread.lastInboundMessageId);
+      expect(aAfter.thread.lastInboundAt).toBe(aBefore.thread.lastInboundAt);
+      // Every message stays inside its inn.
+      const all = await t.run((ctx) => ctx.db.query("messages").collect());
+      expect(all.filter((m) => m.threadId === threadA._id)).toHaveLength(1);
+      expect(all.filter((m) => m.threadId === threadB._id)).toHaveLength(2);
+    });
+
+    /** A stored copy of the shared parent under `innId`, on its own thread. Mirrors what inbound.receive writes. */
+    async function insertParentCopy(ctx: Parameters<Parameters<ReturnType<typeof makeTest>["run"]>[0]>[0], innId: Id<"inns">, inbox: string, tag: string) {
+      const threadId = await ctx.db.insert("threads", {
+        innId,
+        agentmailThreadId: `thr_${tag}`,
+        guestEmail: "dana@example.com",
+        subject: "Bringing our dog",
+        snippet: "Can we bring our dog in October?",
+        status: "new",
+        lastInboundAt: Date.parse("2026-09-21T10:00:00.000Z"),
+      });
+      const messageId = await ctx.db.insert("messages", {
+        threadId,
+        innId,
+        direction: "in",
+        agentmailMessageId: `<m_${tag}@x>`,
+        rfcMessageId: SHARED_RFC,
+        from: "dana@example.com",
+        to: inbox,
+        text: "Can we bring our dog in October?",
+        at: Date.parse("2026-09-21T10:00:00.000Z"),
+        inboxId: inbox,
+        agentmailThreadId: `thr_${tag}`,
+      });
+      await ctx.db.patch(threadId, { lastInboundMessageId: messageId });
+      return threadId;
+    }
+
+    it("finds the receiving inn's first parent with one inn-scoped read, behind 100 foreign copies and among 100 same-inn duplicates", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const a = await signedInUser(t, { name: "A" });
+      const b = await signedInUser(t, { name: "B" });
+      const innA = await seedLiveInn(t, a.userId, { inboxId: "a@agentmail.to" });
+      const innB = await seedLiveInn(t, b.userId, { inboxId: "b@agentmail.to" });
+      // 100 copies of the parent live in A's inn and are stored before B's, so
+      // every global prefix of the RFC index (any take(N) with N <= 100) holds
+      // only foreign rows. The inn-scoped index never visits them.
+      const FOREIGN = 100;
+      const foreignThreadIds = await t.run(async (ctx) => {
+        const ids: Id<"threads">[] = [];
+        for (let i = 0; i < FOREIGN; i++) ids.push(await insertParentCopy(ctx, innA.innId, "a@agentmail.to", `a_${i}`));
+        return ids;
+      });
+      expect(await (await signedPost(t, original("b@agentmail.to", "evt_b", "thr_b"), "n1")).json()).toEqual({ ok: true, outcome: "stored" });
+      const [threadB] = await b.as.query(api.threads.queue, { innId: innB.innId });
+      // 100 further same-inn duplicates of the parent are stored after B's
+      // original; the reply must join the earliest same-inn copy, not any of these.
+      const SAME_INN = 100;
+      const duplicateThreadIds = await t.run(async (ctx) => {
+        const ids: Id<"threads">[] = [];
+        for (let i = 0; i < SAME_INN; i++) ids.push(await insertParentCopy(ctx, innB.innId, "b@agentmail.to", `b_dup_${i}`));
+        return ids;
+      });
+      const sharedCopies = await t.run((ctx) => ctx.db.query("messages").withIndex("by_rfc_message_id", (q) => q.eq("rfcMessageId", SHARED_RFC)).collect());
+      expect(sharedCopies).toHaveLength(FOREIGN + 1 + SAME_INN);
+      expect(sharedCopies[FOREIGN].threadId).toBe(threadB._id);
+      // The inn-scoped index answers directly: first() is B's original, and the
+      // range for B holds no foreign row at all.
+      const scoped = await t.run((ctx) =>
+        ctx.db.query("messages").withIndex("by_inn_rfc_message_id", (q) => q.eq("innId", innB.innId).eq("rfcMessageId", SHARED_RFC)).collect(),
+      );
+      expect(scoped).toHaveLength(1 + SAME_INN);
+      expect(scoped[0].threadId).toBe(threadB._id);
+      expect(scoped.every((m) => m.innId === innB.innId)).toBe(true);
+
+      expect(await (await signedPost(t, reply("b@agentmail.to", "evt_b_reply"), "n2")).json()).toEqual({ ok: true, outcome: "stored" });
+
+      // The reply joined B's original thread instead of opening a new one or
+      // landing on a later same-inn duplicate.
+      const queueB = await b.as.query(api.threads.queue, { innId: innB.innId });
+      expect(queueB).toHaveLength(1 + SAME_INN);
+      const messagesB = await t.run((ctx) => ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", threadB._id)).collect());
+      expect(messagesB.map((m) => m.rfcMessageId).sort()).toEqual([REPLY_RFC, SHARED_RFC].sort());
+      expect(messagesB.every((m) => m.innId === innB.innId)).toBe(true);
+      // No foreign thread and no same-inn duplicate gained the reply.
+      const all = await t.run((ctx) => ctx.db.query("messages").collect());
+      const replies = all.filter((m) => m.rfcMessageId === REPLY_RFC);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].threadId).toBe(threadB._id);
+      const foreignSet = new Set<string>(foreignThreadIds);
+      const duplicateSet = new Set<string>(duplicateThreadIds);
+      expect(all.filter((m) => foreignSet.has(m.threadId) || duplicateSet.has(m.threadId)).every((m) => m.rfcMessageId === SHARED_RFC)).toBe(true);
+      expect(await a.as.query(api.threads.queue, { innId: innA.innId })).toHaveLength(FOREIGN);
+    });
+
+    it("a message row whose innId disagrees with its thread's inn never pulls a reply across inns", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const a = await signedInUser(t, { name: "A" });
+      const b = await signedInUser(t, { name: "B" });
+      const innA = await seedLiveInn(t, a.userId, { inboxId: "a@agentmail.to" });
+      const innB = await seedLiveInn(t, b.userId, { inboxId: "b@agentmail.to" });
+      await signedPost(t, original("a@agentmail.to", "evt_a", "thr_a"), "p1");
+      const [threadA] = await a.as.query(api.threads.queue, { innId: innA.innId });
+      // Corrupt the denormalized column: A's parent claims to belong to B.
+      await t.run(async (ctx) => {
+        const [parent] = await ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", threadA._id)).collect();
+        await ctx.db.patch(parent._id, { innId: innB.innId });
+      });
+
+      expect(await (await signedPost(t, reply("b@agentmail.to", "evt_b_reply"), "p2")).json()).toEqual({ ok: true, outcome: "stored" });
+
+      // The thread's own inn is re-checked, so B opens a fresh thread and A is untouched.
+      const queueB = await b.as.query(api.threads.queue, { innId: innB.innId });
+      expect(queueB).toHaveLength(1);
+      expect(queueB[0]._id).not.toBe(threadA._id);
+      expect((await a.as.query(api.threads.get, { threadId: threadA._id })).messages).toHaveLength(1);
+    });
+
+    it("a legacy parent without innId is not matched until the backfill has run", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const owner = await signedInUser(t, { name: "Owner" });
+      const { innId } = await seedLiveInn(t, owner.userId);
+      await signedPost(t, original("seagull@agentmail.to", "evt_1", "thr_abc"), "l1");
+      const [thread] = await owner.as.query(api.threads.queue, { innId });
+      // Simulate a row written before the column existed.
+      await t.run(async (ctx) => {
+        const [parent] = await ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", thread._id)).collect();
+        await ctx.db.patch(parent._id, { innId: undefined });
+      });
+
+      expect(await (await signedPost(t, reply("seagull@agentmail.to", "evt_reply"), "l2")).json()).toEqual({ ok: true, outcome: "stored" });
+      const queue = await owner.as.query(api.threads.queue, { innId });
+      expect(queue).toHaveLength(2);
+      expect(queue.map((q) => q._id)).toContain(thread._id);
+    });
+
+    it("a parent that exists only in another inn is never matched: the reply opens its own thread", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const a = await signedInUser(t, { name: "A" });
+      const b = await signedInUser(t, { name: "B" });
+      const innA = await seedLiveInn(t, a.userId, { inboxId: "a@agentmail.to" });
+      const innB = await seedLiveInn(t, b.userId, { inboxId: "b@agentmail.to" });
+      await signedPost(t, original("a@agentmail.to", "evt_a", "thr_a"), "f1");
+      const [threadA] = await a.as.query(api.threads.queue, { innId: innA.innId });
+
+      expect(await (await signedPost(t, reply("b@agentmail.to", "evt_b_reply"), "f2")).json()).toEqual({ ok: true, outcome: "stored" });
+
+      const queueB = await b.as.query(api.threads.queue, { innId: innB.innId });
+      expect(queueB).toHaveLength(1);
+      expect(queueB[0]._id).not.toBe(threadA._id);
+      expect((await t.run((ctx) => ctx.db.get(queueB[0]._id)))?.innId).toBe(innB.innId);
+      const messagesB = await t.run((ctx) => ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", queueB[0]._id)).collect());
+      expect(messagesB).toHaveLength(1);
+      expect(messagesB[0].rfcMessageId).toBe(REPLY_RFC);
+      // A did not gain the reply.
+      const detailA = await a.as.query(api.threads.get, { threadId: threadA._id });
+      expect(detailA.messages).toHaveLength(1);
+      expect(await a.as.query(api.threads.queue, { innId: innA.innId })).toHaveLength(1);
+    });
+
+    it("the normal single-inn fallback still attaches a reply with an unknown provider thread id", async () => {
+      withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+      const t = makeTest();
+      const owner = await signedInUser(t, { name: "Owner" });
+      const { innId } = await seedLiveInn(t, owner.userId);
+      await signedPost(t, original("seagull@agentmail.to", "evt_1", "thr_abc"), "s1");
+      const [thread] = await owner.as.query(api.threads.queue, { innId });
+
+      expect(await (await signedPost(t, reply("seagull@agentmail.to", "evt_reply"), "s2")).json()).toEqual({ ok: true, outcome: "stored" });
+
+      const queue = await owner.as.query(api.threads.queue, { innId });
+      expect(queue).toHaveLength(1);
+      expect(queue[0]._id).toBe(thread._id);
+      const detail = await owner.as.query(api.threads.get, { threadId: thread._id });
+      expect(detail.messages).toHaveLength(2);
+      expect(detail.thread.status).toBe("drafting");
+      // The thread keeps its original provider thread id; the reply's is only recorded on the message.
+      expect((await t.run((ctx) => ctx.db.get(thread._id)))?.agentmailThreadId).toBe("thr_abc");
+      const messages = await t.run((ctx) => ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", thread._id)).collect());
+      expect(messages.find((m) => m.rfcMessageId === REPLY_RFC)?.agentmailThreadId).toBe("thr_reply_unknown");
+    });
   });
 
   it("a newer inbound joins the existing thread, supersedes unsent drafts and cancels follow-ups", async () => {

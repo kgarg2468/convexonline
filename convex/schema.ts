@@ -178,6 +178,13 @@ export default defineSchema({
 
   messages: defineTable({
     threadId: v.id("threads"),
+    /**
+     * Denormalized owner inn (always the thread's inn) so In-Reply-To parents
+     * can be looked up directly inside the receiving inn. Optional only while
+     * rows written before the field existed are backfilled by
+     * `migrations.backfillMessageInnIds`; every writer sets it.
+     */
+    innId: v.optional(v.id("inns")),
     direction: v.union(v.literal("in"), v.literal("out")),
     agentmailMessageId: v.optional(v.string()),
     rfcMessageId: v.optional(v.string()),
@@ -193,7 +200,8 @@ export default defineSchema({
   })
     .index("by_thread", ["threadId"])
     .index("by_agentmail_message_id", ["agentmailMessageId"])
-    .index("by_rfc_message_id", ["rfcMessageId"]),
+    .index("by_rfc_message_id", ["rfcMessageId"])
+    .index("by_inn_rfc_message_id", ["innId", "rfcMessageId"]),
 
   drafts: defineTable({
     threadId: v.id("threads"),
