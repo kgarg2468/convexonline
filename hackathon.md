@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T23:48:00Z
+- **Last updated:** 2026-09-21T23:52:00Z
 
 ## Log
 
@@ -180,6 +180,11 @@ Production viewer checks established playback but exposed seeking snapping back 
 Added an exact route for the demo MP4 that resolves only that current public asset and redirects to its storage URL with no-store caching. Missing files return 404 without SPA fallback. Six actual-component regression tests cover route precedence, redirect behavior, replacement uploads, missing assets and unchanged root routes. All 386 offline tests, types, lint and build pass. Production seeking will be rechecked after deploying the reviewed route.
 Evidence: `convex/http.ts`, `tests/videoRouting.test.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - f17df04
 Deployed the reviewed range-support route. A fresh MP4 request redirects to Convex storage and returns the requested 1,024-byte range with HTTP 206. An older cached response still serves the unversioned URL, so the viewer's source and download links now share a version query to bypass that response. The video and transcript bytes are unchanged.
 Evidence: `public/demo.html`, `convex/http.ts`.
+
+### 2026-09-21 - working tree
+Final production viewer verification passed all ten Chromium checks, including actual playback and seeking to two minutes, with no media, console or page errors. The published video is 150.27 seconds, below three minutes; its bytes match the reviewed artifact. The narration transcript is published and matches the committed text. The app health endpoint returns HTTP 200.
+The frontend and backend remain hosted on Convex. Source-change, delivery, follow-up and model-evaluation evidence are documented, including the retained failed receipt check and party-size assertion. Gmail confirmation and additional inbox capacity remain external requirements. Submission materials and social copy are prepared; no form or social post has been sent.
+Evidence: `docs/verification.md`, `docs/submission.md`, `public/demo.html`, `public/front-desk-demo-transcript.txt`.
