@@ -1,8 +1,10 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
+import { mutation } from "./functions";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireInnAccess, requireThreadAccess } from "./access";
+import { aggregateThreadStats, aggregatesReady, scannedThreadStats } from "./aggregates";
 import { CLAIM_TTL_MS, evaluateClaim, evaluateRelease, isClaimActive } from "./lib/claimLocks";
 import { cancelEmailFollowUps } from "./followUps";
 import { threadStatus } from "./schema";
@@ -77,51 +79,24 @@ export const search = query({
   },
 });
 
-/** Real counts over the inn's tables (no aggregate component). */
+/**
+ * Inbox header counts for one inn. Read from the per-inn aggregates once
+ * `migrations.backfillAggregates` has walked every source table; until then
+ * the tables are counted directly so a half-built aggregate is never shown.
+ * "Sent today" is the inn's local calendar day, decided by the server clock.
+ *
+ * `clock` is ignored by the handler. The client passes the current minute so
+ * the subscription re-executes (with a fresh server `Date.now()`) when the
+ * local day rolls over without any row changing; the value itself is never
+ * trusted as the cutoff.
+ */
 export const stats = query({
-  args: { innId: v.id("inns") },
+  args: { innId: v.id("inns"), clock: v.optional(v.number()) },
   handler: async (ctx, { innId }) => {
-    await requireInnAccess(ctx, innId);
-    const threads = await ctx.db
-      .query("threads")
-      .withIndex("by_inn_lastInbound", (q) => q.eq("innId", innId))
-      .collect();
-    const count = (s: Doc<"threads">["status"]) => threads.filter((t) => t.status === s).length;
-    const dayStart = Date.now() - 24 * 60 * 60 * 1000;
-    let sentTotal = 0;
-    let sentToday = 0;
-    for (const t of threads) {
-      const replies = await ctx.db
-        .query("sentReplies")
-        .withIndex("by_thread", (q) => q.eq("threadId", t._id))
-        .collect();
-      sentTotal += replies.length;
-      sentToday += replies.filter((r) => r.sentAt >= dayStart).length;
-    }
-    const pending = await ctx.db
-      .query("corrections")
-      .withIndex("by_inn_status", (q) => q.eq("innId", innId).eq("status", "needs_review"))
-      .collect();
-    const responseTimes = threads
-      .map((t) => t.firstResponseMs)
-      .filter((x): x is number => typeof x === "number")
-      .sort((a, b) => a - b);
-    const median =
-      responseTimes.length === 0
-        ? null
-        : responseTimes.length % 2 === 1
-          ? responseTimes[(responseTimes.length - 1) / 2]
-          : (responseTimes[responseTimes.length / 2 - 1] + responseTimes[responseTimes.length / 2]) / 2;
-    return {
-      open: count("new") + count("drafting") + count("needs_staff") + count("ready"),
-      needsStaff: count("needs_staff"),
-      ready: count("ready"),
-      waitingGuest: count("waiting_guest"),
-      sentToday,
-      sentTotal,
-      pendingCorrections: pending.length,
-      medianFirstResponseMs: median,
-    };
+    const { inn } = await requireInnAccess(ctx, innId);
+    const now = Date.now();
+    if (await aggregatesReady(ctx)) return await aggregateThreadStats(ctx, inn, now);
+    return await scannedThreadStats(ctx, inn, now);
   },
 });
 

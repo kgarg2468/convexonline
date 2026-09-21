@@ -15,7 +15,8 @@
 import { ConvexError, v } from "convex/values";
 import { Presence } from "@convex-dev/presence";
 import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
+import { mutation } from "./functions";
 import type { Id } from "./_generated/dataModel";
 import { membershipFor, requireThreadAccess } from "./access";
 import { HEARTBEAT_INTERVAL_MS, PRESENCE_TTL_MS } from "./lib/presenceTiming";

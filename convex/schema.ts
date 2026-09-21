@@ -421,6 +421,23 @@ export default defineSchema({
     .index("by_approver_membership_status", ["approvedByMembershipId", "status"]),
 
   /**
+   * Progress of `migrations.backfillAggregates`: one row per source table the
+   * stats aggregates (convex/aggregates.ts) are built from. `threads.stats`
+   * reads the component only once every row here is `done`; until then it
+   * keeps counting the tables directly, so a half-built aggregate is never
+   * shown. Written only by the internal migrator.
+   */
+  aggregateBackfills: defineTable({
+    table: v.union(v.literal("threads"), v.literal("sentReplies"), v.literal("corrections")),
+    /** Pagination cursor of the next batch; absent before the first batch and once done. */
+    cursor: v.optional(v.string()),
+    done: v.boolean(),
+    processed: v.number(),
+    startedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_table", ["table"]),
+
+  /**
    * One-use staff invitations. Only the SHA-256 of the capability token is
    * stored; the raw token exists solely in the creating action's return value.
    */

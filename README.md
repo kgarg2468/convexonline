@@ -22,6 +22,8 @@ frontend and backend are hosted on Convex.
 - Vitest + `convex-test` for backend tests.
 - The Convex rate-limiter component shares an OpenAI operation budget across
   each inn's staff and incoming messages.
+- The Convex aggregate component maintains per-inn queue counts, sent-reply
+  totals, pending corrections, and median first-response time.
 
 ## Layout
 
@@ -97,6 +99,22 @@ Incoming mail is still stored when the budget is exhausted. Drafts and
 corrections show a retry time, and staff can request another attempt when the
 budget and existing redraft cooldown allow it. Throttling never schedules an
 automatic retry loop. Demo work does not consume this provider budget.
+
+## Inbox statistics
+
+Four aggregate component instances update in the same transaction as thread,
+sent-reply, and correction writes. Each inn has its own namespace. “Sent today”
+uses the inn's local calendar day, including daylight-saving changes. Normal
+replies and correction sends count; follow-up emails do not. Median first
+response excludes threads that have not received a reply.
+
+After first deploying the aggregate components, run
+`npx convex run --prod migrations:runAggregateBackfill '{}'`. The internal
+migration advances through the three source tables in batches of 100 and
+persists progress. Live writes remain indexed throughout. Statistics continue
+to read the source tables until all backfills finish, then switch to aggregates.
+Re-running a completed backfill is a no-op; `{"restart":true}` safely walks the
+tables again without clearing the component data.
 
 ## Follow-up emails
 

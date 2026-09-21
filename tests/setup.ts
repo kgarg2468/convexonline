@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import presenceComponent from "@convex-dev/presence/test";
 import rateLimiterComponent from "@convex-dev/rate-limiter/test";
+import aggregateComponent from "@convex-dev/aggregate/test";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -14,6 +15,11 @@ export function makeTest() {
   // The real rate limiter component (and its nested batch worker) behind the
   // per-inn model budget, so throttle tests exercise the published package.
   rateLimiterComponent.register(t);
+  // The real aggregate component, one instance per stats aggregate exactly as
+  // mounted in convex.config.ts, so every mutation's triggers write to it.
+  for (const name of ["threadStatusCounts", "threadFirstResponseTimes", "sentRepliesBySentAt", "correctionStatusCounts"]) {
+    aggregateComponent.register(t, name);
+  }
   return t;
 }
 

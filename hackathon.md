@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/kgarg2468/convexonline
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://outgoing-zebra-720.convex.cloud
-- **Components:** @convex-dev/static-hosting, @convex-dev/presence, @convex-dev/rate-limiter
+- **Components:** @convex-dev/static-hosting, @convex-dev/presence, @convex-dev/rate-limiter, @convex-dev/aggregate
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, realtime queries, full-text search, scheduled functions, crons
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T20:16:11Z
+- **Last updated:** 2026-09-21T20:38:26Z
 
 ## Log
 
@@ -115,7 +115,12 @@ Live correction probes exposed unsupported historical statements in generated no
 All 314 offline tests, CI and follow-up review passed. Three live OpenAI correction cases—pet fee, checkout time and breakfast hours—passed with verified new-value quotes and accepted independent verdicts. These probes ran the real model adapters with an isolated test database and sent no mail. The backend is deployed on Convex.
 Evidence: `convex/corrections.ts`, `convex/providers/openai.ts`, `tests/corrections.test.ts`, `tests/providers.test.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 55fdd36
 Added per-inn model budgets using the registered Convex rate-limiter component. Normal drafts, staff-edit verification and correction proposals share atomic burst and hourly limits. Denied operations show an inn-local retry time; incoming mail remains stored and no automatic model retry is scheduled. Demo, stale, missing-key and empty-source draft work consumes no budget.
-All 327 offline tests pass, including 13 actual-component budget tests. Root and standalone browser type checks, lint and the production build pass. These tests mock provider transport.
+All 327 offline tests pass, including 13 actual-component budget tests. Root and standalone browser type checks, lint and the production build pass. CI and automated review passed; the frontend and backend are deployed on Convex. These tests mock provider transport.
 Evidence: `convex/modelBudget.ts`, `convex/generation.ts`, `convex/corrections.ts`, `tests/modelBudget.test.ts`, `src/workspace/inbox/ThreadDetail.tsx`.
+
+### 2026-09-21 - working tree
+Added four inn-scoped aggregate instances for thread states, first-response times, sent replies and correction states. App mutations update them transactionally. A persistent, repeatable migration backfills 100 source rows per batch; statistics retain accurate table counts until every backfill finishes. “Sent today” now follows the inn's local calendar day and refreshes without requiring a database write.
+All 341 offline tests pass, including interleaved writes during backfill, tenant isolation, normal and correction sends, medians, and daylight-saving boundaries. Root and standalone browser types, lint and build pass. The prior rate-limit deployment also passed 28 production browser scenarios; two optional screenshot tests were skipped.
+Evidence: `convex/aggregates.ts`, `convex/functions.ts`, `convex/migrations.ts`, `convex/lib/localDay.ts`, `tests/aggregates.test.ts`, `tests/localDay.test.ts`.
