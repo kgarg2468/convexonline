@@ -307,24 +307,40 @@ describe("draft generation", () => {
         return draftId;
       });
 
-    // A newer guest message on the thread must not replace the inbound this draft answers.
+    const original = "Subject: Dog?\n\nOriginal question about the dog.";
+
+    // A current bound draft is judged with exactly the inquiry it answers.
     const bound = await seedDraft(messageId);
+    await t.action(internal.generation.reverify, { draftId: bound });
+    expect(judged).toHaveLength(1);
+    expect(judged[0]).toContain(`<guest_email>\n${original}\n</guest_email>`);
+    expect((await t.run((ctx) => ctx.db.get(bound)))?.status).toBe("ready");
+
+    // Once a newer guest message becomes the latest, the snapshot still resolves only the bound
+    // inbound (never the newest), but the rate-budget stale guard refuses the judge outright.
+    const stale = await seedDraft(messageId);
     await t.run(async (ctx) => {
       const newer = await ctx.db.insert("messages", { threadId, direction: "in", from: "guest@example.com", to: "x", text: "Newer follow-up message.", at: Date.now() });
       await ctx.db.patch(threadId, { lastInboundMessageId: newer });
     });
-    await t.action(internal.generation.reverify, { draftId: bound });
+    const staleSnap = await t.query(internal.generation.draftForReverify, { draftId: stale });
+    expect(staleSnap?.guestContext).toBe(original);
+    expect(staleSnap?.guestContext).not.toContain("Newer follow-up");
+    await t.action(internal.generation.reverify, { draftId: stale });
     expect(judged).toHaveLength(1);
-    expect(judged[0]).toContain("<guest_email>\nSubject: Dog?\n\nOriginal question about the dog.\n</guest_email>");
-    expect(judged[0]).not.toContain("Newer follow-up");
-    expect((await t.run((ctx) => ctx.db.get(bound)))?.status).toBe("ready");
+    const staleRow = await t.run((ctx) => ctx.db.get(stale));
+    expect(staleRow?.status).toBe("needs_edit");
+    expect(staleRow?.verifiedText).toBeUndefined();
+    expect(staleRow?.judgeVerdict).toBeUndefined();
 
-    // A draft bound to a message from another thread gets no guest context at all (source-only judge).
+    // A draft bound to a message from another thread gets no guest context at all, and the
+    // action likewise refuses it as stale work without another judge call.
     const crossed = await seedDraft(other.messageId);
+    const crossedSnap = await t.query(internal.generation.draftForReverify, { draftId: crossed });
+    expect(crossedSnap?.guestContext).toBeUndefined();
     await t.action(internal.generation.reverify, { draftId: crossed });
-    expect(judged).toHaveLength(2);
-    expect(judged[1]).not.toContain("<guest_email>");
-    expect(judged[1]).not.toContain("different thread");
+    expect(judged).toHaveLength(1);
+    expect((await t.run((ctx) => ctx.db.get(crossed)))?.status).toBe("needs_edit");
   });
 
   it("re-judging applies only to the text that was judged (a later edit wins)", async () => {

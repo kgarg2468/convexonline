@@ -264,6 +264,27 @@ export const generateForThread = internalAction({
       await ctx.runMutation(internal.generation.fail, { draftId, reason: "drafter unavailable: OPENAI_API_KEY is not configured" });
       return null;
     }
+    // No source means no provider work is possible (the drafter itself would
+    // reject the call), so fail visibly before any budget is reserved.
+    if (snap.pages.length === 0 && snap.facts.length === 0) {
+      await ctx.runMutation(internal.generation.fail, {
+        draftId,
+        reason: "nothing to draft from: this inn has no website pages or staff facts yet",
+      });
+      return null;
+    }
+    // One budget operation covers the draft and its judge. Charged only once
+    // a provider call is actually possible (key present, draft still current);
+    // a denial leaves a visible needs_edit draft for staff to redraft later.
+    const budget = await ctx.runMutation(internal.modelBudget.reserve, {
+      scope: { kind: "draft", draftId, inboundMessageId },
+    });
+    if (!budget.ok) {
+      if (budget.kind === "throttled") {
+        await ctx.runMutation(internal.generation.fail, { draftId, reason: `drafting paused: ${budget.reason}` });
+      }
+      return null;
+    }
     const currentDate = currentDateIn(snap.inn.timezone);
     const inquiry = inquiryFor(snap.thread.subject, snap.inbound.text);
     let generated;
@@ -429,6 +450,19 @@ export const reverify = internalAction({
         answer,
         reason: "edited text not re-judged: OPENAI_API_KEY is not configured (send as staff-authored or wait)",
       });
+      return null;
+    }
+    // Each re-judge of an edit is one budget operation, so repeated edits
+    // cannot run the judge without bound. The scope pins the exact text seen.
+    const budget = await ctx.runMutation(internal.modelBudget.reserve, { scope: { kind: "reverify", draftId, answer } });
+    if (!budget.ok) {
+      if (budget.kind === "throttled") {
+        await ctx.runMutation(internal.generation.applyReverify, {
+          draftId,
+          answer,
+          reason: `edited text not re-judged: ${budget.reason} (or send as staff-authored)`,
+        });
+      }
       return null;
     }
     try {

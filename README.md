@@ -20,6 +20,8 @@ frontend and backend are hosted on Convex.
   Demo visitors get a private seeded inn and can never send live mail.
 - React 19 + Vite + TypeScript frontend.
 - Vitest + `convex-test` for backend tests.
+- The Convex rate-limiter component shares an OpenAI operation budget across
+  each inn's staff and incoming messages.
 
 ## Layout
 
@@ -82,6 +84,19 @@ separate from real staff accounts and never sends mail.
 
 Demo inns run the same guards with a fixture drafter and simulated sends; no
 provider is ever called for demo data and demo users never gain live authority.
+
+## Drafting limits
+
+Each inn shares a token bucket that refills at 10 model operations per minute,
+with a burst capacity of 10, and a fixed limit of 60 operations per clock hour.
+A draft and its independent judge count as one operation; re-judging an edit
+or generating a correction each use one operation. Both limits must allow the
+operation before either is charged.
+
+Incoming mail is still stored when the budget is exhausted. Drafts and
+corrections show a retry time, and staff can request another attempt when the
+budget and existing redraft cooldown allow it. Throttling never schedules an
+automatic retry loop. Demo work does not consume this provider budget.
 
 ## Follow-up emails
 
