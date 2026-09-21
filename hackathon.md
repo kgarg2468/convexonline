@@ -138,6 +138,7 @@ All 353 offline tests pass, including 12 archive tests exercising the actual com
 Evidence: `convex/agentmailArchive.ts`, `convex/inbound.ts`, `convex/convex.config.ts`, `tests/agentmailArchive.test.ts`.
 
 ### 2026-09-21 - working tree
-Improved staff-facing validation and claim feedback. Known validation failures show the backend's bounded explanation; a missing active claim no longer incorrectly blames another staff member. Named claim holders and explicit server guidance remain visible.
+Improved staff-facing validation and claim feedback. An explicit set of property validation failures shows the backend's bounded explanation; a missing active claim no longer incorrectly blames another staff member. Named claim holders and explicit server guidance remain visible.
 All 353 offline tests, root and browser types, lint and build pass. Three website browser flows pass against production, including submitting an invalid time zone, reading the precise error and successfully correcting the same form.
-Evidence: `src/workspace/lib/format.ts`, `tests/browser/specs/inn-website.spec.ts`.
+Automated review caught generic validation errors carrying internal details and Unicode controls bypassing the text guard. Both are fixed; ten disclosure/control-boundary tests pass, and the browser validation/recovery flow passes again.
+Evidence: `src/workspace/lib/format.ts`, `tests/uiErrors.test.ts`, `tests/browser/specs/inn-website.spec.ts`.
