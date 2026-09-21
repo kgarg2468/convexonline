@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T20:51:24Z
+- **Last updated:** 2026-09-21T21:35:00Z
 
 ## Log
 
@@ -128,5 +128,6 @@ Evidence: `convex/aggregates.ts`, `convex/functions.ts`, `convex/migrations.ts`,
 
 ### 2026-09-21 - working tree
 Added an inbox statistics strip showing replies sent on the inn's local day, median first-response time and the open queue. Empty inns explicitly show no first responses yet; desktop and mobile layouts wrap the metrics.
-Root and browser type checks, lint and build pass. Twelve targeted browser scenarios pass against the production backend, including counts changing after a simulated send, empty-inn statistics, owner website editing and mobile navigation. An initial run encountered a local network disconnect; the unchanged rerun passed all twelve scenarios.
+Root and browser type checks, lint and build pass. Twelve targeted browser scenarios pass against the production backend, including the queue changing after a simulated send, empty-inn statistics, owner website editing and mobile navigation. An initial run encountered a local network disconnect; the unchanged rerun passed all twelve scenarios.
+Automated review caught a live-midnight race in the browser count assertion. The browser now checks count rendering and the queue transition; controlled-clock backend tests retain exact daily-count coverage. All five targeted inbox browser flows pass after the fix.
 Evidence: `src/workspace/inbox/InboxStats.tsx`, `tests/browser/specs/inbox.spec.ts`, `tests/browser/specs/inn-website.spec.ts`.
