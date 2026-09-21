@@ -4,11 +4,12 @@ import { internalMutation } from "./functions";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireInnAccess } from "./access";
-import { readEnv } from "./lib/env";
+import { hasEnv, readEnv } from "./lib/env";
 import { describeError } from "./lib/errors";
 import { deploymentOriginOf, hostedPageUrls, hostedSiteScope, isOnDeploymentOrigin, isWithinHostedSite, parseHostedSiteUrl } from "./lib/innWebsiteHtml";
 import { classifyPage, isWatchedKind, selectPages, titleFromMarkdown, MAX_PAGE_CHARS, MAX_PAGES, MAX_TOTAL_CHARS } from "./lib/siteSelection";
-import { isPublicHttpsUrl, mapSite, scrapePage } from "./providers/firecrawl";
+import { isPublicHttpsUrl } from "./providers/firecrawl";
+import { mapSiteViaComponent, scrapePageViaComponent } from "./firecrawlClient";
 import { recordPageVersion } from "./pages";
 
 export const INN_COOLDOWN_MS = 10 * 60 * 1000;
@@ -157,15 +158,15 @@ export const storePage = internalMutation({
   },
 });
 
+/** Scrapes through the Firecrawl component (the key is bound in convex.config.ts, never passed here). */
 async function scrapeInto(
-  ctx: { runMutation: (ref: typeof internal.ingest.storePage, args: { innId: Id<"inns">; url: string; markdown: string; diffText?: string }) => Promise<{ affected: number }> },
-  apiKey: string,
+  ctx: Parameters<typeof scrapePageViaComponent>[0],
   innId: Id<"inns">,
   url: string,
   budget: { remaining: number },
 ): Promise<{ stored: boolean; affected: number; reason?: string }> {
   try {
-    const page = await scrapePage({ apiKey, url, tag: `inn-${innId}` });
+    const page = await scrapePageViaComponent(ctx, { url, tag: `inn-${innId}` });
     const markdown = page.markdown.slice(0, MAX_PAGE_CHARS);
     if (markdown.length > budget.remaining) return { stored: false, affected: 0, reason: "site budget exhausted" };
     budget.remaining -= markdown.length;
@@ -187,8 +188,9 @@ export const crawlSite = action({
     { innId },
   ): Promise<{ runId: Id<"crawlRuns">; pagesStored: number; pagesSkipped: number; affectedClaims: number }> => {
     const { runId, siteUrl }: { runId: Id<"crawlRuns">; siteUrl: string } = await ctx.runMutation(internal.ingest.beginRun, { innId });
-    const apiKey = readEnv("FIRECRAWL_API_KEY");
-    if (!apiKey) {
+    // The component reads the same declared env var; refusing here keeps a
+    // misconfigured deployment from opening runs that can only fail.
+    if (!hasEnv("FIRECRAWL_API_KEY")) {
       await ctx.runMutation(internal.ingest.finishRun, { runId, status: "failed", pagesStored: 0, pagesSkipped: 0, reason: "FIRECRAWL_API_KEY is not configured" });
       throw new ConvexError({ code: "firecrawl_unavailable", message: "Site crawling is not configured on this deployment" });
     }
@@ -201,7 +203,7 @@ export const crawlSite = action({
     }
     let urls: string[];
     try {
-      const map = await mapSite({ apiKey, url: siteUrl, limit: 50 });
+      const map = await mapSiteViaComponent(ctx, { url: siteUrl, limit: 50 });
       if (scope === "own") {
         // Hosted fictional site: the map is same-origin with the whole app and
         // every other hosted inn, so keep only this inn's own /inn/<id>/
@@ -223,7 +225,7 @@ export const crawlSite = action({
     let affectedClaims = 0;
     const skipped: string[] = [];
     for (const url of urls) {
-      const r = await scrapeInto(ctx, apiKey, innId, url, budget);
+      const r = await scrapeInto(ctx, innId, url, budget);
       if (r.stored) {
         pagesStored += 1;
         affectedClaims += r.affected;
@@ -300,13 +302,12 @@ export const recordCronRun = internalMutation({
 export const rescrapeDue = internalAction({
   args: {},
   handler: async (ctx): Promise<{ scraped: number; reason: string | undefined }> => {
-    const apiKey = readEnv("FIRECRAWL_API_KEY");
-    if (!apiKey) return { scraped: 0, reason: "FIRECRAWL_API_KEY is not configured" };
+    if (!hasEnv("FIRECRAWL_API_KEY")) return { scraped: 0, reason: "FIRECRAWL_API_KEY is not configured" };
     const due: Array<{ innId: Id<"inns">; url: string }> = await ctx.runQuery(internal.ingest.duePages, { before: Date.now() - RESCRAPE_MIN_AGE_MS, limit: RESCRAPE_BATCH });
     const perInn = new Map<Id<"inns">, { stored: number; skipped: number; reasons: string[] }>();
     for (const { innId, url } of due) {
       const stats = perInn.get(innId) ?? { stored: 0, skipped: 0, reasons: [] };
-      const r = await scrapeInto(ctx, apiKey, innId, url, { remaining: MAX_PAGE_CHARS });
+      const r = await scrapeInto(ctx, innId, url, { remaining: MAX_PAGE_CHARS });
       if (r.stored) stats.stored += 1;
       else {
         stats.skipped += 1;

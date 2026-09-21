@@ -22,6 +22,7 @@
     "@convex-dev/presence": "0.4.0",
     "@convex-dev/rate-limiter": "0.4.0",
     "@convex-dev/static-hosting": "^0.2.1",
+    "@firecrawl/firecrawl-convex": "0.1.1",
     "convex": "^1.46.0",
     "convex-helpers": "^0.1.124",
     "react": "^19.3.0",

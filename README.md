@@ -21,6 +21,8 @@ frontend and backend are hosted on Convex.
 - The AgentMail Convex component durably archives accepted inbound events and
   messages in the same transaction as the app receipt. Inbox provisioning and
   guarded outbound delivery use the direct AgentMail REST adapter.
+- The Firecrawl Convex component performs live site mapping and fresh page
+  scraping; app-owned validation and source-version tracking remain in place.
 - React 19 + Vite + TypeScript frontend.
 - Vitest + `convex-test` for backend tests.
 - The Convex rate-limiter component shares an OpenAI operation budget across
@@ -239,9 +241,12 @@ There is no separate script for creating inn inboxes.
 
 Environment variables on the deployment: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`,
 `AGENTMAIL_API_KEY`, `AGENTMAIL_WEBHOOK_ID`, `AGENTMAIL_WEBHOOK_SECRET`, plus
-the Convex Auth keys (`CONVEX_SITE_URL` is provided by Convex). Each is optional
-at runtime: the matching feature reports itself unavailable
-(`integrations.status`) instead of failing silently or faking success.
+the Convex Auth keys (`CONVEX_SITE_URL` is provided by Convex).
+`FIRECRAWL_API_KEY` is required at deployment because it is passed through the
+app's typed environment to the registered Firecrawl component. Configure the
+real key before deploying; the component does not use a placeholder. Missing
+OpenAI or AgentMail credentials make their matching features unavailable
+(`integrations.status`). Staff authentication also requires its deployment keys.
 
 ## Deployment notes
 

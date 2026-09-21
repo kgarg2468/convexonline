@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T21:45:32Z
+- **Last updated:** 2026-09-21T21:59:51Z
 
 ## Log
 
@@ -137,8 +137,13 @@ Registered the AgentMail Convex component for durable inbound event and message 
 All 353 offline tests pass, including 12 archive tests exercising the actual component, signed webhooks, tenant isolation, duplicate deliveries, oversized identities and transaction rollback. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. Provider transport is mocked in these tests. CI and automated review passed, and the backend is deployed on Convex. The preceding inbox-statistics deployment passed 28 production browser scenarios, with two optional screenshot captures skipped.
 Evidence: `convex/agentmailArchive.ts`, `convex/inbound.ts`, `convex/convex.config.ts`, `tests/agentmailArchive.test.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 8ee612b
 Improved staff-facing validation and claim feedback. An explicit set of property validation failures shows the backend's bounded explanation; a missing active claim no longer incorrectly blames another staff member. Named claim holders and explicit server guidance remain visible.
 All 353 offline tests, root and browser types, lint and build pass. Three website browser flows pass against production, including submitting an invalid time zone, reading the precise error and successfully correcting the same form.
-Automated review caught generic validation errors carrying internal details and Unicode controls bypassing the text guard. Both are fixed; ten disclosure/control-boundary tests pass, and the browser validation/recovery flow passes again.
+Automated review caught generic validation errors carrying internal details and Unicode controls bypassing the text guard. Both are fixed; ten disclosure/control-boundary tests pass, and the browser validation/recovery flow passes again. CI and follow-up automated review passed; the frontend is deployed on Convex.
 Evidence: `src/workspace/lib/format.ts`, `tests/uiErrors.test.ts`, `tests/browser/specs/inn-website.spec.ts`.
+
+### 2026-09-21 - working tree
+Registered the Firecrawl Convex component and routed manual mapping, page scraping and scheduled refreshes through it. Typed environment binding supplies the existing deployment key; app-owned source validation, inn scope, fresh-fetch settings, page budgets and change tracking remain enforced. Component errors are sanitized before staff see them.
+All 370 offline tests pass, including seven actual-component cases covering request attribution, source-error rejection, retry exhaustion, error sanitization, tenant isolation and changed-source correction creation. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. These tests mock external HTTP transport; live component crawling remains to be verified after deployment.
+Evidence: `convex/firecrawlClient.ts`, `convex/providers/firecrawl.ts`, `convex/ingest.ts`, `convex/convex.config.ts`, `tests/firecrawlComponent.test.ts`.
