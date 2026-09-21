@@ -161,6 +161,8 @@ export default defineSchema({
     .index("by_inn_status", ["innId", "status"])
     .index("by_inn_lastInbound", ["innId", "lastInboundAt"])
     .index("by_inn_agentmail_thread", ["innId", "agentmailThreadId"])
+    /** Claim locks held by one member, so removing them never scans the whole inn. */
+    .index("by_inn_claimedBy", ["innId", "claimedBy"])
     .searchIndex("search_threads", {
       searchField: "searchableText",
       filterFields: ["innId"],
@@ -354,7 +356,15 @@ export default defineSchema({
     usedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
     label: v.optional(v.string()),
+    /**
+     * True until the invite is used or revoked. Combined with `expiresAt` this
+     * lets the outstanding-invite check read only rows that can still be
+     * accepted instead of the inn's whole invitation history.
+     */
+    isOpen: v.boolean(),
   })
     .index("by_tokenHash", ["tokenHash"])
-    .index("by_inn_expiresAt", ["innId", "expiresAt"]),
+    /** `expiresAt` is always `createdAt + INVITE_TTL_MS`, so this also orders by creation time. */
+    .index("by_inn_expiresAt", ["innId", "expiresAt"])
+    .index("by_inn_open_expiresAt", ["innId", "isOpen", "expiresAt"]),
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import { INVITE_TTL_MS, MAX_OUTSTANDING_INVITES } from "../convex/teams";
+import { CLAIM_RELEASE_BATCH, INVITE_TTL_MS, MAX_OUTSTANDING_INVITES, RECENT_INVITES_SHOWN } from "../convex/teams";
 import { addStaff, makeTest, seedInn, seedThread, signedInUser } from "./setup";
 import { agentmailReplyRoute, json, seedInboundThread, seedLiveInn, settle, stubFetch, withEnv } from "./integrationSetup";
 
@@ -38,6 +38,72 @@ async function sha256Hex(text: string) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+/**
+ * Runs pending `runAfter(0, …)` jobs, including ones they schedule in turn,
+ * a bounded number of rounds; fails if the chain has not ended by then. This
+ * is deliberately not "run all timers": a recurring job would never let that
+ * return, and a bounded chain must be seen to finish on its own.
+ */
+async function drainScheduledFunctions(t: T, maxRounds = 5) {
+  for (let round = 0; round < maxRounds; round++) {
+    if (vi.getTimerCount() === 0) return;
+    await vi.advanceTimersByTimeAsync(1);
+    await t.finishInProgressScheduledFunctions();
+  }
+  expect(vi.getTimerCount(), `scheduled chain still pending after ${maxRounds} rounds`).toBe(0);
+}
+
+/** Every scheduled run of the background claim cleanup, with its final state. */
+const cleanupJobs = (t: T) =>
+  t.run(async (ctx) => {
+    const jobs = await ctx.db.system.query("_scheduled_functions").collect();
+    return jobs.filter((j) => j.name === "teams:releaseRemovedMemberClaims").map((j) => j.state.kind);
+  });
+
+/**
+ * Inserts closed invitation history directly, keeping the production
+ * invariant `expiresAt === createdAt + INVITE_TTL_MS`. Used and revoked rows
+ * are created one second apart from `from`; expired rows are still flagged
+ * open but were created a day past their TTL before `from`, so only their
+ * expiry closes them.
+ */
+async function seedInviteHistory(t: T, innId: Id<"inns">, createdBy: Id<"users">, count: number, from: number) {
+  await t.run(async (ctx) => {
+    for (let i = 0; i < count; i++) {
+      const kind = i % 3;
+      const createdAt = (kind === 2 ? from - INVITE_TTL_MS - 24 * 60 * 60 * 1000 : from) + i * 1000;
+      const base = { innId, createdBy, createdAt, expiresAt: createdAt + INVITE_TTL_MS, tokenHash: await sha256Hex(`history-${innId}-${i}`), label: `h${i}` };
+      if (kind === 0) await ctx.db.insert("teamInvites", { ...base, isOpen: false, usedBy: createdBy, usedAt: createdAt + 1 });
+      else if (kind === 1) await ctx.db.insert("teamInvites", { ...base, isOpen: false, revokedAt: createdAt + 1 });
+      else await ctx.db.insert("teamInvites", { ...base, isOpen: true });
+    }
+  });
+}
+
+async function seedClaimedThreads(t: T, innId: Id<"inns">, claimedBy: Id<"users">, count: number) {
+  return await t.run(async (ctx) => {
+    const ids: Id<"threads">[] = [];
+    for (let i = 0; i < count; i++) {
+      ids.push(
+        await ctx.db.insert("threads", {
+          innId,
+          guestEmail: "guest@example.com",
+          subject: `claimed ${i}`,
+          snippet: "",
+          status: "ready",
+          lastInboundAt: Date.now(),
+          claimedBy,
+          claimedAt: Date.now(),
+        }),
+      );
+    }
+    return ids;
+  });
+}
+
+const claimedByCount = (t: T, innId: Id<"inns">, userId: Id<"users">) =>
+  t.run(async (ctx) => (await ctx.db.query("threads").withIndex("by_inn_claimedBy", (q) => q.eq("innId", innId).eq("claimedBy", userId)).collect()).length);
 
 async function failure(p: Promise<unknown>): Promise<string> {
   const err = await p.then(
@@ -194,6 +260,50 @@ describe("listing and revoking", () => {
     await expect(t.query(api.teams.listInvites, { innId })).rejects.toThrow(/unauthenticated/);
   });
 
+  it("a long history stays bounded: every pending invite is listed, plus the most recent closed ones", async () => {
+    vi.useFakeTimers();
+    const base = Date.parse("2026-09-01T00:00:00Z");
+    vi.setSystemTime(base);
+    const t = makeTest();
+    const { owner, innId } = await ownerWithInn(t);
+    const oldest = await owner.as.action(api.teams.createInvite, { innId, label: "oldest pending" });
+
+    const HISTORY = 105;
+    await seedInviteHistory(t, innId, owner.userId, HISTORY, base + 1000);
+    vi.setSystemTime(base + (HISTORY + 10) * 1000);
+
+    // The cap only counts open, unexpired invites, however much closed history exists.
+    const fresh = [];
+    for (let i = 1; i < MAX_OUTSTANDING_INVITES; i++) fresh.push(await owner.as.action(api.teams.createInvite, { innId, label: `fresh ${i}` }));
+    expect(await failure(owner.as.action(api.teams.createInvite, { innId }))).toMatch(/invite_limit/);
+    expect(await invites(t)).toHaveLength(1 + HISTORY + MAX_OUTSTANDING_INVITES - 1);
+
+    const listed = await owner.as.query(api.teams.listInvites, { innId });
+    expect(listed.length).toBeLessThanOrEqual(RECENT_INVITES_SHOWN + MAX_OUTSTANDING_INVITES);
+    expect(listed.length).toBeGreaterThanOrEqual(RECENT_INVITES_SHOWN);
+    expect(new Set(listed.map((i) => i._id)).size).toBe(listed.length);
+    // The oldest pending invite is not hidden behind a hundred newer closed rows.
+    expect(listed.find((i) => i._id === oldest.inviteId)).toMatchObject({ state: "pending", label: "oldest pending" });
+    for (const f of fresh) expect(listed.find((i) => i._id === f.inviteId)?.state).toBe("pending");
+    expect(listed.filter((i) => i.state === "pending")).toHaveLength(MAX_OUTSTANDING_INVITES);
+    // Newest first, and the closed rows shown are the most recent ones.
+    for (let i = 1; i < listed.length; i++) expect(listed[i - 1].createdAt).toBeGreaterThanOrEqual(listed[i].createdAt);
+    expect(listed.at(-1)!._id).toBe(oldest.inviteId);
+    const closedShown = listed.filter((i) => i.state !== "pending");
+    expect(closedShown.length).toBe(RECENT_INVITES_SHOWN - (MAX_OUTSTANDING_INVITES - 1));
+    // Those are the newest used/revoked rows; the long-expired ones (still flagged open) fall off the end.
+    expect(Math.min(...closedShown.map((i) => i.createdAt))).toBeGreaterThan(base + 1000 * 20);
+    expect(new Set(closedShown.map((i) => i.state))).toEqual(new Set(["used", "revoked"]));
+    expect(closedShown.filter((i) => i.state === "used").every((i) => i.usedByName === "Owner")).toBe(true);
+    for (const row of listed) expect(Object.keys(row).sort()).toEqual(["_id", "createdAt", "expiresAt", "label", "revokedAt", "state", "usedAt", "usedByName"]);
+
+    // Revoking closes the row and frees a slot immediately.
+    await owner.as.mutation(api.teams.revokeInvite, { inviteId: oldest.inviteId });
+    expect((await t.run((ctx) => ctx.db.get(oldest.inviteId)))!.isOpen).toBe(false);
+    await owner.as.action(api.teams.createInvite, { innId });
+    expect(await failure(owner.as.action(api.teams.createInvite, { innId }))).toMatch(/invite_limit/);
+  });
+
   it("revoke is owner-only, idempotent, and blocks acceptance", async () => {
     const t = makeTest();
     const { owner, innId } = await ownerWithInn(t);
@@ -258,7 +368,7 @@ describe("preview", () => {
     // A hash planted on a demo inn is never previewable.
     await t.run(async (ctx) => {
       const demo = await ctx.db.insert("inns", { name: "Demo", siteUrl: "https://demo.example", timezone: "UTC", isDemo: true, createdBy: owner.userId });
-      await ctx.db.insert("teamInvites", { innId: demo, tokenHash: await sha256Hex("d".repeat(64)), createdBy: owner.userId, createdAt: Date.now(), expiresAt: Date.now() + 1000 });
+      await ctx.db.insert("teamInvites", { innId: demo, tokenHash: await sha256Hex("d".repeat(64)), createdBy: owner.userId, createdAt: Date.now(), expiresAt: Date.now() + 1000, isOpen: true });
     });
     expect(await viewer.as.query(api.teams.previewInvite, { token: "d".repeat(64) })).toEqual({ state: "invalid" });
 
@@ -491,6 +601,80 @@ describe("removing staff", () => {
     await expect(staff.as.query(api.inns.get, { innId })).rejects.toThrow(/forbidden/);
     await expect(staff.as.mutation(api.threads.claim, { threadId: mine2 })).rejects.toThrow(/forbidden/);
     expect((await staff.as.query(api.inns.mine, {})).map((i) => i.innId)).toEqual([other.innId]);
+  });
+
+  it("a member holding hundreds of claims loses access at once; the backlog is cleared in bounded batches", async () => {
+    vi.useFakeTimers();
+    const t = makeTest();
+    const { owner, innId } = await ownerWithInn(t);
+    const other = await ownerWithInn(t, "Other");
+    const staff = await signedInUser(t, { name: "Staff" });
+    await addStaff(t, innId, staff.userId);
+    await addStaff(t, other.innId, staff.userId);
+    const helper = await signedInUser(t, { name: "Helper" });
+    await addStaff(t, innId, helper.userId);
+
+    const TOTAL = 230;
+    await seedClaimedThreads(t, innId, staff.userId, TOTAL);
+    const helpers = await seedClaimedThreads(t, innId, helper.userId, 3);
+    const elsewhere = await seedClaimedThreads(t, other.innId, staff.userId, 5);
+    const unclaimed = await seedThread(t, innId, "unclaimed");
+
+    expect(await owner.as.mutation(api.teams.removeStaff, { innId, userId: staff.userId })).toEqual({
+      released: CLAIM_RELEASE_BATCH,
+      cleanupScheduled: true,
+    });
+    // Access is gone immediately, before any background work runs.
+    expect(await membershipOf(t, innId, staff.userId)).toBeNull();
+    await expect(staff.as.query(api.inns.get, { innId })).rejects.toThrow(/forbidden/);
+    expect(await claimedByCount(t, innId, staff.userId)).toBe(TOTAL - CLAIM_RELEASE_BATCH);
+    expect(vi.getTimerCount()).toBe(1);
+    expect(await cleanupJobs(t)).toEqual(["pending"]);
+
+    // The background chain frees one batch per job and ends by itself: 130 left needs exactly two more jobs.
+    await drainScheduledFunctions(t);
+    expect(await claimedByCount(t, innId, staff.userId)).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(await cleanupJobs(t)).toEqual(["success", "success"]);
+
+    const freed = await t.run((ctx) => ctx.db.query("threads").withIndex("by_inn_lastInbound", (q) => q.eq("innId", innId)).collect());
+    expect(freed.filter((th) => th.claimedBy === undefined && th.claimedAt === undefined)).toHaveLength(TOTAL + 1);
+    const get = (id: Id<"threads">) => t.run((ctx) => ctx.db.get(id));
+    for (const id of helpers) expect((await get(id))!.claimedBy).toBe(helper.userId);
+    for (const id of elsewhere) expect((await get(id))!.claimedBy).toBe(staff.userId);
+    expect((await get(unclaimed))!.claimedBy).toBeUndefined();
+    expect(await membershipOf(t, other.innId, staff.userId)).toMatchObject({ role: "staff" });
+  });
+
+  it("re-inviting a member before the claim backlog drains stops the cleanup and keeps their claims", async () => {
+    vi.useFakeTimers();
+    const t = makeTest();
+    const { owner, innId } = await ownerWithInn(t);
+    const staff = await signedInUser(t, { name: "Staff" });
+    await addStaff(t, innId, staff.userId);
+    const TOTAL = 230;
+    await seedClaimedThreads(t, innId, staff.userId, TOTAL);
+
+    expect(await owner.as.mutation(api.teams.removeStaff, { innId, userId: staff.userId })).toEqual({
+      released: CLAIM_RELEASE_BATCH,
+      cleanupScheduled: true,
+    });
+    expect(await claimedByCount(t, innId, staff.userId)).toBe(TOTAL - CLAIM_RELEASE_BATCH);
+
+    // Re-invited (through a real invitation) before the scheduled batch runs.
+    const invite = await owner.as.action(api.teams.createInvite, { innId });
+    expect(await staff.as.mutation(api.teams.acceptInvite, { token: invite.token })).toEqual({ innId, joined: true });
+    const fresh = await seedThread(t, innId, "taken after rejoining");
+    expect((await staff.as.mutation(api.threads.claim, { threadId: fresh })).kind).toBe("acquired");
+
+    await drainScheduledFunctions(t);
+    expect(vi.getTimerCount()).toBe(0);
+    // The one scheduled job saw the membership and stopped without chaining another.
+    expect(await cleanupJobs(t)).toEqual(["success"]);
+    // Nothing more was released: the old locks and the new claim are both intact.
+    expect(await claimedByCount(t, innId, staff.userId)).toBe(TOTAL - CLAIM_RELEASE_BATCH + 1);
+    expect((await t.run((ctx) => ctx.db.get(fresh)))!.claimedBy).toBe(staff.userId);
+    expect(await membershipOf(t, innId, staff.userId)).toMatchObject({ role: "staff" });
   });
 
   it("never removes owners, the caller, non-members, or anyone from a foreign inn; non-owners cannot remove", async () => {

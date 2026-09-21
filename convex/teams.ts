@@ -18,6 +18,10 @@ import { canJoinInn } from "./lib/tenant";
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_OUTSTANDING_INVITES = 20;
+/** How much invitation history `listInvites` shows besides everything still pending. */
+export const RECENT_INVITES_SHOWN = 50;
+/** Claim locks released per transaction when a member is removed. */
+export const CLAIM_RELEASE_BATCH = 100;
 const MAX_LABEL_LENGTH = 120;
 /** Exactly the format `createInvite` returns: 32 random bytes as lowercase hex. */
 const TOKEN_PATTERN = /^[0-9a-f]{64}$/;
@@ -79,13 +83,18 @@ async function findByToken(ctx: Ctx, token: string): Promise<Doc<"teamInvites"> 
     .unique();
 }
 
-/** Invitations that can still be accepted right now. */
+/**
+ * Invitations that can still be accepted right now. Reads only open, unexpired
+ * rows and at most one past the cap: `storeInvite` enforces the cap in the same
+ * transaction, so more than `MAX_OUTSTANDING_INVITES` can never accumulate and
+ * the read stays bounded no matter how long the inn's history grows.
+ */
 async function outstandingInvites(ctx: Ctx, innId: Id<"inns">, now: number): Promise<Doc<"teamInvites">[]> {
-  const unexpired = await ctx.db
+  const open = await ctx.db
     .query("teamInvites")
-    .withIndex("by_inn_expiresAt", (q) => q.eq("innId", innId).gt("expiresAt", now))
-    .collect();
-  return unexpired.filter((invite) => inviteState(invite, now) === "pending");
+    .withIndex("by_inn_open_expiresAt", (q) => q.eq("innId", innId).eq("isOpen", true).gt("expiresAt", now))
+    .take(MAX_OUTSTANDING_INVITES + 1);
+  return open.filter((invite) => inviteState(invite, now) === "pending");
 }
 
 const inviteRefused = (reason: "unknown" | "expired" | "revoked" | "used", message: string) =>
@@ -150,22 +159,33 @@ export const storeInvite = internalMutation({
       createdAt: now,
       expiresAt,
       label: cleanLabel,
+      isOpen: true,
     });
     return { inviteId, expiresAt };
   },
 });
 
-/** Owner-only list of invitation metadata. Never includes hashes or tokens. */
+/**
+ * Owner-only list of invitation metadata. Never includes hashes or tokens.
+ * Bounded: every invitation still pending (so an old unexpired link is never
+ * hidden behind newer history) plus the most recent `RECENT_INVITES_SHOWN`
+ * rows of any state, newest first.
+ */
 export const listInvites = query({
   args: { innId: v.id("inns") },
   handler: async (ctx, { innId }) => {
     await requireOwner(ctx, innId);
     const now = Date.now();
-    const invites = await ctx.db
+    const pending = await outstandingInvites(ctx, innId, now);
+    // expiresAt is createdAt + a constant TTL, so descending expiry is descending creation.
+    const recent = await ctx.db
       .query("teamInvites")
       .withIndex("by_inn_expiresAt", (q) => q.eq("innId", innId))
-      .collect();
-    invites.sort((a, b) => b.createdAt - a.createdAt);
+      .order("desc")
+      .take(RECENT_INVITES_SHOWN);
+    const byId = new Map<Id<"teamInvites">, Doc<"teamInvites">>();
+    for (const invite of [...pending, ...recent]) byId.set(invite._id, invite);
+    const invites = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
     const result = [];
     for (const invite of invites) {
       const usedBy = invite.usedBy ? await membershipFor(ctx, innId, invite.usedBy) : null;
@@ -195,7 +215,7 @@ export const revokeInvite = mutation({
     const now = Date.now();
     const state = inviteState(invite, now);
     if (state !== "pending") return { state };
-    await ctx.db.patch(inviteId, { revokedAt: now });
+    await ctx.db.patch(inviteId, { revokedAt: now, isOpen: false });
     return { state: "revoked" as const };
   },
 });
@@ -265,10 +285,27 @@ export const acceptInvite = mutation({
         name: user.name ?? user.email ?? "Staff",
       });
     }
-    await ctx.db.patch(invite._id, { usedBy: user._id, usedAt: now });
+    await ctx.db.patch(invite._id, { usedBy: user._id, usedAt: now, isOpen: false });
     return { innId: inn._id, joined: !existing };
   },
 });
+
+/**
+ * Releases up to one batch of the claim locks `userId` holds on `innId`'s
+ * threads. Returns how many were released and whether any remain, so the
+ * caller can schedule the next batch instead of growing the transaction.
+ */
+async function releaseClaimBatch(ctx: MutationCtx, innId: Id<"inns">, userId: Id<"users">): Promise<{ released: number; more: boolean }> {
+  const held = await ctx.db
+    .query("threads")
+    .withIndex("by_inn_claimedBy", (q) => q.eq("innId", innId).eq("claimedBy", userId))
+    .take(CLAIM_RELEASE_BATCH + 1);
+  const batch = held.slice(0, CLAIM_RELEASE_BATCH);
+  for (const thread of batch) {
+    await ctx.db.patch(thread._id, { claimedBy: undefined, claimedAt: undefined });
+  }
+  return { released: batch.length, more: held.length > CLAIM_RELEASE_BATCH };
+}
 
 /**
  * Removes a staff member from the owner's inn. Owners (including the caller)
@@ -276,6 +313,11 @@ export const acceptInvite = mutation({
  * threads are released so the rest of the team is not locked out until the
  * claim TTL passes; outbox rows they reserved are refused at dispatch by the
  * existing authority recheck.
+ *
+ * Only one bounded batch of claims is released here so that a long claim
+ * history can never make the removal itself fail and roll back the access
+ * revocation. Anything beyond that is cleared by `releaseRemovedMemberClaims`
+ * in the background; `released` counts only what this transaction freed.
  */
 export const removeStaff = mutation({
   args: { innId: v.id("inns"), userId: v.id("users") },
@@ -289,16 +331,24 @@ export const removeStaff = mutation({
       throw new ConvexError({ code: "forbidden", message: "Only staff members can be removed" });
     }
     await ctx.db.delete(target._id);
-    const threads = await ctx.db
-      .query("threads")
-      .withIndex("by_inn_lastInbound", (q) => q.eq("innId", innId))
-      .collect();
-    let released = 0;
-    for (const thread of threads) {
-      if (thread.claimedBy !== userId) continue;
-      await ctx.db.patch(thread._id, { claimedBy: undefined, claimedAt: undefined });
-      released += 1;
-    }
-    return { released };
+    const { released, more } = await releaseClaimBatch(ctx, innId, userId);
+    if (!more) return { released };
+    await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId });
+    return { released, cleanupScheduled: true as const };
+  },
+});
+
+/**
+ * Background continuation of `removeStaff`: clears the remaining claim locks
+ * of a removed member, one batch per transaction, for exactly the inn and user
+ * the removal named. Stops the moment the user is a member again (re-invited
+ * before the backlog drained) so it never erases claims they took legitimately.
+ */
+export const releaseRemovedMemberClaims = internalMutation({
+  args: { innId: v.id("inns"), userId: v.id("users") },
+  handler: async (ctx, { innId, userId }) => {
+    if ((await membershipFor(ctx, innId, userId)) !== null) return;
+    const { more } = await releaseClaimBatch(ctx, innId, userId);
+    if (more) await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId });
   },
 });
