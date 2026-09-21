@@ -34,10 +34,22 @@ frontend and backend are hosted on Convex.
 | `convex/drafts.ts`, `outbox.ts`, `corrections.ts` | Transactional send reservations, single-dispatch delivery, correction proposals/approval/sends |
 | `convex/ingest.ts`, `pages.ts`, `crons.ts` | Site crawl (≤10 pages), page versions + sent-claim re-verification, hourly rescrape of watched pages |
 | `convex/inbox.ts`, `integrations.ts`, `followUps.ts` | Inbox provisioning (server-controlled ids, appended to the product webhook), key-presence + readiness booleans, bounded follow-up reminders |
+| `convex/teams.ts`, `presence.ts` | One-use staff invitations, membership removal, authenticated thread presence |
 | `convex/threads.ts`, `facts.ts`, `inns.ts` | Staff workspace API (queue, detail, search, stats, staff facts) |
 | `convex/demo.ts`, `demoContent.ts` | Per-visitor demo inn, fixture drafter, simulated sends, scripted policy change (3 affected / 3 control replies) |
 | `src/` | App shell: sign-in, queue, thread detail, corrections review |
 | `tests/` | Offline suites: auth/tenant, auth routing, claims, webhook, inbox webhook subscription, generation, send/outbox, corrections, demo loop, ingest, providers |
+
+## Working with staff
+
+Create a staff account and property, then open **Settings → Team** to create a
+one-use invitation link. Share that link with a colleague, who signs in and
+explicitly joins the named property. Links expire after seven days; owners can
+revoke open links and remove staff. Removed staff lose workspace access and their
+thread claims are released. Thread detail also shows current viewers using the
+Convex presence component; viewing does not grant the claim lock. Sessions expire
+within 25 seconds of leaving or hiding the thread. The anonymous demo remains separate from real staff
+accounts and never sends mail.
 
 ## Email loop
 

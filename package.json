@@ -17,6 +17,7 @@
   "dependencies": {
     "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/presence": "0.4.0",
     "@convex-dev/static-hosting": "^0.2.1",
     "convex": "^1.46.0",
     "react": "^19.3.0",

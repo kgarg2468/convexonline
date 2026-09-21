@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T16:58:13Z
+- **Last updated:** 2026-09-21T17:23:36Z
 
 ## Log
 
@@ -79,3 +79,8 @@ Evidence: `convex/migrations.ts`, `convex/http.ts`, `convex/convex.config.ts`.
 Added owner-created, one-use staff invitations with seven-day expiry, hashed token storage, revocation and atomic membership acceptance. Removed members cannot reuse consumed links to regain access. Owners can remove staff; membership revocation is immediate and claim cleanup proceeds in indexed batches of 100, stopping if the member rejoins.
 Automated review caught unbounded thread and invitation-history reads. Both were bounded before merge. Twenty-seven team integration tests and 255 total tests pass, including concurrent acceptance, tenant isolation, a 230-claim cleanup and rejoining during cleanup. CI and automated review passed; the backend is deployed on production Convex.
 Evidence: `convex/teams.ts`, `convex/schema.ts`, `tests/teams.test.ts`.
+
+### 2026-09-21 - 4170529
+Added owner invitation and staff-removal controls, explicit invitation acceptance after sign-in, and clear refusal states for used, revoked and malformed links. The workspace handles access removal while a staff tab is open.
+All six invitation browser flows passed, alongside the full 22-test desktop/mobile regression. PR CI now checks the standalone browser package's types. CI and automated review passed; the frontend is deployed on Convex.
+Evidence: `src/workspace/settings/TeamSettings.tsx`, `src/workspace/onboarding/InvitationGate.tsx`, `src/workspace/lib/invitations.ts`, `tests/browser/specs/teams.spec.ts`, `.github/workflows/ci.yml`.
