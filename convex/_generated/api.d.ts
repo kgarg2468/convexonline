@@ -30,6 +30,7 @@ import type * as lib_errors from "../lib/errors.js";
 import type * as lib_grounding from "../lib/grounding.js";
 import type * as lib_inboundPayload from "../lib/inboundPayload.js";
 import type * as lib_inboxWebhook from "../lib/inboxWebhook.js";
+import type * as lib_presenceTiming from "../lib/presenceTiming.js";
 import type * as lib_quotes from "../lib/quotes.js";
 import type * as lib_sendGuards from "../lib/sendGuards.js";
 import type * as lib_siteSelection from "../lib/siteSelection.js";
@@ -39,6 +40,7 @@ import type * as lib_webhookSignature from "../lib/webhookSignature.js";
 import type * as migrations from "../migrations.js";
 import type * as outbox from "../outbox.js";
 import type * as pages from "../pages.js";
+import type * as presence from "../presence.js";
 import type * as providers_agentmail from "../providers/agentmail.js";
 import type * as providers_firecrawl from "../providers/firecrawl.js";
 import type * as providers_index from "../providers/index.js";
@@ -77,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "lib/grounding": typeof lib_grounding;
   "lib/inboundPayload": typeof lib_inboundPayload;
   "lib/inboxWebhook": typeof lib_inboxWebhook;
+  "lib/presenceTiming": typeof lib_presenceTiming;
   "lib/quotes": typeof lib_quotes;
   "lib/sendGuards": typeof lib_sendGuards;
   "lib/siteSelection": typeof lib_siteSelection;
@@ -86,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   outbox: typeof outbox;
   pages: typeof pages;
+  presence: typeof presence;
   "providers/agentmail": typeof providers_agentmail;
   "providers/firecrawl": typeof providers_firecrawl;
   "providers/index": typeof providers_index;
@@ -124,4 +128,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
+  presence: import("@convex-dev/presence/_generated/component.js").ComponentApi<"presence">;
 };

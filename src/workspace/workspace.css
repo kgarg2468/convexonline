@@ -1463,3 +1463,28 @@ body {
   font-size: 16px;
   margin-bottom: 8px;
 }
+
+/* ---------- thread presence (who has the thread open) ---------- */
+
+.fd-presence {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -8px 0 14px;
+  font-size: 13px;
+  color: var(--fd-muted);
+}
+.fd-presence strong {
+  font-weight: 600;
+  color: var(--fd-ink);
+}
+.fd-presence__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fd-pine);
+  flex: none;
+}
+.fd-presence--off {
+  font-style: italic;
+}

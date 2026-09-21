@@ -1,11 +1,16 @@
 import { convexTest } from "convex-test";
+import presenceComponent from "@convex-dev/presence/test";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 
 export const modules = import.meta.glob("../convex/**/!(*.*.*)*.*s");
 
 export function makeTest() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  // The real presence component (and its nested batch worker), as mounted in
+  // convex.config.ts, so presence tests exercise the published package.
+  presenceComponent.register(t);
+  return t;
 }
 
 export type T = ReturnType<typeof makeTest>;

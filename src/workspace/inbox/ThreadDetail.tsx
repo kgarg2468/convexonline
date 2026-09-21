@@ -9,6 +9,7 @@ import { DraftPanel } from "./DraftPanel";
 import { GapForm } from "./GapForm";
 import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
+import { ThreadPresence } from "./ThreadPresence";
 import { otherReplyOutbox } from "../lib/outbox";
 
 export function ThreadDetail({
@@ -148,6 +149,7 @@ export function ThreadDetail({
             )}
           </div>
         </div>
+        <ThreadPresence key={`${threadId}:${viewerId}`} threadId={threadId} />
         {lock.error ? (
           <div style={{ marginBottom: 14 }}>
             <Notice tone="error">{lock.error}</Notice>
