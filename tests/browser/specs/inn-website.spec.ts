@@ -84,6 +84,61 @@ async function fresh(browser: Browser): Promise<{ context: BrowserContext; page:
   return { context, page, errors };
 }
 
+async function signIn(page: Page, who: Account) {
+  await expect(page.getByRole("tab", { name: "Sign in" })).toBeVisible();
+  await page.getByLabel("Email").fill(who.email);
+  await page.getByLabel("Password").fill(who.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Sign in" })).toHaveCount(0, { timeout: 30_000 });
+}
+
+/**
+ * A deterministic transport delay for one Convex mutation, without touching
+ * the app or the backend. The page's sync WebSocket is proxied through
+ * Playwright: every frame is forwarded to the real deployment unchanged, except
+ * that the client→server frame carrying the named mutation is parked until the
+ * test releases it. The mutation then really runs on the server; only its
+ * departure was delayed, so the UI's pending state can be observed for exactly
+ * as long as the test needs. Must be installed before the first navigation.
+ */
+async function gateMutations(page: Page) {
+  let target: string | null = null;
+  const parked: Array<() => void> = [];
+  await page.routeWebSocket(/\/api\/[^/]+\/sync/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((frame) => {
+      if (
+        target !== null &&
+        typeof frame === "string" &&
+        frame.includes('"type":"Mutation"') &&
+        frame.includes(`"udfPath":"${target}"`)
+      ) {
+        parked.push(() => server.send(frame));
+        return;
+      }
+      server.send(frame);
+    });
+    server.onMessage((frame) => ws.send(frame));
+    ws.onClose((code, reason) => void server.close({ code, reason }));
+    server.onClose((code, reason) => void ws.close({ code, reason }));
+  });
+  return {
+    /** From now on, park the next frame(s) that carry this mutation. */
+    hold(udfPath: string) {
+      target = udfPath;
+    },
+    /** Resolves once a parked frame exists, i.e. the app is genuinely waiting on the server. */
+    async parked() {
+      await expect.poll(() => parked.length, { message: "the mutation frame was captured in transit" }).toBe(1);
+    },
+    /** Let the parked frame(s) through and stop parking. */
+    release() {
+      target = null;
+      for (const send of parked.splice(0)) send();
+    },
+  };
+}
+
 /** Hosted site root: https origin plus /inn/<id>/ and nothing else. */
 const HOSTED_ROOT = /^https:\/\/[^/]+\/inn\/[A-Za-z0-9]{8,64}\/$/;
 
@@ -201,6 +256,157 @@ test.describe("hosted fictional inn website", () => {
 
       expect(a.errors, "no uncaught errors in the owner's tab").toEqual([]);
       expect(b.errors, "no uncaught errors in the staff tab").toEqual([]);
+    } finally {
+      await a.context.close();
+      await b.context.close();
+    }
+  });
+
+  test("the same owner in two sessions: a dirty draft survives the other session's save, discard loads the latest, saving overwrites deliberately; controls lock while a request is in flight", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    const owner = account("owner");
+    const property = `Fictional Inn ${randomUUID().slice(0, 6)}`;
+    const marker = randomUUID().slice(0, 8);
+    const draftPolicy = `Draft one ${marker}: dogs must be leashed in the garden.`;
+    const finalPolicy = `Draft two ${marker}: dogs must be leashed everywhere.`;
+    const otherWifi = `Wi-Fi note from the other session ${marker}.`;
+    const defaultPolicy =
+      "Dogs are welcome in our designated pet-friendly rooms. Please let us know when booking so we can assign a suitable room.";
+    const defaultWifi = "Free Wi-Fi is available throughout the inn.";
+
+    const a = await fresh(browser);
+    const b = await fresh(browser);
+    try {
+      const gate = await gateMutations(a.page);
+
+      // Session A: sign up and create the fictional inn. The create request is
+      // parked in transit, so the pending state is observable: the kind cannot
+      // be switched under a create that already left with the other kind.
+      await a.page.goto("/");
+      await signUp(a.page, owner);
+      await expect(a.page.getByText("Set up your first property.")).toBeVisible();
+      const external = a.page.getByRole("radio", { name: /real property/i });
+      const fictional = a.page.getByRole("radio", { name: /fictional inn/i });
+      await fictional.check();
+      await expect(a.page.getByLabel("Website")).toHaveCount(0);
+      await a.page.getByLabel("Property name").fill(property);
+      gate.hold("innWebsites:createFictional");
+      await a.page.getByRole("button", { name: "Create fictional inn" }).click();
+      await gate.parked();
+      await expect(a.page.getByRole("button", { name: "Creating…" })).toBeDisabled();
+      await expect(external).toBeDisabled();
+      await expect(fictional).toBeDisabled();
+      await expect(fictional).toBeChecked();
+      await expect(a.page.getByLabel("Website")).toHaveCount(0);
+      await a.page.screenshot({ path: test.info().outputPath("create-pending.png"), fullPage: true });
+      gate.release();
+      await expect(a.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      await expect(a.page.getByRole("navigation", { name: "Workspace" })).toContainText(property);
+      await openSettings(a.page);
+      const editorA = website(a.page);
+      const saveA = editorA.getByRole("button", { name: "Save website" });
+      await expect(editorA.getByLabel("Pet policy")).toHaveValue(defaultPolicy);
+      const siteUrl = await editorA.getByRole("link", { name: "Open the public website" }).getAttribute("href");
+      expect(siteUrl).toMatch(HOSTED_ROOT);
+
+      // Session B: the same owner signs in elsewhere and lands in the same editor.
+      await b.page.goto("/");
+      await signIn(b.page, owner);
+      await expect(b.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      await openSettings(b.page);
+      const editorB = website(b.page);
+      const saveB = editorB.getByRole("button", { name: "Save website" });
+      await expect(editorB.getByLabel("Pet policy")).toHaveValue(defaultPolicy);
+      await expect(editorB.getByLabel("Check-in time")).toHaveValue("3:00 PM");
+
+      // A starts a draft and does not save. B saves a different field.
+      await editorA.getByLabel("Pet policy").fill(draftPolicy);
+      await expect(editorA.getByText("Unsaved changes. Saving publishes them immediately.")).toBeVisible();
+      await expect(editorA.getByText(/saved from another session/)).toHaveCount(0);
+      await editorB.getByLabel("Check-in time").fill("4:00 PM");
+      await saveB.click();
+      await expect(editorB.getByText(/^Website saved /)).toBeVisible({ timeout: 30_000 });
+
+      // A's draft is intact, still based on the version it started from, and
+      // A is told that the site changed underneath it.
+      await expect(editorA.getByText(/saved from another session since you started editing/)).toBeVisible();
+      await expect(editorA.getByLabel("Pet policy")).toHaveValue(draftPolicy);
+      await expect(editorA.getByLabel("Check-in time")).toHaveValue("3:00 PM");
+      await expect(saveA).toBeEnabled();
+      await expect(editorA.getByRole("button", { name: "Discard changes" })).toBeEnabled();
+      await a.page.screenshot({ path: test.info().outputPath("draft-changed-elsewhere.png"), fullPage: true });
+
+      // Discard: the form shows the latest server version, warning gone.
+      await editorA.getByRole("button", { name: "Discard changes" }).click();
+      await expect(editorA.getByLabel("Pet policy")).toHaveValue(defaultPolicy);
+      await expect(editorA.getByLabel("Check-in time")).toHaveValue("4:00 PM");
+      await expect(editorA.getByText(/saved from another session/)).toHaveCount(0);
+      await expect(editorA.getByText("No unsaved changes.")).toBeVisible();
+      await expect(saveA).toBeDisabled();
+      await expect(editorA.getByRole("button", { name: "Discard changes" })).toHaveCount(0);
+
+      // Deliberate overwrite: A drafts again, B saves Wi-Fi meanwhile, A saves anyway.
+      await editorA.getByLabel("Pet policy").fill(finalPolicy);
+      await expect(editorA.getByLabel("Wi-Fi")).toHaveValue(defaultWifi);
+      await editorB.getByLabel("Wi-Fi").fill(otherWifi);
+      await saveB.click();
+      await expect(editorB.getByText(/^Website saved /)).toBeVisible({ timeout: 30_000 });
+      await expect(editorA.getByText(/saved from another session since you started editing/)).toBeVisible();
+      await expect(editorA.getByLabel("Wi-Fi")).toHaveValue(defaultWifi);
+
+      // A's save is parked in transit: every field, Save and Discard are locked
+      // and the status says so, until the request is let through.
+      gate.hold("innWebsites:update");
+      await saveA.click();
+      await gate.parked();
+      await expect(editorA.getByRole("button", { name: "Saving…" })).toBeDisabled();
+      await expect(editorA.getByRole("button", { name: "Discard changes" })).toBeDisabled();
+      await expect(
+        editorA.getByRole("status").filter({ hasText: "Saving to the public website…" }),
+      ).toHaveText("Saving to the public website…");
+      await expect(editorA.locator("input:disabled, textarea:disabled")).toHaveCount(11);
+      await expect(editorA.locator("input:enabled, textarea:enabled")).toHaveCount(0);
+      await expect(editorA.getByLabel("Pet policy")).toHaveValue(finalPolicy);
+      await a.page.screenshot({ path: test.info().outputPath("save-pending.png"), fullPage: true });
+      gate.release();
+      await expect(editorA.getByText(/^Website saved /)).toBeVisible({ timeout: 30_000 });
+      await expect(editorA.getByText(/saved from another session/)).toHaveCount(0);
+      await expect(saveA).toBeDisabled();
+      await expect(editorA.locator("input:disabled, textarea:disabled")).toHaveCount(0);
+      await expect(editorA.getByLabel("Pet policy")).toHaveValue(finalPolicy);
+      await expect(editorA.getByLabel("Check-in time")).toHaveValue("4:00 PM");
+      await expect(editorA.getByLabel("Wi-Fi")).toHaveValue(defaultWifi);
+
+      // B sees A's version: A's policy, B's earlier check-in, B's Wi-Fi overwritten.
+      await expect(editorB.getByLabel("Pet policy")).toHaveValue(finalPolicy);
+      await expect(editorB.getByLabel("Check-in time")).toHaveValue("4:00 PM");
+      await expect(editorB.getByLabel("Wi-Fi")).toHaveValue(defaultWifi);
+      await expect(saveB).toBeDisabled();
+      await b.page.screenshot({ path: test.info().outputPath("other-session-after-overwrite.png"), fullPage: true });
+
+      // The public site says the same.
+      const policies = await request.get(`${siteUrl}policies`);
+      expect(policies.status()).toBe(200);
+      const policiesHtml = await policies.text();
+      expect(policiesHtml).toContain(finalPolicy);
+      expect(policiesHtml).not.toContain(draftPolicy);
+      const pages = await editorA.getByRole("list", { name: "Public pages" }).getByRole("link").evaluateAll((links) =>
+        links.map((l) => (l as HTMLAnchorElement).href),
+      );
+      expect(pages.length).toBeGreaterThan(0);
+      for (const url of pages) {
+        const res = await request.get(url);
+        expect(res.status(), url).toBe(200);
+        const html = await res.text();
+        expect(html, `${url} keeps B's overwritten Wi-Fi note out`).not.toContain(otherWifi);
+        expect(html, `${url} shows no staff data`).not.toContain(owner.email);
+      }
+
+      expect(a.errors, "no uncaught errors in session A").toEqual([]);
+      expect(b.errors, "no uncaught errors in session B").toEqual([]);
     } finally {
       await a.context.close();
       await b.context.close();

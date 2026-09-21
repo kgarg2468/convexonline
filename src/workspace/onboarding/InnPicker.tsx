@@ -118,7 +118,9 @@ export function InnPicker({
           <form onSubmit={submit}>
             <p className="fd-section__title">New property</p>
             {/* Option labels deliberately avoid the words "Website" and
-                "Property name": those are the labels of the inputs below. */}
+                "Property name": those are the labels of the inputs below.
+                The kind is locked while a create is pending so the selected
+                mode cannot diverge from the request already in flight. */}
             <fieldset className="fd-kind">
               <legend className="fd-field__label">What are you setting up?</legend>
               <label className="fd-kind__option">
@@ -126,6 +128,7 @@ export function InnPicker({
                   type="radio"
                   name="fd-inn-kind"
                   checked={kind === "external"}
+                  disabled={action.busy}
                   onChange={() => chooseKind("external")}
                 />
                 <span>
@@ -138,6 +141,7 @@ export function InnPicker({
                   type="radio"
                   name="fd-inn-kind"
                   checked={kind === "fictional"}
+                  disabled={action.busy}
                   onChange={() => chooseKind("fictional")}
                 />
                 <span>
