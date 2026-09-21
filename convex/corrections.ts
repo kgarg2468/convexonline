@@ -378,6 +378,12 @@ export const generateProposal = internalAction({
         { kind: "page", id: c.page.versionId, url: c.page.url, markdown: c.page.markdown, pageId: c.page.pageId },
       ]);
       const ok = grounded.filter((g) => g.status === "ok");
+      // A non-answerable class means the drafter needs a staff fact or an
+      // availability/approval decision; never judge or persist such text.
+      if (generated.class !== "answerable") {
+        await apply({ reason: `drafter classified the correction as ${generated.class}; write it by hand` });
+        return null;
+      }
       if (generated.abstain || generated.answer.trim().length === 0 || ok.length === 0 || ok.length !== grounded.length) {
         await apply({ reason: "drafter could not ground a correction in the new page; write it by hand" });
         return null;

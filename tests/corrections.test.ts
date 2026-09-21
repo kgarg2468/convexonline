@@ -233,6 +233,45 @@ describe("corrections on real inns", () => {
     expect(await t.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
   });
 
+  it.each(["needs_staff_fact", "needs_availability_or_approval"] as const)(
+    "a %s draft with a well-grounded quote is held for staff without judging or storing a proposal",
+    async (cls) => {
+      withEnv({ OPENAI_API_KEY: "sk-test" });
+      const t = makeTest();
+      const s = await seedSentInn(t);
+      stubFetch(openaiRoutes({ draft: () => json(500, { error: "not yet" }) }));
+      const result = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V2 });
+      vi.unstubAllGlobals();
+      let judgeCalls = 0;
+      stubFetch(
+        openaiRoutes({
+          draft: () =>
+            responsesOutput(
+              draftOutput({
+                class: cls,
+                abstain: false,
+                answer: "Update: our pet fee is now $40 per night pet fee, one dog per room.",
+                claims: [{ statement: "fee is $40", url: "https://seagull.example/policies", quote: "$40 per night pet fee", sourceId: result.pageVersionId }],
+              }),
+            ),
+          judge: () => {
+            judgeCalls += 1;
+            return responsesOutput(judgeOutput());
+          },
+        }),
+      );
+      await t.action(internal.corrections.generateProposal, { correctionId: (await pending(t, s.owner, s.innId))[0]._id });
+      expect(judgeCalls).toBe(0);
+      const [c] = await pending(t, s.owner, s.innId);
+      expect(c).toMatchObject({ status: "needs_review", proposedText: null, evidenceQuote: null, judgeVerdict: null });
+      expect(c.statusReason).toContain(cls);
+      await s.owner.as.mutation(api.threads.claim, { threadId: s.pet.threadId });
+      await expect(s.owner.as.mutation(api.corrections.review, { correctionId: c._id, decision: "approve" })).rejects.toThrow(/needs text before approval/);
+      expect((await pending(t, s.owner, s.innId))[0].status).toBe("needs_review");
+      expect(await t.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
+    },
+  );
+
   it("approve → live send into the original thread; the claim becomes corrected and cannot be sent twice", async () => {
     withEnv({ OPENAI_API_KEY: undefined, AGENTMAIL_API_KEY: "am-test" });
     const t = makeTest();
