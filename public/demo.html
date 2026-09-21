@@ -44,13 +44,14 @@
       <p>When a policy changes, Front Desk finds sent replies whose cited passages changed, and staff review corrections from one queue.</p>
       <p class="meta">2:30 narrated walkthrough of actual screen captures from a fictional inn and real, owned test inboxes. The public app demo simulates email.</p>
       <video controls preload="metadata" playsinline poster="./front-desk-demo-poster.png" aria-label="Front Desk demo video, 2 minutes 30 seconds">
-        <source src="./front-desk-demo.mp4" type="video/mp4" />
-        Your browser cannot play this video. <a href="./front-desk-demo.mp4" download>Download the MP4</a> instead.
+        <!-- The ?v= query bypasses older cached proxy responses that lacked byte-range support; bump it whenever media delivery changes. -->
+        <source src="./front-desk-demo.mp4?v=20260921-range" type="video/mp4" />
+        Your browser cannot play this video. <a href="./front-desk-demo.mp4?v=20260921-range" download>Download the MP4</a> instead.
       </video>
       <nav aria-label="Demo links">
         <a href="./">Open the app</a>
         <a href="https://github.com/kgarg2468/convexonline">GitHub repository</a>
-        <a href="./front-desk-demo.mp4" download="front-desk-demo.mp4">Download video (4.6 MB)</a>
+        <a href="./front-desk-demo.mp4?v=20260921-range" download="front-desk-demo.mp4">Download video (4.6 MB)</a>
         <a href="./front-desk-demo-transcript.txt">Read the video transcript</a>
       </nav>
     </main>
