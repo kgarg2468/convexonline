@@ -76,12 +76,24 @@ export const receive = internalMutation({
       .withIndex("by_inn_agentmail_thread", (q) => q.eq("innId", inn._id).eq("agentmailThreadId", args.providerThreadId))
       .first();
     if (!thread && args.inReplyTo) {
-      const parent = await ctx.db
+      // The same RFC message can be stored under several inns (a guest mails
+      // many properties at once, or a message is copied between inboxes), so the
+      // In-Reply-To parent must be resolved inside the receiving inn rather
+      // than taking the first global match. Nothing in the schema bounds how
+      // many copies share an RFC id, so every indexed match is scanned: a
+      // fixed cap would silently miss the receiving inn's copy once more
+      // foreign copies than the cap were stored ahead of it.
+      const parents = await ctx.db
         .query("messages")
         .withIndex("by_rfc_message_id", (q) => q.eq("rfcMessageId", args.inReplyTo))
-        .first();
-      const parentThread = parent ? await ctx.db.get(parent.threadId) : null;
-      if (parentThread && parentThread.innId === inn._id) thread = parentThread;
+        .collect();
+      for (const parent of parents) {
+        const parentThread = await ctx.db.get(parent.threadId);
+        if (parentThread && parentThread.innId === inn._id) {
+          thread = parentThread;
+          break;
+        }
+      }
     }
     const receivedAt = Math.min(args.receivedAt, Date.now());
     let threadId: Id<"threads">;
