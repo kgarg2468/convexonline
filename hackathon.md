@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T22:05:31Z
+- **Last updated:** 2026-09-21T22:41:35Z
 
 ## Log
 
@@ -150,5 +150,6 @@ Evidence: `convex/firecrawlClient.ts`, `convex/providers/firecrawl.ts`, `convex/
 
 ### 2026-09-21 - working tree
 Correction summaries and the navigation badge now count distinct sent replies rather than claim records or threads. Replies with any unresolved claim are excluded from the unchanged controls; corrected evidence stays associated with its original reply. Individual evidence cards and approval decisions remain separate, with passage counts shown when useful.
-All 373 offline tests pass. Three new regression scenarios cover multiple claims per reply, separate replies in one thread, approval without sending, correction delivery and dismissed-then-restored evidence. Root and browser types, lint and build pass. Provider transport is mocked; deployed browser verification follows this change's deployment.
+Automated review identified an unbounded history scan. Unchanged controls now page through inn-scoped sent replies with server-owned scan caps and bounded claim/correction-history reads. Partial results are labeled, older replies can be loaded, and unchecked replies never count as verified controls.
+All 380 offline tests pass. Regression scenarios cover multiple claims per reply, separate replies in one thread, approval without sending, correction delivery, restored evidence, pagination, tenant isolation and overflow accounting. Root and browser types, lint and build pass. Provider transport is mocked; deployed browser verification follows this change's deployment.
 Evidence: `convex/corrections.ts`, `src/workspace/corrections/CorrectionsView.tsx`, `src/workspace/FrontDeskWorkspace.tsx`, `tests/corrections.test.ts`.

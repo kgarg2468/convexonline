@@ -291,6 +291,7 @@ export type Correction = {
 };
 
 export type UnaffectedControl = {
+  kind: "control";
   claimId: Id<"claims">;
   threadId: Id<"threads">;
   /** The original sent reply of the claim's draft (never a corrective email); the strip counts distinct values. */
@@ -300,6 +301,17 @@ export type UnaffectedControl = {
   quote: string;
   pageUrl: string;
 };
+
+/** A sent reply whose draft cites more passages than one query reads: not re-checked, so never counted as still true. */
+export type UncheckedReply = {
+  kind: "unchecked";
+  threadId: Id<"threads">;
+  sentReplyId: Id<"sentReplies">;
+  subject: string;
+};
+
+/** One item of a `corrections.unaffectedControls` page. */
+export type UnaffectedControlRow = UnaffectedControl | UncheckedReply;
 
 export type DemoStatus = {
   policyVersion: "changed" | "original";

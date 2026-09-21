@@ -39,7 +39,11 @@ describe("source change re-verification", () => {
     expect(corrections.some((c) => c.oldQuote.includes("Check-in is from"))).toBe(false);
 
     // The cancellation sentence did not change: it is a control, not a correction.
-    const controls = await visitor.as.query(api.corrections.unaffectedControls, { innId });
+    // Paginated contract: the demo inn's six replies fit one page, and every row is a control.
+    const controlPage = await visitor.as.query(api.corrections.unaffectedControls, { innId, paginationOpts: { cursor: null, numItems: 25 } });
+    expect(controlPage.isDone).toBe(true);
+    const controls = controlPage.page.filter((c) => c.kind === "control");
+    expect(controls).toHaveLength(controlPage.page.length);
     expect(controls.some((c) => c.quote.includes("full refund"))).toBe(true);
     expect(corrections.some((c) => c.oldQuote.includes("full refund"))).toBe(false);
     // Claims citing other pages were never re-checked or flagged.

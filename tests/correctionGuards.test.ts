@@ -65,6 +65,25 @@ async function seedSentInn(t: T) {
 }
 
 const corrections = (t: T) => t.run((ctx) => ctx.db.query("corrections").collect());
+
+type Owner = Awaited<ReturnType<typeof signedInUser>>;
+type ControlPage = Awaited<ReturnType<typeof controlPage>>;
+const controlPage = (owner: Owner, innId: Id<"inns">, cursor: string | null) =>
+  owner.as.query(api.corrections.unaffectedControls, { innId, paginationOpts: { cursor, numItems: 25 } });
+/** Control rows of every page (paginated contract); an `unchecked` row fails the test outright. */
+async function controlsOf(owner: Owner, innId: Id<"inns">) {
+  const controls = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: ControlPage = await controlPage(owner, innId, cursor);
+    for (const row of page.page) {
+      if (row.kind !== "control") throw new Error(`unexpected ${row.kind} row`);
+      controls.push(row);
+    }
+    if (page.isDone) return controls;
+    cursor = page.continueCursor;
+  }
+}
 const claimOf = (t: T, id: Id<"claims">) => t.run((ctx) => ctx.db.get(id));
 const pendingIds = async (t: T) => (await corrections(t)).filter((c) => c.status === "needs_review").map((c) => c._id);
 
@@ -260,7 +279,7 @@ describe("guest-visible truth follows the latest sent correction", () => {
     expect(open).toHaveLength(1);
     expect(open[0]).toMatchObject({ oldQuote: "$40 per night pet fee", newVersionId: to25.pageVersionId });
     expect((await corrections(t)).find((c) => c._id === previousOpen)).toMatchObject({ status: "superseded", supersededById: open[0]._id });
-    expect(await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId })).toEqual([]);
+    expect(await controlsOf(s.owner, s.innId)).toEqual([]);
 
     // $40 restored: what the guest heard is true again → corrected and current, open proposals closed.
     const back40 = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V40 + "\n" });
@@ -268,7 +287,7 @@ describe("guest-visible truth follows the latest sent correction", () => {
     expect(await claimOf(t, s.claimId)).toMatchObject({ status: "corrected", checkedAgainstVersionId: back40.pageVersionId });
     expect((await corrections(t)).filter((c) => c.status === "needs_review" || c.status === "approved")).toEqual([]);
     expect((await corrections(t)).find((c) => c._id === c1)?.status).toBe("sent");
-    const controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
+    const controls = await controlsOf(s.owner, s.innId);
     expect(controls).toHaveLength(1);
     expect(controls[0]).toMatchObject({ claimId: s.claimId, quote: "$40 per night pet fee" });
     expect(await s.owner.as.query(api.threads.stats, { innId: s.innId })).toMatchObject({ pendingCorrections: 0 });
@@ -321,7 +340,7 @@ describe("guest-visible truth follows the latest sent correction", () => {
     const open = rows.filter((c) => c.status === "needs_review");
     expect(open).toHaveLength(1);
     expect(open[0]).toMatchObject({ oldQuote: "$40 per night pet fee", oldVersionId: to40.pageVersionId, newVersionId: to30.pageVersionId });
-    expect(await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId })).toEqual([]);
+    expect(await controlsOf(s.owner, s.innId)).toEqual([]);
 
     // Restoring $40 heals it; restoring $30 would not, because $30 is no longer what the guest last heard.
     const back40 = await s.owner.as.mutation(api.pages.submitContent, { pageId: s.pageId, markdown: V40 + "\n" });
@@ -330,7 +349,7 @@ describe("guest-visible truth follows the latest sent correction", () => {
     expect((await corrections(t)).filter((c) => c.status === "needs_review" || c.status === "approved")).toEqual([]);
     // The control shows the passage the guest heard last ($40, delivered last), not the
     // later-proposed but earlier-delivered $30.
-    const controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
+    const controls = await controlsOf(s.owner, s.innId);
     expect(controls).toHaveLength(1);
     expect(controls[0]).toMatchObject({ claimId: s.claimId, quote: "$40 per night pet fee" });
   });
@@ -357,6 +376,6 @@ describe("guest-visible truth follows the latest sent correction", () => {
     expect(open[0].statusReason).toMatch(/no evidence quote/);
     await settle(t);
     expect((await corrections(t)).find((c) => c._id === open[0]._id)?.proposedText).toBeUndefined();
-    expect(await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId })).toEqual([]);
+    expect(await controlsOf(s.owner, s.innId)).toEqual([]);
   });
 });

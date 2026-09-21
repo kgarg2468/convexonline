@@ -283,7 +283,9 @@ describe("cited page changes while the provider call is in flight", () => {
     expect(rows.find((c) => c._id === c1._id)?.status).toBe("sent");
     expect(rows.filter((c) => c.status === "needs_review" || c.status === "approved")).toEqual([]);
     expect(await t.run((ctx) => ctx.db.get(s.claimId))).toMatchObject({ status: "corrected", checkedAgainstVersionId: plus.pageVersionId });
-    const controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId });
-    expect(controls.map((c) => c.quote)).toEqual(["$40 per night pet fee"]);
+    // Paginated contract: one page covers this inn; only control rows may appear.
+    const controls = await s.owner.as.query(api.corrections.unaffectedControls, { innId: s.innId, paginationOpts: { cursor: null, numItems: 25 } });
+    expect(controls.isDone).toBe(true);
+    expect(controls.page.map((c) => (c.kind === "control" ? c.quote : c.kind))).toEqual(["$40 per night pet fee"]);
   });
 });

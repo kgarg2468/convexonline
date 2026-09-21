@@ -79,7 +79,11 @@ describe("demo loop (no providers, no live mail)", () => {
       expect(p.oldQuote).toContain("$25");
     }
     expect(new Set(proposals.map((p) => p.threadId)).size).toBe(3);
-    const controls = await visitor.as.query(api.corrections.unaffectedControls, { innId });
+    // Paginated contract: the demo inn's six replies fit one page, and every row is a control.
+    const controlPage = await visitor.as.query(api.corrections.unaffectedControls, { innId, paginationOpts: { cursor: null, numItems: 25 } });
+    expect(controlPage.isDone).toBe(true);
+    const controls = controlPage.page.filter((c) => c.kind === "control");
+    expect(controls).toHaveLength(controlPage.page.length);
     // Controls are listed per claim; three distinct sent replies cite unchanged passages.
     expect(new Set(controls.map((c) => c.threadId)).size).toBe(3);
     expect(controls.every((c) => !c.quote.includes("$25"))).toBe(true);

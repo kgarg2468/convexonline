@@ -1,9 +1,10 @@
 import { ConvexError, v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalQuery, query } from "./_generated/server";
 import { internalMutation, mutation } from "./functions";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireInnAccess, requireLiveMailAccess, requireThreadAccess } from "./access";
 import { evaluateClaim } from "./lib/claimLocks";
 import { currentDateIn, readEnv } from "./lib/env";
@@ -13,7 +14,6 @@ import { verifyQuote } from "./lib/quotes";
 import { decideCorrectionSend, isCorrectionTextApproved } from "./lib/sendGuards";
 import { generateGroundedDraft, judgeDraft, DRAFT_MODEL_DEFAULT, JUDGE_MODEL_DEFAULT } from "./providers/openai";
 import { outboxStatusesFor, reserveOutbox } from "./outbox";
-import { latestSentCorrection } from "./pages";
 import { correctionStatus } from "./schema";
 
 export const list = query({
@@ -65,10 +65,103 @@ export const list = query({
 });
 
 /**
+ * Most sent replies an *initial* page of `unaffectedControls` walks, whatever
+ * `numItems` the client asks for. A reactive re-query of an existing range
+ * (`endCursor`) is bounded by `CONTROLS_MAX_ROWS_READ` instead, so one call
+ * may walk up to that many replies.
+ */
+const CONTROLS_REPLIES_PER_PAGE = 25;
+/** Most claims of one draft the query reads; a draft beyond it is reported unchecked, never assumed true. */
+const CONTROLS_CLAIMS_PER_DRAFT = 50;
+/**
+ * Correction-row budget of one corrected claim; the claim reads at most this
+ * many rows plus one lookahead row before its reply is reported unchecked.
+ */
+const CONTROLS_CORRECTIONS_PER_CLAIM = 20;
+/**
+ * Correction-row budget of one call across all its replies; the call reads at
+ * most this many rows plus one lookahead row, and corrected replies beyond it
+ * are reported unchecked.
+ */
+const CONTROLS_CORRECTIONS_PER_QUERY = 400;
+/**
+ * Server-owned scan caps for the reply walk. A client may pass `endCursor`
+ * (reactive pagination splits pages that way), which overrides `numItems`, so
+ * the row and byte caps are what actually bound one call: a reactive range
+ * may span up to `CONTROLS_MAX_ROWS_READ` replies. The row cap leaves
+ * headroom over a full page so an initial page of exactly
+ * `CONTROLS_REPLIES_PER_PAGE` replies is never reported as needing a split.
+ */
+const CONTROLS_MAX_ROWS_READ = CONTROLS_REPLIES_PER_PAGE * 2;
+const CONTROLS_MAX_BYTES_READ = 1 << 20;
+
+/**
+ * `latestSentCorrection` under a read budget: the same "delivered last" choice
+ * over every correction of the claim, or `overflow` when the claim's history
+ * is larger than this call may read. An overflow never falls back to an older
+ * correction or to the original quote; the caller reports the reply unchecked.
+ *
+ * Every row actually read is charged to `budget`, including the one lookahead
+ * row that proves an overflow, so an oversized history is never a free read.
+ * A claim reads at most `CONTROLS_CORRECTIONS_PER_CLAIM + 1` rows, and once
+ * the budget is spent the call reports overflow without querying at all: a
+ * whole call reads at most `CONTROLS_CORRECTIONS_PER_QUERY + 1` correction
+ * rows (the budget plus a final lookahead row).
+ */
+async function latestSentCorrectionWithin(
+  ctx: QueryCtx,
+  claimId: Id<"claims">,
+  budget: { remaining: number },
+): Promise<{ overflow: true } | { overflow: false; correction: Doc<"corrections"> | null }> {
+  if (budget.remaining <= 0) return { overflow: true };
+  const limit = Math.min(CONTROLS_CORRECTIONS_PER_CLAIM, budget.remaining);
+  const rows = await ctx.db
+    .query("corrections")
+    .withIndex("by_claim", (q) => q.eq("claimId", claimId))
+    .take(limit + 1);
+  budget.remaining -= rows.length;
+  if (rows.length > limit) return { overflow: true };
+  let best: { correction: Doc<"corrections">; deliveredAt: number; tieBreak: number } | null = null;
+  for (const correction of rows) {
+    if (correction.status !== "sent") continue;
+    const reply = correction.sentReplyIdForCorrection ? await ctx.db.get(correction.sentReplyIdForCorrection) : null;
+    const candidate = {
+      correction,
+      deliveredAt: reply?.sentAt ?? correction._creationTime,
+      tieBreak: reply?._creationTime ?? correction._creationTime,
+    };
+    if (!best || candidate.deliveredAt > best.deliveredAt || (candidate.deliveredAt === best.deliveredAt && candidate.tieBreak > best.tieBreak)) {
+      best = candidate;
+    }
+  }
+  return { overflow: false, correction: best?.correction ?? null };
+}
+
+type UnaffectedControlRow =
+  | {
+      kind: "control";
+      claimId: Id<"claims">;
+      threadId: Id<"threads">;
+      sentReplyId: Id<"sentReplies">;
+      subject: string;
+      statement: string;
+      quote: string;
+      pageUrl: string;
+    }
+  | { kind: "unchecked"; threadId: Id<"threads">; sentReplyId: Id<"sentReplies">; subject: string };
+
+/**
  * Sent claims that still hold after the latest change of their page: the
  * controls shown beside affected replies in the review screen. A corrected
  * claim counts when the passage its sent correction rests on still holds; the
  * quote shown is then that passage, the last thing the guest was told.
+ *
+ * Paginated over the inn's sent replies (newest first, at most
+ * `CONTROLS_REPLIES_PER_PAGE` replies per initial page and at most
+ * `CONTROLS_MAX_ROWS_READ` per reactive `endCursor` range), so one call never
+ * walks the inn's whole history. Each page is the flattened control rows of its replies:
+ * `page` may be shorter or longer than the reply count, and `isDone` is the
+ * only signal that every sent reply has been checked.
  *
  * Each row carries the *original* sent reply of its draft (the same
  * `sentReplies.by_draft` first row `recheckSentClaim` uses, so a corrective
@@ -77,68 +170,92 @@ export const list = query({
  * any claim of the same draft is still `needs_review` (including one whose
  * correction is approved or dismissed but not yet sent or restored), none of
  * that draft's claims are listed, so the reply never shows as both affected
- * and "still true".
+ * and "still true". A draft with more claims than the query reads, or a
+ * corrected claim whose correction history exceeds the call's read budget,
+ * yields one `unchecked` row instead of control rows: its reply is neither
+ * listed nor counted as still true, and none of its other claims are listed.
  */
 export const unaffectedControls = query({
-  args: { innId: v.id("inns") },
-  handler: async (ctx, { innId }) => {
+  args: { innId: v.id("inns"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { innId, paginationOpts }) => {
     await requireInnAccess(ctx, innId);
-    const pages = await ctx.db
-      .query("pages")
+    const replies = await ctx.db
+      .query("sentReplies")
       .withIndex("by_inn", (q) => q.eq("innId", innId))
-      .collect();
-    // Per draft: the original sent reply id, or null when the reply is not a
-    // control (never sent, or a sibling claim is still under review).
-    const replyByDraft = new Map<Id<"drafts">, Id<"sentReplies"> | null>();
-    const controlReplyFor = async (draftId: Id<"drafts">) => {
-      const cached = replyByDraft.get(draftId);
-      if (cached !== undefined) return cached;
-      const reply = await ctx.db
-        .query("sentReplies")
-        .withIndex("by_draft", (q) => q.eq("draftId", draftId))
-        .first();
-      let result: Id<"sentReplies"> | null = null;
-      if (reply) {
-        const unresolved = await ctx.db
-          .query("claims")
-          .withIndex("by_draft", (q) => q.eq("draftId", draftId))
-          .filter((q) => q.eq(q.field("status"), "needs_review"))
-          .first();
-        if (!unresolved) result = reply._id;
+      .order("desc")
+      .paginate({
+        ...paginationOpts,
+        numItems: Math.max(1, Math.min(paginationOpts.numItems, CONTROLS_REPLIES_PER_PAGE)),
+        maximumRowsRead: CONTROLS_MAX_ROWS_READ,
+        maximumBytesRead: CONTROLS_MAX_BYTES_READ,
+      });
+    const budget = { remaining: CONTROLS_CORRECTIONS_PER_QUERY };
+    const pages = new Map<Id<"pages">, Doc<"pages"> | null>();
+    const pageFor = async (pageId: Id<"pages">) => {
+      let page = pages.get(pageId);
+      if (page === undefined) {
+        page = await ctx.db.get(pageId);
+        pages.set(pageId, page);
       }
-      replyByDraft.set(draftId, result);
-      return result;
+      return page;
     };
-    const out = [];
-    for (const page of pages) {
-      if (!page.lastVersionId) continue;
+    const page: UnaffectedControlRow[] = [];
+    for (const reply of replies.page) {
+      if (reply.kind === "correction") continue;
+      // The reply a claim is listed under is the first `by_draft` row of its
+      // draft; any other row of the same draft is skipped so a reply is never
+      // listed twice or under a later row.
+      const original = await ctx.db
+        .query("sentReplies")
+        .withIndex("by_draft", (q) => q.eq("draftId", reply.draftId))
+        .first();
+      if (!original || original._id !== reply._id) continue;
       const claims = await ctx.db
         .query("claims")
-        .withIndex("by_page", (q) => q.eq("pageId", page._id))
-        .collect();
-      for (const claim of claims) {
-        if (claim.checkedAgainstVersionId !== page.lastVersionId) continue;
+        .withIndex("by_draft", (q) => q.eq("draftId", reply.draftId))
+        .take(CONTROLS_CLAIMS_PER_DRAFT + 1);
+      if (claims.length <= CONTROLS_CLAIMS_PER_DRAFT && claims.some((claim) => claim.status === "needs_review")) continue;
+      // Rows of this reply are held back until every claim is resolved: an
+      // overflow anywhere in the draft reports the reply unchecked as a whole
+      // rather than listing the claims read before it.
+      const rows: UnaffectedControlRow[] = [];
+      let unchecked = claims.length > CONTROLS_CLAIMS_PER_DRAFT;
+      let subject: string | undefined;
+      for (const claim of unchecked ? [] : claims) {
+        if (!claim.pageId) continue;
+        const source = await pageFor(claim.pageId);
+        if (!source || source.innId !== innId || !source.lastVersionId) continue;
+        if (claim.checkedAgainstVersionId !== source.lastVersionId) continue;
         let quote = claim.quote;
         if (claim.status === "corrected") {
-          const sent = await latestSentCorrection(ctx, claim._id);
-          if (!sent?.evidenceQuote) continue;
-          quote = sent.evidenceQuote;
+          const sent = await latestSentCorrectionWithin(ctx, claim._id, budget);
+          if (sent.overflow) {
+            unchecked = true;
+            break;
+          }
+          if (!sent.correction?.evidenceQuote) continue;
+          quote = sent.correction.evidenceQuote;
         } else if (claim.status !== "ok") continue;
-        const sentReplyId = await controlReplyFor(claim.draftId);
-        if (!sentReplyId) continue;
-        const thread = await ctx.db.get(claim.threadId);
-        out.push({
+        if (subject === undefined) subject = (await ctx.db.get(claim.threadId))?.subject ?? "";
+        rows.push({
+          kind: "control",
           claimId: claim._id,
           threadId: claim.threadId,
-          sentReplyId,
-          subject: thread?.subject ?? "",
+          sentReplyId: reply._id,
+          subject,
           statement: claim.statement,
           quote,
-          pageUrl: page.url,
+          pageUrl: source.url,
         });
       }
+      if (unchecked) {
+        const thread = await ctx.db.get(reply.threadId);
+        page.push({ kind: "unchecked", threadId: reply.threadId, sentReplyId: reply._id, subject: thread?.subject ?? "" });
+        continue;
+      }
+      page.push(...rows);
     }
-    return out;
+    return { ...replies, page };
   },
 });
 
