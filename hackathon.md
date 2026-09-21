@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T18:32:00Z
+- **Last updated:** 2026-09-21T19:01:08Z
 
 ## Log
 
@@ -99,3 +99,8 @@ Evidence: `convex/followUps.ts`, `convex/outbox.ts`, `convex/teams.ts`, `tests/f
 Added explicit follow-up approval, rescheduling and cancellation controls, with exact message text, approval history and delivery status. Reminder-only notices remain separate. The picker shows the selected date's time-zone offset and rejects local times skipped by daylight saving.
 All 25 desktop/mobile browser tests passed against the production backend, including three new follow-up scenarios. CI and automated review passed; the frontend is deployed on Convex. These browser checks use simulated delivery.
 Evidence: `src/workspace/inbox/FollowUpPanel.tsx`, `src/workspace/inbox/ThreadDetail.tsx`, `tests/browser/specs/followups.spec.ts`.
+
+### 2026-09-21 - 95f6f52
+Added owner-edited fictional inn websites served as escaped public HTML on Convex. Real crawls are restricted to the inn's own pages and request fresh content; saving a website never directly changes source versions or sent claims.
+Automated review caught a scope bypass through regular-property creation. Creation, ingestion and scheduled refresh now reject foreign deployment-hosted sites, including legacy records. All 309 tests, CI and the follow-up review pass; the backend is deployed. The change-to-correction tests mock provider transport; the hosted real-provider walkthrough is not yet verified.
+Evidence: `convex/innWebsites.ts`, `convex/lib/innWebsiteHtml.ts`, `convex/ingest.ts`, `tests/innWebsites.test.ts`, `tests/ingest.test.ts`.

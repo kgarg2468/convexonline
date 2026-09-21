@@ -98,6 +98,18 @@ not restore their old approvals. Once a message is with the provider it cannot
 be recalled; an unknown outcome stays blocked from automatic retry. Demo
 follow-ups are clearly labeled simulated and never contact a mail provider.
 
+## A fictional inn you can edit
+
+When creating a property, choose **A fictional inn with a hosted example site**.
+Front Desk publishes four clearly fictional pages on the same Convex deployment:
+home, policies, rooms and notices. The owner can change their structured content
+under **Settings → Public website**; invited staff can view the public pages.
+
+**Save website** publishes the edits immediately. Open **Knowledge → Crawl the
+website** to capture the new content through Firecrawl and review any sent replies
+whose cited passages changed. Crawling and email use the configured providers;
+set up the guest inbox in Settings when ready.
+
 ## Inbox setup (one webhook per deployment)
 
 Each deployment owns exactly one AgentMail `message.received` webhook, scoped
