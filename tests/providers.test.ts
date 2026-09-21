@@ -506,6 +506,58 @@ describe("openai.generateGroundedDraft", () => {
     expect(r.claims[0].sourceId).toBe("f1");
   });
 
+  it("rejects a forged quote that names a valid page", async () => {
+    const forged = {
+      ...goodDraft,
+      claims: [{ ...goodDraft.claims[0], quote: "Check-in is at noon and pets stay free." }],
+    };
+    const e = await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(forged)).fetch)), {
+      kind: "invalid_response",
+      retryable: false,
+    });
+    expect(e.message).not.toContain("pets stay free");
+  });
+
+  it("rejects a forged quote that names a valid staff fact", async () => {
+    const forged = {
+      ...goodDraft,
+      claims: [{ statement: "Large dogs allowed", url: "staff:f1", quote: "Yes, any size.", sourceId: "f1" }],
+    };
+    await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(forged)).fetch)), {
+      kind: "invalid_response",
+    });
+  });
+
+  it("rejects a quote that exists only in a different source than the one cited", async () => {
+    const crossed = {
+      ...goodDraft,
+      claims: [{ statement: "Small dogs allowed", url: "https://inn.example/policies", quote: "Yes, small ones.", sourceId: "v1" }],
+    };
+    await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(crossed)).fetch)), {
+      kind: "invalid_response",
+    });
+  });
+
+  it("rejects empty and markdown-only quotes", async () => {
+    for (const quote of ["", "   ", "** **", "# \n> "]) {
+      const empty = { ...goodDraft, claims: [{ ...goodDraft.claims[0], quote }] };
+      await expectProviderError(generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(empty)).fetch)), {
+        kind: "invalid_response",
+      });
+    }
+  });
+
+  it("accepts a quote that matches after markdown normalization, returned unchanged", async () => {
+    const normalized = { ...goodDraft, claims: [{ ...goodDraft.claims[0], quote: "Check-in is at 3 pm." }] };
+    const r = await generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(normalized)).fetch));
+    expect(r.claims[0].quote).toBe("Check-in is at 3 pm.");
+  });
+
+  it("accepts an abstaining draft with no claims", async () => {
+    const abstain = { ...goodDraft, class: "needs_staff_fact", answer: "", abstain: true, gapQuestion: "Is there parking?", claims: [] };
+    expect(await generateGroundedDraft(draftArgs(mockFetch(200, responsesBody(abstain)).fetch))).toEqual(abstain);
+  });
+
   it("rejects invalid or missing output fields even from a strict-schema provider", async () => {
     const cases: unknown[] = [
       { ...goodDraft, class: "maybe" },

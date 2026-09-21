@@ -4,6 +4,7 @@
  * Every provider failure, refusal or malformed output fails closed: the caller
  * never receives a partially trusted draft.
  */
+import { verifyQuote } from "../lib/quotes";
 import { httpError, isRecord, postJson, ProviderError, requireNonEmpty, type FetchLike } from "./shared";
 
 export const OPENAI_BASE_URL = "https://api.openai.com";
@@ -258,7 +259,10 @@ function nullableStr(x: unknown, max: number, field: string): string | null {
   return x === null ? null : str(x, max, field);
 }
 
-function validateDraft(raw: unknown, sources: Map<string, string>): GroundedDraft {
+/** A supplied source as the drafter saw it: its url and the raw text quotes must come from. */
+type SourceRecord = { url: string; content: string };
+
+function validateDraft(raw: unknown, sources: Map<string, SourceRecord>): GroundedDraft {
   if (!isRecord(raw)) throw invalid("draft is not an object");
   const cls = raw.class;
   if (cls !== "answerable" && cls !== "needs_staff_fact" && cls !== "needs_availability_or_approval") {
@@ -272,14 +276,19 @@ function validateDraft(raw: unknown, sources: Map<string, string>): GroundedDraf
   const claims: DraftClaim[] = raw.claims.map((c, i) => {
     if (!isRecord(c)) throw invalid(`draft.claims[${i}] is not an object`);
     const sourceId = str(c.sourceId, 200, `draft.claims[${i}].sourceId`);
-    const expectedUrl = sources.get(sourceId);
-    if (expectedUrl === undefined) throw invalid(`draft.claims[${i}].sourceId is not a supplied source`);
+    const source = sources.get(sourceId);
+    if (source === undefined) throw invalid(`draft.claims[${i}].sourceId is not a supplied source`);
     const url = str(c.url, 2_048, `draft.claims[${i}].url`);
-    if (url !== expectedUrl) throw invalid(`draft.claims[${i}].url does not match its source`);
+    if (url !== source.url) throw invalid(`draft.claims[${i}].url does not match its source`);
+    const quote = str(c.quote, LIMITS.quoteChars, `draft.claims[${i}].quote`);
+    // Fail closed: a quote that is not verbatim (or markdown-normalized) text
+    // of its cited source is rejected outright, never rewritten or substituted.
+    const verification = verifyQuote(source.content, quote);
+    if (!verification.verified) throw invalid(`draft.claims[${i}].quote ${verification.reason} in its source`);
     return {
       statement: str(c.statement, LIMITS.statementChars, `draft.claims[${i}].statement`),
       url,
-      quote: str(c.quote, LIMITS.quoteChars, `draft.claims[${i}].quote`),
+      quote,
       sourceId,
     };
   });
@@ -332,7 +341,7 @@ export async function generateGroundedDraft(args: GenerateGroundedDraftArgs): Pr
   if (args.pages.length > LIMITS.pages) throw inputError("too many pages");
   if (args.facts.length > LIMITS.facts) throw inputError("too many staff facts");
 
-  const sources = new Map<string, string>();
+  const sources = new Map<string, SourceRecord>();
   let total = 0;
   for (const p of args.pages) {
     requireNonEmpty("openai", "page.versionId", p.versionId);
@@ -340,14 +349,14 @@ export async function generateGroundedDraft(args: GenerateGroundedDraftArgs): Pr
     if (p.markdown.length > LIMITS.pageMarkdownChars) throw inputError("page markdown too long");
     total += p.markdown.length;
     if (sources.has(p.versionId)) throw inputError("duplicate source id");
-    sources.set(p.versionId, p.url);
+    sources.set(p.versionId, { url: p.url, content: p.markdown });
   }
   if (total > LIMITS.totalPageChars) throw inputError("total page markdown too long");
   for (const f of args.facts) {
     requireNonEmpty("openai", "fact.id", f.id);
     if (f.question.length + f.answer.length > LIMITS.factChars) throw inputError("staff fact too long");
     if (sources.has(f.id)) throw inputError("duplicate source id");
-    sources.set(f.id, `staff:${f.id}`);
+    sources.set(f.id, { url: `staff:${f.id}`, content: `Q: ${f.question}\nA: ${f.answer}` });
   }
 
   const raw = await callStructured({
