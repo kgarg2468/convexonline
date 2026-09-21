@@ -11,6 +11,9 @@ to explore an isolated workspace with simulated email, then change the demo poli
 to review three affected replies alongside three unaffected replies. Both the
 frontend and backend are hosted on Convex.
 
+The [walkthrough](docs/walkthrough.md) covers the isolated demo and the live
+fictional-inn workflow, including staff invitations and approved follow-ups.
+
 The [40-case grounding evaluation](docs/grounding-evaluation.md) records real
 OpenAI calls through the app's generation pipeline. No unanswerable or
 approval-only inquiry became ready; 16 of 24 answerable inquiries became ready
