@@ -10,7 +10,10 @@
  * Usage:
  *   node scripts/configure-auth.mjs
  *   node scripts/configure-auth.mjs --prod
- *   node scripts/configure-auth.mjs --deployment-name X
+ *   node scripts/configure-auth.mjs --deployment X
+ *
+ * `--deployment` is the Convex CLI flag (`npx convex env --help`). The older
+ * `--deployment-name` spelling is still accepted and forwarded as `--deployment`.
  *
  * Key format matches @convex-dev/auth's own `npx @convex-dev/auth` initializer
  * (dist/bin.cjs generateKeys): PKCS8 PEM, trailing whitespace trimmed, every
@@ -33,14 +36,15 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--prod") opts.prod = true;
-    else if (a === "--deployment-name") {
+    else if (a === "--deployment" || a === "--deployment-name") {
       const v = argv[++i];
-      if (!v || v.startsWith("--")) fail("--deployment-name requires a value");
+      if (!v || v.startsWith("--")) fail(`${a} requires a value`);
       opts.deploymentName = v;
-    } else if (a.startsWith("--deployment-name=")) opts.deploymentName = a.slice("--deployment-name=".length);
+    } else if (a.startsWith("--deployment=")) opts.deploymentName = a.slice("--deployment=".length);
+    else if (a.startsWith("--deployment-name=")) opts.deploymentName = a.slice("--deployment-name=".length);
     else fail(`unknown argument: ${a}`);
   }
-  if (opts.prod && opts.deploymentName) fail("--prod and --deployment-name are mutually exclusive");
+  if (opts.prod && opts.deploymentName) fail("--prod and --deployment are mutually exclusive");
   return opts;
 }
 
@@ -51,7 +55,8 @@ function fail(msg, code = 1) {
 
 function deploymentArgs(opts) {
   if (opts.prod) return ["--prod"];
-  if (opts.deploymentName) return ["--deployment-name", opts.deploymentName];
+  // The Convex CLI flag is `--deployment` (see `npx convex env --help`).
+  if (opts.deploymentName) return ["--deployment", opts.deploymentName];
   return [];
 }
 
