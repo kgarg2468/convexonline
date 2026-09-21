@@ -56,12 +56,22 @@ export const correctionStatus = v.union(
 );
 /** Who authored the exact outgoing text. "fixture" is demo-only and never has model provenance. */
 export const textSource = v.union(v.literal("model"), v.literal("staff"), v.literal("fixture"));
+export const outboxKind = v.union(v.literal("reply"), v.literal("correction"), v.literal("follow_up"));
 export const outboxStatus = v.union(
   v.literal("reserved"),
   v.literal("sending"),
   v.literal("sent"),
   v.literal("failed"),
   v.literal("unknown"),
+);
+export const followUpKind = v.union(v.literal("reminder"), v.literal("email"));
+export const followUpStatus = v.union(
+  v.literal("scheduled"),
+  v.literal("cancelled"),
+  v.literal("due"),
+  v.literal("reserved"),
+  v.literal("sent"),
+  v.literal("failed"),
 );
 export const judgeVerdict = v.object({
   entailed: v.boolean(),
@@ -253,9 +263,11 @@ export default defineSchema({
   outbox: defineTable({
     innId: v.id("inns"),
     threadId: v.id("threads"),
-    kind: v.union(v.literal("reply"), v.literal("correction")),
+    kind: outboxKind,
     draftId: v.optional(v.id("drafts")),
     correctionId: v.optional(v.id("corrections")),
+    /** The staff-approved follow-up this row delivers (kind `follow_up` only). */
+    followUpId: v.optional(v.id("followUps")),
     /** Our inbound message the reply threads under, and its provider ids. */
     replyToMessageId: v.id("messages"),
     providerInboxId: v.optional(v.string()),
@@ -273,7 +285,8 @@ export default defineSchema({
   })
     .index("by_thread", ["threadId"])
     .index("by_draft", ["draftId"])
-    .index("by_correction", ["correctionId"]),
+    .index("by_correction", ["correctionId"])
+    .index("by_followUp", ["followUpId"]),
 
   sentReplies: defineTable({
     threadId: v.id("threads"),
@@ -335,12 +348,54 @@ export default defineSchema({
     .index("by_sentReply", ["sentReplyId"])
     .index("by_claim", ["claimId"]),
 
+  /**
+   * Two kinds of row share this table. Reminder rows (kind absent or
+   * `reminder`) only ever flip the thread to `needs_staff` when due. Email rows
+   * (kind `email`) carry a staff approval of the fixed follow-up text and are
+   * the only rows that may reach the outbox; a reminder never authorizes mail.
+   */
   followUps: defineTable({
     threadId: v.id("threads"),
     scheduledId: v.optional(v.id("_scheduled_functions")),
     dueAt: v.number(),
-    status: v.union(v.literal("scheduled"), v.literal("cancelled"), v.literal("due"), v.literal("sent")),
-  }).index("by_thread", ["threadId"]),
+    /**
+     * Reminders: scheduled → due | cancelled. Emails: scheduled → reserved
+     * (outbox row exists; approval immutable) → sent | failed, or cancelled
+     * before dispatch. `reserved` also covers an unknown delivery outcome.
+     */
+    status: followUpStatus,
+    kind: v.optional(followUpKind),
+    /** Email rows: the inn and approval captured at approval time. */
+    innId: v.optional(v.id("inns")),
+    inboundMessageId: v.optional(v.id("messages")),
+    approvedText: v.optional(v.string()),
+    approvedBy: v.optional(v.id("users")),
+    /**
+     * The exact membership row the approver held when approving. Dispatch
+     * requires this very row to still exist: removing the member withdraws
+     * every approval made under it, and rejoining (a new row) never revives them.
+     */
+    approvedByMembershipId: v.optional(v.id("memberships")),
+    approvedAt: v.optional(v.number()),
+    /** The normal reply the follow-up chases. */
+    originalSentReplyId: v.optional(v.id("sentReplies")),
+    originalDraftId: v.optional(v.id("drafts")),
+    originalOutboxId: v.optional(v.id("outbox")),
+    providerInboxId: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
+    simulated: v.optional(v.boolean()),
+    /** Set once the due worker reserved delivery; the approval is frozen from then on. */
+    outboxId: v.optional(v.id("outbox")),
+    sentMessageId: v.optional(v.id("messages")),
+    sentAt: v.optional(v.number()),
+    /** Why the row is cancelled or failed; shown to staff. */
+    statusReason: v.optional(v.string()),
+    cancelledAt: v.optional(v.number()),
+    cancelledBy: v.optional(v.id("users")),
+  })
+    .index("by_thread", ["threadId"])
+    /** Email approvals made under one membership row, so removing it never scans the inn's history. */
+    .index("by_approver_membership_status", ["approvedByMembershipId", "status"]),
 
   /**
    * One-use staff invitations. Only the SHA-256 of the capability token is

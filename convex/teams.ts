@@ -15,6 +15,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { membershipFor, requireLiveMailAccess, requireUser, type InnAccess } from "./access";
 import { sha256Hex } from "./lib/quotes";
 import { canJoinInn } from "./lib/tenant";
+import { cancelRemovedApproverBatch } from "./followUps";
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_OUTSTANDING_INVITES = 20;
@@ -318,6 +319,13 @@ async function releaseClaimBatch(ctx: MutationCtx, innId: Id<"inns">, userId: Id
  * history can never make the removal itself fail and roll back the access
  * revocation. Anything beyond that is cleared by `releaseRemovedMemberClaims`
  * in the background; `released` counts only what this transaction freed.
+ *
+ * Follow-up emails the leaver approved and that are still pending are
+ * withdrawn the same way: one bounded batch keyed on the deleted membership
+ * row, the rest in the background. Every approval names the membership row it
+ * was made under, so the moment that row is deleted the due worker and the
+ * dispatch preflight refuse all of them (pending or reserved) without any
+ * scan, and a later re-invitation (a new row) never brings them back.
  */
 export const removeStaff = mutation({
   args: { innId: v.id("inns"), userId: v.id("users") },
@@ -330,25 +338,35 @@ export const removeStaff = mutation({
     if (!target || target.role !== "staff") {
       throw new ConvexError({ code: "forbidden", message: "Only staff members can be removed" });
     }
-    await ctx.db.delete(target._id);
+    const membershipId = target._id;
+    await ctx.db.delete(membershipId);
     const { released, more } = await releaseClaimBatch(ctx, innId, userId);
-    if (!more) return { released };
-    await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId });
+    const approvals = await cancelRemovedApproverBatch(ctx, membershipId);
+    if (!more && !approvals.more) return { released };
+    await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId, membershipId });
     return { released, cleanupScheduled: true as const };
   },
 });
 
 /**
- * Background continuation of `removeStaff`: clears the remaining claim locks
- * of a removed member, one batch per transaction, for exactly the inn and user
- * the removal named. Stops the moment the user is a member again (re-invited
- * before the backlog drained) so it never erases claims they took legitimately.
+ * Background continuation of `removeStaff`, one batch per transaction, for
+ * exactly the inn and user the removal named.
+ *
+ * Claim locks: stops the moment the user is a member again (re-invited before
+ * the backlog drained) so it never erases claims they took legitimately.
+ *
+ * Follow-up approvals: keyed on the deleted membership row (`membershipId`),
+ * so the batch keeps going after a rejoin. The old approvals are already dead
+ * at dispatch; this only marks them cancelled for staff to see. Approvals made
+ * after rejoining belong to the new row and are never touched.
  */
 export const releaseRemovedMemberClaims = internalMutation({
-  args: { innId: v.id("inns"), userId: v.id("users") },
-  handler: async (ctx, { innId, userId }) => {
-    if ((await membershipFor(ctx, innId, userId)) !== null) return;
-    const { more } = await releaseClaimBatch(ctx, innId, userId);
-    if (more) await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId });
+  args: { innId: v.id("inns"), userId: v.id("users"), membershipId: v.optional(v.id("memberships")) },
+  handler: async (ctx, { innId, userId, membershipId }) => {
+    const rejoined = (await membershipFor(ctx, innId, userId)) !== null;
+    let more = false;
+    if (!rejoined) more = (await releaseClaimBatch(ctx, innId, userId)).more;
+    if (membershipId !== undefined) more = (await cancelRemovedApproverBatch(ctx, membershipId)).more || more;
+    if (more) await ctx.scheduler.runAfter(0, internal.teams.releaseRemovedMemberClaims, { innId, userId, membershipId });
   },
 });
