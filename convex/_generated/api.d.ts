@@ -44,6 +44,7 @@ import type * as providers_firecrawl from "../providers/firecrawl.js";
 import type * as providers_index from "../providers/index.js";
 import type * as providers_openai from "../providers/openai.js";
 import type * as providers_shared from "../providers/shared.js";
+import type * as teams from "../teams.js";
 import type * as threads from "../threads.js";
 import type * as users from "../users.js";
 
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   "providers/index": typeof providers_index;
   "providers/openai": typeof providers_openai;
   "providers/shared": typeof providers_shared;
+  teams: typeof teams;
   threads: typeof threads;
   users: typeof users;
 }>;

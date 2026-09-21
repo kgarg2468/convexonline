@@ -161,6 +161,8 @@ export default defineSchema({
     .index("by_inn_status", ["innId", "status"])
     .index("by_inn_lastInbound", ["innId", "lastInboundAt"])
     .index("by_inn_agentmail_thread", ["innId", "agentmailThreadId"])
+    /** Claim locks held by one member, so removing them never scans the whole inn. */
+    .index("by_inn_claimedBy", ["innId", "claimedBy"])
     .searchIndex("search_threads", {
       searchField: "searchableText",
       filterFields: ["innId"],
@@ -339,4 +341,30 @@ export default defineSchema({
     dueAt: v.number(),
     status: v.union(v.literal("scheduled"), v.literal("cancelled"), v.literal("due"), v.literal("sent")),
   }).index("by_thread", ["threadId"]),
+
+  /**
+   * One-use staff invitations. Only the SHA-256 of the capability token is
+   * stored; the raw token exists solely in the creating action's return value.
+   */
+  teamInvites: defineTable({
+    innId: v.id("inns"),
+    tokenHash: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedBy: v.optional(v.id("users")),
+    usedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    label: v.optional(v.string()),
+    /**
+     * True until the invite is used or revoked. Combined with `expiresAt` this
+     * lets the outstanding-invite check read only rows that can still be
+     * accepted instead of the inn's whole invitation history.
+     */
+    isOpen: v.boolean(),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    /** `expiresAt` is always `createdAt + INVITE_TTL_MS`, so this also orders by creation time. */
+    .index("by_inn_expiresAt", ["innId", "expiresAt"])
+    .index("by_inn_open_expiresAt", ["innId", "isOpen", "expiresAt"]),
 });
