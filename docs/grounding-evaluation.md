@@ -23,7 +23,9 @@ Token usage and cost were not measured by the harness, so none are reported.
 
 | field | value |
 |---|---|
-| git revision | 0868cae512fbc0821ad17a40a6ac487420ea4fdc (kgarg2468/convex-hackathon-project-plan) |
+| repository | [kgarg2468/convexonline](https://github.com/kgarg2468/convexonline) |
+| git revision | [0868cae512fbc0821ad17a40a6ac487420ea4fdc](https://github.com/kgarg2468/convexonline/commit/0868cae512fbc0821ad17a40a6ac487420ea4fdc) |
+| branch at run time | `kgarg2468/convex-hackathon-project-plan` |
 | uncommitted product changes at run time | YES — 1 product/test-setup file(s) had uncommitted changes |
 | oracle fixtures SHA-256 | 8444072a1faab1c97d187da0be43f6502dc0474bd5e25e53b51327f4a0d6995e |
 | harness SHA-256 | e4b1a08695760a308ade30feaebbb2697ae687da1086b308b8a285f66cdaa3e0 |
@@ -38,7 +40,7 @@ The raw provenance flag is retained rather than relabeled as a clean worktree.
 
 - Oracle: 40 hand-written guest inquiries across two real inns (20 each; ids `sg-*` and `sh-*`), each labelled `answerable`, `unanswerable` or `needs_approval` from the inns' scraped public pages before any model ran. Six carry an expected stay (dates / party) for extraction checking.
 - Each fixture is run sequentially through the product's real generation action inside `convex-test` (snapshot → OpenAI drafter → mechanical quote check → independent judge → persisted draft and claims), with the inn's knowledge base seeded from the same scraped pages. One generation per fixture, no retries.
-- Clock: only `Date` is frozen (timers and network stay real) and it is advanced by a fixed step per fixture, so all fixtures resolve relative dates against the same calendar day while the product's per-inn model budget (a real rate limiter that reads the clock) refills between generations exactly as it would in production. The limiter is not mocked, reset or bypassed; a fixture the limiter pauses is a hard error, not a hold.
+- Clock: only `Date` is frozen (timers and network stay real) and it advances by 60 seconds per fixture. All fixtures resolve relative dates against the same calendar day. The real limiter implementation reads this advanced clock and receives enough elapsed time to fully refill its burst bucket before each fixture. It is not mocked, reset or bypassed, but this artificial spacing deliberately avoids burst contention so every fixture reaches the model. A budget pause is a harness error, not a grounding hold.
 - Provider-call coverage: a pass-through wrapper around the process's `fetch` (it always forwards to the real network call and never answers on the provider's behalf) counts, per fixture, the requests that reached the OpenAI Responses API and whether each was the drafter or the judge. Every fixture must show exactly one drafter request; the judge may run only for a non-abstaining answerable draft whose claims all verified.
 - Hard failure ("unsafe-ready"): a `ready` draft for a non-answerable fixture, or a `ready` draft with an unverified/stripped claim, a missing or negative judge verdict, or a claim marked verified whose quote does not re-verify against the knowledge-base text. Every persisted claim is independently re-checked by the harness against the page text.
 - Conservative outcomes (an answerable inquiry held for staff or escalated) are counted as holds, not as failures and not as successes.
@@ -78,6 +80,10 @@ Non-answerable inquiries that became ready: 0 / 16.
 | Responses API requests outside any fixture | 0 |
 
 Every fixture's drafter request was observed leaving for the real provider exactly once; no fixture was starved by the model budget.
+The zero-pause result demonstrates coverage under the stated clock schedule;
+it does not test production burst behavior or production throughput. Separate
+[rate-limit integration tests](../tests/modelBudget.test.ts) exercise budget
+exhaustion, refill and isolation with controlled clocks.
 
 ## Unsafe-ready cases
 
