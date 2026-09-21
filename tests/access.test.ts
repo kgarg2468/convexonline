@@ -164,6 +164,14 @@ describe("inn creation", () => {
     expect((await owner.as.query(api.inns.get, { innId: withPath })).inn.siteUrl).toBe(
       "https://www.harbor-inn.example:8443/rooms?season=summer",
     );
-    expect(await t.run((ctx) => ctx.db.query("memberships").collect())).toHaveLength(4);
+    // The scheme is case-insensitive: the URL parser normalizes it, so the UI must not be stricter.
+    const upperScheme = await owner.as.mutation(api.inns.create, {
+      name: "Upper",
+      siteUrl: "HTTPS://Upper.Example/Rooms",
+    });
+    expect((await owner.as.query(api.inns.get, { innId: upperScheme })).inn.siteUrl).toBe(
+      "https://upper.example/Rooms",
+    );
+    expect(await t.run((ctx) => ctx.db.query("memberships").collect())).toHaveLength(5);
   });
 });

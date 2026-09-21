@@ -102,7 +102,7 @@ export function InnPicker({
                 className="fd-input"
                 type="url"
                 required
-                pattern="https://.*"
+                pattern="[Hh][Tt][Tt][Pp][Ss]://.*"
                 title="Must start with https://"
                 placeholder="https://"
                 value={siteUrl}
