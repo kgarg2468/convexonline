@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireInnAccess, requireThreadAccess } from "./access";
 import { CLAIM_TTL_MS, evaluateClaim, evaluateRelease, isClaimActive } from "./lib/claimLocks";
+import { cancelEmailFollowUps } from "./followUps";
 import { threadStatus } from "./schema";
 
 async function nameFor(ctx: QueryCtx, innId: Id<"inns">, userId: Id<"users"> | undefined) {
@@ -167,7 +168,8 @@ export const get = query({
       .query("followUps")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
       .collect();
-    const followUp = followUps.filter((f) => f.status === "scheduled" || f.status === "due").at(-1) ?? null;
+    // The reminder only; approved follow-up emails are read through followUps.emailForThread.
+    const followUp = followUps.filter((f) => f.kind !== "email" && (f.status === "scheduled" || f.status === "due")).at(-1) ?? null;
     const claimsOut = [];
     for (const c of claims) {
       let currentSource = true;
@@ -243,6 +245,7 @@ export const get = query({
         kind: o.kind,
         draftId: o.draftId ?? null,
         correctionId: o.correctionId ?? null,
+        followUpId: o.followUpId ?? null,
         status: o.status,
         errorKind: o.errorKind ?? null,
         errorMessage: o.errorMessage ?? null,
@@ -250,7 +253,7 @@ export const get = query({
         sentAt: o.sentAt ?? null,
         simulated: o.simulated,
       })),
-      followUp: followUp ? { dueAt: followUp.dueAt, status: followUp.status } : null,
+      followUp: followUp ? { dueAt: followUp.dueAt, status: followUp.status as "scheduled" | "due" } : null,
     };
   },
 });
@@ -300,6 +303,8 @@ export const setStatus = mutation({
       throw new ConvexError({ code: "claimed", heldBy: lock.heldBy, expiresAt: lock.expiresAt });
     }
     await ctx.db.patch(threadId, { status });
+    // Closing withdraws any approved follow-up email that has not reached the provider.
+    if (status === "closed") await cancelEmailFollowUps(ctx, threadId, "the thread was closed", user._id);
     return null;
   },
 });

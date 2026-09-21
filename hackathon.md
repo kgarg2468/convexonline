@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/kgarg2468/convexonline
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://outgoing-zebra-720.convex.cloud
-- **Components:** @convex-dev/static-hosting
+- **Components:** @convex-dev/static-hosting, @convex-dev/presence
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, realtime queries, full-text search, scheduled functions, crons
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T17:23:36Z
+- **Last updated:** 2026-09-21T17:38:01Z
 
 ## Log
 
@@ -84,3 +84,8 @@ Evidence: `convex/teams.ts`, `convex/schema.ts`, `tests/teams.test.ts`.
 Added owner invitation and staff-removal controls, explicit invitation acceptance after sign-in, and clear refusal states for used, revoked and malformed links. The workspace handles access removal while a staff tab is open.
 All six invitation browser flows passed, alongside the full 22-test desktop/mobile regression. PR CI now checks the standalone browser package's types. CI and automated review passed; the frontend is deployed on Convex.
 Evidence: `src/workspace/settings/TeamSettings.tsx`, `src/workspace/onboarding/InvitationGate.tsx`, `src/workspace/lib/invitations.ts`, `tests/browser/specs/teams.spec.ts`, `.github/workflows/ci.yml`.
+
+### 2026-09-21 - 8fd0f70
+Added thread viewers using the registered Convex presence component. Reads and heartbeats check current membership, user identities come from auth, and removed staff disappear immediately. Multiple tabs count as one viewer; silent sessions expire after 25 seconds.
+Eight tests exercise the actual component, including its expiry worker, tenant isolation and member removal. All 263 offline tests, CI and automated review passed. The frontend and backend are deployed on production Convex. A live two-staff browser check also verified mutual presence, exclusive claims and immediate removal; both test memberships were cleaned up.
+Evidence: `convex/presence.ts`, `convex/convex.config.ts`, `src/workspace/inbox/ThreadPresence.tsx`, `tests/presence.test.ts`.

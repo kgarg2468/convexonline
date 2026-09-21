@@ -89,12 +89,15 @@ export type JudgeVerdict = { entailed: boolean; promisedOutsideQuotes: boolean; 
 
 export type OutboxStatus = "reserved" | "sending" | "sent" | "failed" | "unknown";
 
+export type OutboxKind = "reply" | "correction" | "follow_up";
+
 export type OutboxRow = {
   _id: Id<"outbox">;
-  kind: "reply" | "correction";
-  /** The exact draft / correction this row delivers. Null on rows written before the projection carried them. */
+  kind: OutboxKind;
+  /** The exact draft / correction / follow-up this row delivers. Null on rows written before the projection carried them. */
   draftId: Id<"drafts"> | null;
   correctionId: Id<"corrections"> | null;
+  followUpId: Id<"followUps"> | null;
   status: OutboxStatus;
   errorKind: string | null;
   errorMessage: string | null;
@@ -162,8 +165,56 @@ export type ThreadDetail = {
     proposedText: string | null;
   }[];
   outbox: OutboxRow[];
+  /** The reminder only (never mail). Approved follow-up emails come from `FollowUpEmailView`. */
   followUp: { dueAt: number; status: "scheduled" | "due" } | null;
 };
+
+/**
+ * scheduled: approved, waiting for its due time. reserved: the due worker
+ * handed it to the outbox; the approval is frozen (also the resting state of
+ * an unknown delivery, which is never retried). sent / failed / cancelled are
+ * final; `statusReason` says why for the last two.
+ */
+export type FollowUpEmailStatus = "scheduled" | "reserved" | "sent" | "failed" | "cancelled";
+
+export type FollowUpEmail = {
+  _id: Id<"followUps">;
+  status: FollowUpEmailStatus;
+  dueAt: number;
+  /** The exact approved text. */
+  text: string | null;
+  approvedAt: number | null;
+  approvedBy: Id<"users"> | null;
+  approvedByName: string | null;
+  inboundMessageId: Id<"messages"> | null;
+  simulated: boolean;
+  outboxId: Id<"outbox"> | null;
+  delivery: { status: OutboxStatus; errorKind: string | null; errorMessage: string | null; sentAt: number | null } | null;
+  sentAt: number | null;
+  statusReason: string | null;
+  cancelledAt: number | null;
+};
+
+/** Mirror of `followUps.emailForThread`. */
+export type FollowUpEmailView = {
+  /** The only text that can be approved; submit it verbatim. */
+  text: string;
+  minDueAt: number;
+  maxDueAt: number;
+  defaultDueAt: number;
+  /** Demo inns simulate the send; nothing reaches a provider. */
+  simulated: boolean;
+  canApprove: boolean;
+  blockedReason: string | null;
+  /** The caller must hold the thread claim to approve or cancel. */
+  requiresClaim: boolean;
+  /** The approval for the guest's current message, if one is pending, reserved or sent. */
+  current: FollowUpEmail | null;
+  /** Every approval on the thread, newest first. */
+  history: FollowUpEmail[];
+};
+
+export type ApproveFollowUpResult = { followUpId: Id<"followUps">; dueAt: number; replaced: boolean };
 
 export type PageKind = "policies" | "rooms" | "rates" | "notices" | "other";
 export type ChangeStatus = "new" | "same" | "changed";

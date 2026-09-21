@@ -10,15 +10,16 @@ import { isCorrectionTextApproved } from "./lib/sendGuards";
 import { canUseLiveMail } from "./lib/tenant";
 import { membershipFor } from "./access";
 import { replyToMessage } from "./providers/agentmail";
-import { scheduleFollowUp } from "./followUps";
+import { scheduleFollowUp, threadAwaitingGuest } from "./followUps";
 import { recheckSentClaim } from "./pages";
 
 export type ReserveArgs = {
   innId: Id<"inns">;
   threadId: Id<"threads">;
-  kind: "reply" | "correction";
+  kind: "reply" | "correction" | "follow_up";
   draftId?: Id<"drafts">;
   correctionId?: Id<"corrections">;
+  followUpId?: Id<"followUps">;
   replyToMessageId: Id<"messages">;
   providerInboxId?: string;
   providerMessageId?: string;
@@ -108,6 +109,10 @@ async function preflight(ctx: MutationCtx, row: Doc<"outbox">, now: number): Pro
   const thread = await ctx.db.get(row.threadId);
   if (!thread) return "thread missing";
   if (thread.lastInboundMessageId !== row.replyToMessageId) return "a newer guest message arrived before dispatch";
+  // A follow-up is authorized by its captured staff approval, which outlives
+  // any claim lock (it fires days later). Every other kind still needs the
+  // reserving member to hold the thread right now.
+  if (row.kind === "follow_up") return await followUpPreflight(ctx, row, thread);
   if (!isClaimActive(thread, now) || thread.claimedBy !== row.reservedBy) return "thread claim expired or changed before dispatch";
   if (row.kind === "reply") {
     if (!row.draftId) return "reservation has no draft";
@@ -151,6 +156,54 @@ async function preflight(ctx: MutationCtx, row: Doc<"outbox">, now: number): Pro
 }
 
 /**
+ * The follow-up's approval must still be the one this row was reserved for:
+ * same approver under the same membership row, exact text, same inbound and inn, still pointing at this
+ * reservation (a revoked or replaced approval points elsewhere or is
+ * cancelled), no other delivery attempt for it, and the thread still waiting
+ * on the guest about an open inquiry.
+ */
+async function followUpPreflight(ctx: MutationCtx, row: Doc<"outbox">, thread: Doc<"threads">): Promise<string | null> {
+  if (!row.followUpId) return "reservation has no follow-up";
+  const followUp = await ctx.db.get(row.followUpId);
+  if (!followUp || followUp.kind !== "email") return "follow-up approval missing";
+  if (followUp.status === "cancelled") return `follow-up was cancelled before dispatch (${followUp.statusReason ?? "no reason recorded"})`;
+  if (followUp.status !== "reserved" || followUp.outboxId !== row._id) return "follow-up approval no longer covers this reservation";
+  if (followUp.approvedText !== row.text) return "follow-up text differs from the approved text";
+  if (followUp.approvedBy !== row.reservedBy) return "follow-up approver differs from the reserving user";
+  // The approval is bound to the membership row the approver held then. A
+  // removed member's approvals die with that row; a fresh invitation creates a
+  // new row and never revives them. An approval without this binding never sends.
+  const membership = await membershipFor(ctx, row.innId, row.reservedBy);
+  if (!followUp.approvedByMembershipId || membership?._id !== followUp.approvedByMembershipId) {
+    return "the membership that approved this follow-up ended before dispatch";
+  }
+  if (followUp.inboundMessageId !== row.replyToMessageId || followUp.threadId !== row.threadId) return "follow-up is bound to a different guest message";
+  if (followUp.innId !== row.innId || thread.innId !== row.innId) return "follow-up is bound to a different inn";
+  if (followUp.providerInboxId !== row.providerInboxId || followUp.providerMessageId !== row.providerMessageId) {
+    return "follow-up provider binding differs from the reservation";
+  }
+  const others = await ctx.db
+    .query("outbox")
+    .withIndex("by_followUp", (q) => q.eq("followUpId", followUp._id))
+    .collect();
+  if (others.some((o) => o._id !== row._id && o.status !== "failed")) return "another delivery of this follow-up exists";
+  if (thread.status === "closed") return "the thread was closed before dispatch";
+  if (thread.stay?.status !== "inquiry") return "the stay is no longer an open inquiry";
+  if (!(await threadAwaitingGuest(ctx, thread))) return `the thread is no longer waiting on the guest (${thread.status})`;
+  return null;
+}
+
+/** Follow-up rows carry their refusal onto the approval so staff can see why nothing went out. */
+async function failReservation(ctx: MutationCtx, row: Doc<"outbox">, errorKind: string, errorMessage: string) {
+  await ctx.db.patch(row._id, { status: "failed", errorKind, errorMessage });
+  if (row.kind !== "follow_up" || !row.followUpId) return;
+  const followUp = await ctx.db.get(row.followUpId);
+  if (followUp && followUp.status === "reserved" && followUp.outboxId === row._id) {
+    await ctx.db.patch(followUp._id, { status: "failed", statusReason: errorMessage });
+  }
+}
+
+/**
  * Live sending authority is decided again at dispatch, not only at
  * reservation: the reserving user may have been removed or downgraded, the inn
  * may have become demo, or its inbox may have been rebound in between. Uses the
@@ -177,7 +230,7 @@ export const beginSend = internalMutation({
     if (row.status !== "reserved") return { ok: false as const, reason: `status ${row.status}` };
     const problem = await preflight(ctx, row, Date.now());
     if (problem) {
-      await ctx.db.patch(outboxId, { status: "failed", errorKind: "precondition", errorMessage: problem });
+      await failReservation(ctx, row, "precondition", problem);
       return { ok: false as const, reason: problem };
     }
     if (row.simulated) {
@@ -187,17 +240,17 @@ export const beginSend = internalMutation({
     if (inn) {
       const lost = await dispatchAuthorityProblem(ctx, row, inn);
       if (lost) {
-        await ctx.db.patch(outboxId, { status: "failed", errorKind: "precondition", errorMessage: lost });
+        await failReservation(ctx, row, "precondition", lost);
         return { ok: false as const, reason: lost };
       }
     }
     const inboxId = row.providerInboxId ?? inn?.inboxId;
     if (!inn || inn.isDemo || !inboxId) {
-      await ctx.db.patch(outboxId, { status: "failed", errorKind: "inbox_not_configured", errorMessage: "no inbox bound to this inn" });
+      await failReservation(ctx, row, "inbox_not_configured", "no inbox bound to this inn");
       return { ok: false as const, reason: "inbox not configured" };
     }
     if (!row.providerMessageId) {
-      await ctx.db.patch(outboxId, { status: "failed", errorKind: "no_reply_target", errorMessage: "inbound has no provider id" });
+      await failReservation(ctx, row, "no_reply_target", "inbound has no provider id");
       return { ok: false as const, reason: "no provider message id" };
     }
     await ctx.db.patch(outboxId, { status: "sending" });
@@ -205,13 +258,10 @@ export const beginSend = internalMutation({
   },
 });
 
-/** Records the delivered message and closes out the draft or correction. */
-export async function commitDelivery(
-  ctx: MutationCtx,
-  row: Doc<"outbox">,
-  delivered: { providerMessageId?: string; providerThreadId?: string },
-) {
-  const now = Date.now();
+type Delivered = { providerMessageId?: string; providerThreadId?: string };
+
+/** The outbound message row for a delivery, as the guest received it. */
+async function insertOutboundMessage(ctx: MutationCtx, row: Doc<"outbox">, delivered: Delivered, now: number) {
   const thread = await ctx.db.get(row.threadId);
   const inn = await ctx.db.get(row.innId);
   const inbound = await ctx.db.get(row.replyToMessageId);
@@ -239,6 +289,38 @@ export async function commitDelivery(
     inboxId: row.providerInboxId,
     agentmailThreadId: delivered.providerThreadId ?? thread.agentmailThreadId,
   });
+  return { messageId, thread, inn, inbound };
+}
+
+/**
+ * Records a delivered follow-up: the message the guest received, the outbox
+ * row and the approval's state. Nothing else moves: the original draft and
+ * its sent-reply provenance stay as they are, no reminder or further
+ * follow-up is created, and the thread keeps whatever state it has now (a
+ * guest message that arrived in flight owns it).
+ */
+export async function commitFollowUpDelivery(ctx: MutationCtx, row: Doc<"outbox">, delivered: Delivered) {
+  const now = Date.now();
+  const { messageId } = await insertOutboundMessage(ctx, row, delivered, now);
+  await ctx.db.patch(row._id, { status: "sent", sentAt: now, sentProviderMessageId: delivered.providerMessageId });
+  if (row.followUpId) {
+    const followUp = await ctx.db.get(row.followUpId);
+    if (followUp && followUp.outboxId === row._id) {
+      await ctx.db.patch(followUp._id, { status: "sent", sentMessageId: messageId, sentAt: now });
+    }
+  }
+  return { messageId };
+}
+
+/** Records the delivered message and closes out the draft or correction. */
+export async function commitDelivery(
+  ctx: MutationCtx,
+  row: Doc<"outbox">,
+  delivered: Delivered,
+) {
+  if (row.kind === "follow_up") throw new ConvexError({ code: "invalid", message: "follow-ups commit through commitFollowUpDelivery" });
+  const now = Date.now();
+  const { messageId, thread, inn, inbound } = await insertOutboundMessage(ctx, row, delivered, now);
   let draftId = row.draftId;
   let correction: Doc<"corrections"> | null = null;
   if (row.kind === "correction" && row.correctionId) {
@@ -324,7 +406,8 @@ export const commit = internalMutation({
   handler: async (ctx, { outboxId, providerMessageId, providerThreadId }) => {
     const row = await ctx.db.get(outboxId);
     if (!row || row.status !== "sending") return null;
-    await commitDelivery(ctx, row, { providerMessageId, providerThreadId });
+    if (row.kind === "follow_up") await commitFollowUpDelivery(ctx, row, { providerMessageId, providerThreadId });
+    else await commitDelivery(ctx, row, { providerMessageId, providerThreadId });
     return null;
   },
 });
@@ -344,6 +427,15 @@ export const markFailed = internalMutation({
     const patch: Partial<Doc<"outbox">> = { status: ambiguous ? "unknown" : "failed", errorKind, errorMessage };
     if (sentProviderMessageId !== undefined) patch.sentProviderMessageId = sentProviderMessageId;
     await ctx.db.patch(outboxId, patch);
+    if (row.kind === "follow_up" && row.followUpId) {
+      const followUp = await ctx.db.get(row.followUpId);
+      if (followUp && followUp.status === "reserved" && followUp.outboxId === row._id) {
+        // An unknown outcome keeps the approval frozen (`reserved`): the guest
+        // may have the message, so it can never be rescheduled. A definite
+        // failure frees the turn for a deliberate new approval.
+        await ctx.db.patch(followUp._id, ambiguous ? { statusReason: errorMessage } : { status: "failed", statusReason: errorMessage });
+      }
+    }
     return null;
   },
 });
