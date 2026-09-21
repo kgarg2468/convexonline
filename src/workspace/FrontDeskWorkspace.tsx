@@ -335,7 +335,9 @@ function Workspace({
       onSwitchInn={onSwitchInn}
       view={view}
       onNavigate={setView}
-      correctionsCount={openCorrections?.length}
+      correctionsCount={
+        openCorrections ? new Set(openCorrections.map((c) => c.sentReplyId)).size : undefined
+      }
       isDemo={current.isDemo}
       header={header}
       flush={view === "inbox"}

@@ -84,7 +84,9 @@ export function Shell(props: ShellProps) {
                   aria-label={
                     correctionsCount === undefined
                       ? "loading"
-                      : `${correctionsCount} replies need review`
+                      : correctionsCount === 1
+                        ? "1 reply needs review"
+                        : `${correctionsCount} replies need review`
                   }
                 >
                   {correctionsCount === undefined ? "…" : correctionsCount}

@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T21:59:51Z
+- **Last updated:** 2026-09-21T22:41:35Z
 
 ## Log
 
@@ -143,7 +143,13 @@ All 353 offline tests, root and browser types, lint and build pass. Three websit
 Automated review caught generic validation errors carrying internal details and Unicode controls bypassing the text guard. Both are fixed; ten disclosure/control-boundary tests pass, and the browser validation/recovery flow passes again. CI and follow-up automated review passed; the frontend is deployed on Convex.
 Evidence: `src/workspace/lib/format.ts`, `tests/uiErrors.test.ts`, `tests/browser/specs/inn-website.spec.ts`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 4b82d6f
 Registered the Firecrawl Convex component and routed manual mapping, page scraping and scheduled refreshes through it. Typed environment binding supplies the existing deployment key; app-owned source validation, inn scope, fresh-fetch settings, page budgets and change tracking remain enforced. Component errors are sanitized before staff see them.
-All 370 offline tests pass, including seven actual-component cases covering request attribution, source-error rejection, retry exhaustion, error sanitization, tenant isolation and changed-source correction creation. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. These tests mock external HTTP transport; live component crawling remains to be verified after deployment.
+All 370 offline tests pass, including seven actual-component cases covering request attribution, source-error rejection, retry exhaustion, error sanitization, tenant isolation and changed-source correction creation. Types, lint and build pass; the production dependency audit reports zero vulnerabilities. These tests mock external HTTP transport; CI and automated review passed, and the component is deployed on production Convex. Live component crawling remains to be verified.
 Evidence: `convex/firecrawlClient.ts`, `convex/providers/firecrawl.ts`, `convex/ingest.ts`, `convex/convex.config.ts`, `tests/firecrawlComponent.test.ts`.
+
+### 2026-09-21 - working tree
+Correction summaries and the navigation badge now count distinct sent replies rather than claim records or threads. Replies with any unresolved claim are excluded from the unchanged controls; corrected evidence stays associated with its original reply. Individual evidence cards and approval decisions remain separate, with passage counts shown when useful.
+Automated review identified an unbounded history scan. Unchanged controls now page through inn-scoped sent replies with server-owned scan caps and bounded claim/correction-history reads. Partial results are labeled, older replies can be loaded, and unchecked replies never count as verified controls.
+All 380 offline tests pass. Regression scenarios cover multiple claims per reply, separate replies in one thread, approval without sending, correction delivery, restored evidence, pagination, tenant isolation and overflow accounting. Root and browser types, lint and build pass. Provider transport is mocked; deployed browser verification follows this change's deployment.
+Evidence: `convex/corrections.ts`, `src/workspace/corrections/CorrectionsView.tsx`, `src/workspace/FrontDeskWorkspace.tsx`, `tests/corrections.test.ts`.

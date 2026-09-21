@@ -328,7 +328,9 @@ export default defineSchema({
   })
     .index("by_thread", ["threadId"])
     .index("by_draft", ["draftId"])
-    .index("by_correction", ["correctionId"]),
+    .index("by_correction", ["correctionId"])
+    /** Paginated walks over one inn's sent replies (correction review controls). */
+    .index("by_inn", ["innId"]),
 
   staffFacts: defineTable({
     innId: v.id("inns"),

@@ -1,11 +1,14 @@
-import { useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { Correction, LiveMailDecision, RecordVersionResult, UnaffectedControl } from "../types";
+import type { Correction, LiveMailDecision, RecordVersionResult, UnaffectedControl, UnaffectedControlRow } from "../types";
 import { Empty, Spinner } from "../lib/ui";
 import { CorrectionCard } from "./CorrectionCard";
 import { UnaffectedControls } from "./UnaffectedControls";
 import { DemoActions } from "../shell/DemoActions";
+
+/** Sent replies asked for per page; the server caps the walk at the same size. */
+const CONTROLS_PAGE_SIZE = 25;
 
 export function CorrectionsView({
   innId,
@@ -26,21 +29,36 @@ export function CorrectionsView({
   onOpenThread: (threadId: Id<"threads">) => void;
 }) {
   const corrections = useQuery(api.corrections.list, { innId }) as Correction[] | undefined;
-  const controls = useQuery(api.corrections.unaffectedControls, { innId }) as UnaffectedControl[] | undefined;
+  // Controls arrive in pages of sent replies, newest first. Until `status` is
+  // "Exhausted" only the replies loaded so far have been re-checked, and the
+  // copy says so rather than claiming the whole history was checked.
+  const controlPages = usePaginatedQuery(api.corrections.unaffectedControls, { innId }, { initialNumItems: CONTROLS_PAGE_SIZE });
 
-  if (corrections === undefined || controls === undefined) {
+  if (corrections === undefined || controlPages.status === "LoadingFirstPage") {
     return <Spinner label="Checking sent replies against the latest page versions" />;
   }
 
+  const rows = controlPages.results as UnaffectedControlRow[];
+  const controls = rows.filter((r): r is UnaffectedControl => r.kind === "control");
+  const unchecked = rows.filter((r) => r.kind === "unchecked");
+  const allLoaded = controlPages.status === "Exhausted";
+  // Every reply loaded and none refused by the server: only then is the count
+  // a statement about the whole history rather than about the replies verified.
+  const allChecked = allLoaded && unchecked.length === 0;
   const open = corrections.filter((c) => c.status === "needs_review");
   const approved = corrections.filter((c) => c.status === "approved");
   const reviewed = corrections.filter((c) => c.status === "sent" || c.status === "dismissed" || c.status === "superseded");
   const pagesTouched = new Set(open.map((c) => c.pageUrl)).size;
-  // Controls are listed per claim; the strip counts replies (threads), matching the affected count.
-  const controlReplies = new Set(controls.map((c) => c.threadId)).size;
+  // Cards are listed per claim (one sent reply with several changed passages
+  // yields several cards), but the strip counts sent replies: distinct
+  // `sentReplyId` on every side, so affected, approved and control numbers
+  // are comparable. The passage count is shown only when it differs.
+  const openReplies = new Set(open.map((c) => c.sentReplyId)).size;
+  const approvedReplies = new Set(approved.map((c) => c.sentReplyId)).size;
+  const controlReplies = new Set(controls.map((c) => c.sentReplyId)).size;
   // Before the demo's page edit there is nothing to show; the hero explains
   // the walkthrough and carries the only "Change the policy page" action.
-  const untouched = corrections.length === 0 && controls.length === 0;
+  const untouched = corrections.length === 0 && rows.length === 0 && allLoaded;
 
   const cardProps = { viewerId, isDemo, liveMail, onOpenThread };
 
@@ -61,15 +79,24 @@ export function CorrectionsView({
 
       <div className="fd-strip" role="status">
         <span>
-          <strong>{open.length}</strong> {open.length === 1 ? "reply needs" : "replies need"} review
+          <strong>{openReplies}</strong> {openReplies === 1 ? "reply needs" : "replies need"} review
+          {open.length > openReplies ? ` (${open.length} passages)` : null}
         </span>
         {approved.length > 0 ? (
           <span>
-            <strong>{approved.length}</strong> approved, not sent
+            <strong>{approvedReplies}</strong>{" "}
+            {approvedReplies === 1
+              ? "reply has an approved correction"
+              : "replies have approved corrections"}
+            , not sent
+            {approved.length > approvedReplies ? ` (${approved.length} passages)` : null}
           </span>
         ) : null}
         <span>
-          <strong>{controlReplies}</strong> {controlReplies === 1 ? "reply" : "replies"} re-checked and still true
+          <strong>{controlReplies}</strong> {controlReplies === 1 ? "reply" : "replies"} re-checked{allChecked ? "" : " so far"} and still true
+          {controls.length > controlReplies ? ` (${controls.length} passages)` : null}
+          {allLoaded ? null : ", older replies not loaded yet"}
+          {allLoaded && !allChecked ? `, ${unchecked.length} not verified` : null}
         </span>
         {open.length > 0 ? (
           <span>
@@ -112,9 +139,35 @@ export function CorrectionsView({
       <div className="fd-section">
         <p className="fd-section__title">Re-checked and unaffected</p>
         {controls.length === 0 ? (
-          <p className="fd-muted fd-small">No sent reply has been re-checked against a newer page version yet.</p>
+          <p className="fd-muted fd-small">
+            {!allLoaded
+              ? "None of the sent replies loaded so far has been re-checked against a newer page version."
+              : unchecked.length > 0
+                ? "No loaded sent reply was verified still true; the ones below were not re-checked."
+                : corrections.length > 0
+                  ? "Every sent reply that cites a changed page is listed above; none was re-checked and still true."
+                  : "No sent reply has been re-checked against a newer page version yet."}
+          </p>
         ) : (
           <UnaffectedControls controls={controls} onOpenThread={onOpenThread} />
+        )}
+        {unchecked.length > 0 ? (
+          <p className="fd-muted fd-small">
+            {unchecked.length === 1 ? "1 sent reply cites" : `${unchecked.length} sent replies cite`} more passages or past corrections than
+            this view re-checks and {unchecked.length === 1 ? "is" : "are"} not counted as still true.
+          </p>
+        ) : null}
+        {allLoaded ? null : (
+          <p className="fd-small">
+            <button
+              type="button"
+              className="fd-btn fd-btn--quiet fd-btn--small"
+              disabled={controlPages.status === "LoadingMore"}
+              onClick={() => controlPages.loadMore(CONTROLS_PAGE_SIZE)}
+            >
+              {controlPages.status === "LoadingMore" ? "Loading older sent replies…" : "Load more sent replies"}
+            </button>
+          </p>
         )}
       </div>
 
