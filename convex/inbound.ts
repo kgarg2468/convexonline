@@ -78,21 +78,18 @@ export const receive = internalMutation({
     if (!thread && args.inReplyTo) {
       // The same RFC message can be stored under several inns (a guest mails
       // many properties at once, or a message is copied between inboxes), so the
-      // In-Reply-To parent must be resolved inside the receiving inn rather
-      // than taking the first global match. Nothing in the schema bounds how
-      // many copies share an RFC id, so every indexed match is scanned: a
-      // fixed cap would silently miss the receiving inn's copy once more
-      // foreign copies than the cap were stored ahead of it.
-      const parents = await ctx.db
+      // In-Reply-To parent is resolved directly inside the receiving inn via
+      // the (innId, rfcMessageId) index. One bounded read: foreign copies of
+      // the id are never visited, however many there are. Rows stored before
+      // `innId` existed are invisible here until `migrations.backfillMessageInnIds`
+      // has run; the thread's inn is still re-checked defensively.
+      const parent = await ctx.db
         .query("messages")
-        .withIndex("by_rfc_message_id", (q) => q.eq("rfcMessageId", args.inReplyTo))
-        .collect();
-      for (const parent of parents) {
+        .withIndex("by_inn_rfc_message_id", (q) => q.eq("innId", inn._id).eq("rfcMessageId", args.inReplyTo))
+        .first();
+      if (parent) {
         const parentThread = await ctx.db.get(parent.threadId);
-        if (parentThread && parentThread.innId === inn._id) {
-          thread = parentThread;
-          break;
-        }
+        if (parentThread && parentThread.innId === inn._id) thread = parentThread;
       }
     }
     const receivedAt = Math.min(args.receivedAt, Date.now());
@@ -113,6 +110,7 @@ export const receive = internalMutation({
     }
     const messageId = await ctx.db.insert("messages", {
       threadId,
+      innId: inn._id,
       direction: "in",
       agentmailMessageId: args.providerMessageId,
       rfcMessageId: args.rfcMessageId,
