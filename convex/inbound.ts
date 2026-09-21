@@ -112,6 +112,17 @@ export const receive = internalMutation({
       inboxId: args.inboxId,
       agentmailThreadId: args.providerThreadId,
     });
+    // Webhook deliveries can arrive out of order (retries, provider delays). A
+    // message older than the thread's current turn is kept as history only: it
+    // must not become the turn drafts reply to, supersede current drafts, cancel
+    // follow-ups or trigger a fresh generation. Equal timestamps keep the
+    // existing turn (deterministic: first stored wins) unless the thread has no
+    // inbound turn yet.
+    const advancesTurn = !thread || receivedAt > thread.lastInboundAt || (receivedAt === thread.lastInboundAt && !thread.lastInboundMessageId);
+    if (thread && !advancesTurn) {
+      if (!thread.agentmailThreadId) await ctx.db.patch(threadId, { agentmailThreadId: args.providerThreadId });
+      return { outcome: "stored", threadId };
+    }
     await supersedeUnsentDrafts(ctx, threadId, "a newer guest message arrived");
     await cancelFollowUps(ctx, threadId);
     await ctx.db.patch(threadId, {

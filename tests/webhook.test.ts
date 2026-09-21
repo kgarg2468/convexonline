@@ -188,7 +188,11 @@ describe("POST /api/agentmail/webhook", () => {
       await ctx.db.patch(thread._id, { status: "ready" });
       return id;
     });
-    const res = await signedPost(t, received({ event_id: "evt_5" }, { message_id: "<m2@x>", in_reply_to: "<m1@email.amazonses.com>", text: "Also, what time is check-in?" }), "n2");
+    const res = await signedPost(
+      t,
+      received({ event_id: "evt_5" }, { message_id: "<m2@x>", in_reply_to: "<m1@email.amazonses.com>", text: "Also, what time is check-in?", timestamp: "2026-09-21T10:05:00.000Z" }),
+      "n2",
+    );
     expect(await res.json()).toEqual({ ok: true, outcome: "stored" });
     const queue = await owner.as.query(api.threads.queue, { innId });
     expect(queue).toHaveLength(1);
@@ -203,6 +207,85 @@ describe("POST /api/agentmail/webhook", () => {
     await owner.as.mutation(api.threads.claim, { threadId: thread._id });
     await expect(owner.as.mutation(api.drafts.send, { draftId })).rejects.toThrow(/already_sent|stale_inbound|not_ready/);
     expect(await t.run((ctx) => ctx.db.query("outbox").collect())).toEqual([]);
+  });
+
+  it("a delayed older (or equal-time) inbound is kept as history without taking over the thread's turn", async () => {
+    withEnv({ AGENTMAIL_WEBHOOK_SECRET: TEST_SECRET });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId } = await seedLiveInn(t, owner.userId);
+    const current = "2026-09-20T10:00:00.000Z";
+    const older = "2026-09-20T09:00:00.000Z";
+    const newer = "2026-09-20T11:00:00.000Z";
+    await signedPost(t, received({}, { timestamp: current }), "o1");
+    await settle(t); // the drafter for the current turn has run (no key → needs_staff)
+    const [thread] = await owner.as.query(api.threads.queue, { innId });
+    const currentInbound = thread.lastInboundMessageId!;
+    const currentAt = thread.lastInboundAt;
+    expect(currentAt).toBe(Date.parse(current));
+    // Staff has a ready draft on the current turn and a follow-up scheduled.
+    const draftId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("drafts", {
+        threadId: thread._id,
+        replyToMessageId: currentInbound,
+        class: "answerable",
+        answer: "Yes",
+        abstain: false,
+        status: "ready",
+        model: "test",
+        verifiedText: "Yes",
+      });
+      await ctx.db.insert("followUps", { threadId: thread._id, dueAt: Date.now() + 1000, status: "scheduled" });
+      await ctx.db.patch(thread._id, { status: "ready" });
+      return id;
+    });
+    const generationsBefore = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((s) => s.name === "generation:generateForThread").length;
+
+    const expectTurnIntact = async (messages: number) => {
+      const detail = await owner.as.query(api.threads.get, { threadId: thread._id });
+      expect(detail.messages).toHaveLength(messages);
+      expect(detail.thread.status).toBe("ready");
+      expect(detail.thread.lastInboundMessageId).toBe(currentInbound);
+      expect(detail.thread.lastInboundAt).toBe(currentAt);
+      expect(detail.thread.snippet).toBe("Can we bring our dog in October?");
+      expect((await t.run((ctx) => ctx.db.get(draftId)))?.status).toBe("ready");
+      expect((await t.run((ctx) => ctx.db.query("followUps").collect())).map((f) => f.status)).toEqual(["scheduled"]);
+      const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+      expect(scheduled.filter((s) => s.name === "generation:generateForThread")).toHaveLength(generationsBefore);
+    };
+
+    // A signed delivery of an *older* message in the same thread arrives late.
+    const earlierNote = "Earlier note: we have a small dog.";
+    const late = await signedPost(t, received({ event_id: "evt_old" }, { message_id: "<m0@x>", text: earlierNote, extracted_text: earlierNote, timestamp: older }), "o2");
+    expect(await late.json()).toEqual({ ok: true, outcome: "stored" });
+    await expectTurnIntact(2);
+    const detail = await owner.as.query(api.threads.get, { threadId: thread._id });
+    const lateMessage = detail.messages.find((m) => m.text.startsWith("Earlier note"));
+    expect(lateMessage?.at).toBe(Date.parse(older));
+    // Redelivery of the older message is still a duplicate.
+    expect(await (await signedPost(t, received({ event_id: "evt_old_again" }, { message_id: "<m0@x>", timestamp: older }), "o3")).json()).toEqual({ ok: true, outcome: "duplicate" });
+    await expectTurnIntact(2);
+
+    // Equal timestamps keep the existing turn (first stored wins).
+    const tie = await signedPost(t, received({ event_id: "evt_tie" }, { message_id: "<m0b@x>", text: "Sent at the same instant.", extracted_text: "Sent at the same instant.", timestamp: current }), "o4");
+    expect(await tie.json()).toEqual({ ok: true, outcome: "stored" });
+    await expectTurnIntact(3);
+    // The current draft can still be sent (nothing newer arrived).
+    expect((await t.run((ctx) => ctx.db.get(thread._id)))?.lastInboundMessageId).toBe(currentInbound);
+
+    // A genuinely newer message still advances the turn: supersedes, cancels, reschedules.
+    const fresh = await signedPost(t, received({ event_id: "evt_new" }, { message_id: "<m3@x>", text: "Also, what time is check-in?", extracted_text: "Also, what time is check-in?", timestamp: newer }), "o5");
+    expect(await fresh.json()).toEqual({ ok: true, outcome: "stored" });
+    const after = await owner.as.query(api.threads.get, { threadId: thread._id });
+    expect(after.messages).toHaveLength(4);
+    expect(after.thread.status).toBe("drafting");
+    expect(after.thread.lastInboundMessageId).not.toBe(currentInbound);
+    expect(after.thread.lastInboundAt).toBe(Date.parse(newer));
+    expect(after.thread.snippet).toBe("Also, what time is check-in?");
+    expect((await t.run((ctx) => ctx.db.get(draftId)))?.status).toBe("superseded");
+    expect((await t.run((ctx) => ctx.db.query("followUps").collect())).map((f) => f.status)).toEqual(["cancelled"]);
+    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.filter((s) => s.name === "generation:generateForThread")).toHaveLength(generationsBefore + 1);
   });
 
   it("no public function exposes raw mail or debug mutations", async () => {

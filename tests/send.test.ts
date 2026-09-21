@@ -58,6 +58,18 @@ async function liveSetup(t: T, opts: { inboxId?: string } = {}) {
 
 const outboxRows = (t: T) => t.run((ctx) => ctx.db.query("outbox").collect());
 
+/**
+ * Move the seeded inbound turn into the past so a follow-up inbound stamped with
+ * Date.now() is strictly newer. Thread and message timestamps stay in sync.
+ */
+async function backdateInbound(t: T, threadId: Id<"threads">, messageId: Id<"messages">, ms = 60_000) {
+  const at = Date.now() - ms;
+  await t.run(async (ctx) => {
+    await ctx.db.patch(threadId, { lastInboundAt: at });
+    await ctx.db.patch(messageId, { at });
+  });
+}
+
 describe("send guards (pure)", () => {
   const base = {
     actor: "u1" as Id<"users">,
@@ -177,7 +189,8 @@ describe("outbox delivery", () => {
   it("schedules a follow-up only for stay inquiries and cancels it on the next inbound", async () => {
     withEnv({ AGENTMAIL_API_KEY: "am-test" });
     const t = makeTest();
-    const { owner, draftId, threadId } = await liveSetup(t);
+    const { owner, draftId, threadId, messageId } = await liveSetup(t);
+    await backdateInbound(t, threadId, messageId);
     await t.run((ctx) => ctx.db.patch(threadId, { stay: { checkIn: "2026-10-09", checkOut: "2026-10-11", party: 2, status: "inquiry" } }));
     stubFetch([agentmailReplyRoute(() => json(200, { message_id: "msg_out_1" }))]);
     await owner.as.mutation(api.threads.claim, { threadId });
@@ -322,6 +335,7 @@ describe("send preconditions", () => {
     const t2 = makeTest();
     const s = await liveSetup(t2);
     await s.owner.as.mutation(api.threads.claim, { threadId: s.threadId });
+    await backdateInbound(t2, s.threadId, s.messageId);
     await t2.mutation(internal.inbound.receive, {
       inboxId: "seagull@agentmail.to",
       eventId: "evt_9",

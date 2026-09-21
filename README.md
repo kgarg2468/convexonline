@@ -6,6 +6,11 @@ against verbatim quotes, and sent by staff from a realtime workspace. When the
 website changes, every reply already sent is re-checked and the ones whose cited
 passage no longer holds are flagged for a correction in the guest's thread.
 
+Try the [live app](https://outgoing-zebra-720.convex.site). Choose **Open the demo workspace**
+to explore an isolated workspace with simulated email, then change the demo policy
+to review three affected replies alongside three unaffected replies. Both the
+frontend and backend are hosted on Convex.
+
 ## Stack
 
 - Convex backend and realtime queries; the SPA is served from the same
@@ -40,7 +45,9 @@ passage no longer holds are flagged for a correction in the guest's thread.
    verified against `AGENTMAIL_WEBHOOK_SECRET` (Standard Webhooks headers), the
    inbox id is mapped to its inn, and the event and message ids are deduped per
    inn. The message joins its thread (provider thread id, then `In-Reply-To`),
-   unsent drafts are superseded, follow-ups cancelled, and generation scheduled.
+   and advances the current turn only when it is newer. Older deliveries remain
+   in history; newer deliveries supersede unsent drafts, cancel follow-ups, and
+   schedule generation.
 2. `generation.generateForThread` snapshots the inn's pages and staff facts,
    asks the drafter for an answer with quoted claims, verifies every quote
    mechanically against the cited page version or fact, and only then asks the

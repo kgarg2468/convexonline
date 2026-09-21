@@ -3,16 +3,16 @@
 - **Project:** Front Desk
 - **Event:** Convex All Gas Hackathon
 - **What it does:** A shared inn inbox that tracks the sources behind guest replies and flags cited passages that change.
-- **Live app:** https://cheery-egret-460.convex.site
+- **Live app:** https://outgoing-zebra-720.convex.site
 - **Repo:** https://github.com/kgarg2468/convexonline
 - **Frontend:** Convex static hosting
-- **Convex deployment:** https://cheery-egret-460.convex.cloud
+- **Convex deployment:** https://outgoing-zebra-720.convex.cloud
 - **Components:** @convex-dev/static-hosting
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, realtime queries, full-text search, scheduled functions, crons
 - **Auth:** Convex Auth
 - **AI models:** gpt-5.6-sol, gpt-6-astra
 - **Started:** 2026-09-21T09:46:53Z
-- **Last updated:** 2026-09-21T10:42:00Z
+- **Last updated:** 2026-09-21T10:55:07Z
 
 ## Log
 
@@ -34,8 +34,14 @@ Separated provider-key setup from webhook registration so syncing provider crede
 Setup scripts accept the Convex CLI's deployment selector and provision an actual auth signing-key pair without exposing its values.
 Evidence: `scripts/configure-auth.mjs`, `scripts/configure-secrets.mjs`.
 
-### 2026-09-21 - working tree
+### 2026-09-21 - 251c7a3
 Implemented signed incoming-mail webhooks, per-inn deduplication and threading, site ingestion, grounded draft generation with an independent judge, staff facts, guarded send reservations and correction review.
 Added isolated demo sends and a policy-change fixture with three affected replies and three unaffected controls.
-The integration has 188 passing offline tests. All 16 browser scenarios pass against the development backend, covering simulated replies, correction approval and delivery, staff facts, isolated sessions and mobile layouts. Production provider verification remains pending.
+The integration has 188 passing offline tests. All 16 browser scenarios pass against the production deployment, covering simulated replies, correction approval and delivery, staff facts, isolated sessions and mobile layouts. Production frontend and backend are deployed on Convex.
 Evidence: `convex/inbound.ts`, `convex/generation.ts`, `convex/ingest.ts`, `convex/outbox.ts`, `convex/corrections.ts`, `convex/demo.ts`, `tests/`.
+
+### 2026-09-21 - working tree
+Rejected scraped target error pages before storing source versions and preserved the current email turn when delayed older webhooks arrive. Added regression coverage; 192 offline tests pass.
+Production verification completed a real Firecrawl crawl, signed AgentMail inbound delivery, OpenAI draft and independent judge, staff-authorized send, and threaded reply between owned test inboxes. The run reused an existing project inbox because the provider account had no capacity for another inbox.
+An unsupported question correctly asked for a staff fact. Regeneration introduced an unsupported inference, which the judge blocked; removing that inference through staff editing passed re-verification. The second reply was left unsent.
+Evidence: `convex/providers/firecrawl.ts`, `convex/inbound.ts`, `tests/providers.test.ts`, `tests/ingest.test.ts`, `tests/webhook.test.ts`, `tests/send.test.ts`, `convex/generation.ts`, `convex/drafts.ts`.

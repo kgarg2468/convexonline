@@ -129,6 +129,23 @@ export async function scrapePage(args: ScrapePageArgs): Promise<ScrapePageResult
   const ct = isRecord(data.changeTracking) ? data.changeTracking : {};
   const diff = isRecord(ct.diff) ? optionalString(ct.diff.text) : undefined;
   const meta = isRecord(data.metadata) ? data.metadata : {};
+  // Firecrawl reports success for its own request even when the *target* page
+  // answered with an error (e.g. a 403 "Forbidden" body). Such a body is not
+  // knowledge about the inn; refuse it so ingest records a failure instead of
+  // a bogus page version. A missing status code stays accepted (fixtures and
+  // older provider payloads omit it); only an explicit non-2xx or an explicit
+  // provider error marker rejects.
+  const targetStatus = typeof meta.statusCode === "number" ? meta.statusCode : undefined;
+  if (targetStatus !== undefined && (targetStatus < 200 || targetStatus >= 300)) {
+    throw new ProviderError({
+      provider: "firecrawl",
+      kind: "invalid_response",
+      status: res.status,
+      message: `target page responded with HTTP ${targetStatus}`,
+      retryable: targetStatus === 429 || targetStatus >= 500,
+    });
+  }
+  if (optionalString(meta.error)?.trim()) throw invalid("target page reported a scrape error");
   const result: ScrapePageResult = {
     url: target.toString(),
     markdown: markdown.slice(0, FIRECRAWL_MAX_MARKDOWN_CHARS),

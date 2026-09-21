@@ -11,16 +11,21 @@ afterEach(() => {
 
 const SITE = "https://seagull.example";
 
-function firecrawlRoutes(pages: Record<string, string>, links: string[]): Route[] {
+/** A page body, optionally with the status code the *target* site answered (Firecrawl still reports success). */
+type ScrapedPage = string | { markdown: string; statusCode: number };
+
+function firecrawlRoutes(pages: Record<string, ScrapedPage>, links: string[]): Route[] {
   return [
     { match: (url) => url.endsWith("/v2/map"), respond: () => json(200, { success: true, links }) },
     {
       match: (url) => url.endsWith("/v2/scrape"),
       respond: (_url, init) => {
         const body = JSON.parse(String(init.body)) as { url: string };
-        const markdown = pages[body.url];
-        if (!markdown) return json(500, {});
-        return json(200, { success: true, data: { markdown, changeTracking: { changeStatus: "new" }, metadata: { title: "t" } } });
+        const page = pages[body.url];
+        if (!page) return json(500, {});
+        const markdown = typeof page === "string" ? page : page.markdown;
+        const metadata = typeof page === "string" ? { title: "t" } : { title: "t", statusCode: page.statusCode };
+        return json(200, { success: true, data: { markdown, changeTracking: { changeStatus: "new" }, metadata } });
       },
     },
   ];
@@ -108,6 +113,45 @@ describe("crawlSite", () => {
     const stranger = await signedInUser(t, { name: "S" });
     await expect(stranger.as.action(api.ingest.crawlSite, { innId })).rejects.toThrow(/forbidden/);
     expect(calls).toEqual([]);
+  });
+
+  it("a target page that answers 403 is not stored: the run fails and the previous valid version survives", async () => {
+    withEnv({ FIRECRAWL_API_KEY: "fc-test" });
+    const t = makeTest();
+    const owner = await signedInUser(t, { name: "Owner" });
+    const { innId, pageId, versionId } = await seedLiveInn(t, owner.userId);
+    const forbidden = { markdown: "Forbidden\n\nYou don't have permission to access this resource.", statusCode: 403 };
+    stubFetch(firecrawlRoutes({ [SITE + "/"]: forbidden, [`${SITE}/policies`]: forbidden }, [`${SITE}/policies`]));
+
+    const result = await owner.as.action(api.ingest.crawlSite, { innId });
+    expect(result).toMatchObject({ pagesStored: 0, pagesSkipped: 2, affectedClaims: 0 });
+    const [run] = await owner.as.query(api.ingest.runs, { innId });
+    expect(run).toMatchObject({ status: "failed", pagesStored: 0, pagesSkipped: 2 });
+    expect(run.reason).toMatch(/403/);
+    expect(run.reason).not.toMatch(/permission/);
+
+    // No homepage row was created from the error body; the policies page still points at its earlier version.
+    const stored = await owner.as.query(api.pages.list, { innId });
+    expect(stored.map((p) => p.url)).toEqual([`${SITE}/policies`]);
+    expect(stored[0].lastVersion?._id).toBe(versionId);
+    const versions = await t.run((ctx) => ctx.db.query("pageVersions").collect());
+    expect(versions).toHaveLength(1);
+    expect(versions[0].pageId).toBe(pageId);
+    expect(versions[0].markdown).not.toContain("Forbidden");
+
+    // A mixed crawl keeps the good page and reports only the blocked one.
+    await t.run((ctx) => ctx.db.patch(innId, { lastCrawlStartedAt: undefined }));
+    stubFetch(firecrawlRoutes({ [SITE + "/"]: "# Seagull Inn\n\nWelcome.", [`${SITE}/policies`]: forbidden }, [`${SITE}/policies`]));
+    const mixed = await owner.as.action(api.ingest.crawlSite, { innId });
+    expect(mixed).toMatchObject({ pagesStored: 1, pagesSkipped: 1 });
+    const [mixedRun] = await owner.as.query(api.ingest.runs, { innId });
+    expect(mixedRun).toMatchObject({ status: "done", pagesStored: 1, pagesSkipped: 1 });
+    expect(mixedRun.reason).toMatch(/policies: .*403/);
+    const after = await owner.as.query(api.pages.list, { innId });
+    expect(Object.fromEntries(after.map((p) => [p.url, p.lastVersion?._id]))).toEqual({
+      [`${SITE}/policies`]: versionId,
+      [SITE + "/"]: expect.any(String),
+    });
   });
 
   it("a re-crawl that changes a cited passage opens a correction and schedules a proposal", async () => {

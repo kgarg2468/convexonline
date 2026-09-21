@@ -334,6 +334,49 @@ describe("firecrawl.scrapePage", () => {
     });
   });
 
+  it("rejects a provider-success scrape whose target page answered non-2xx", async () => {
+    // Real case: the Seagull homepage returned a 403 "Forbidden" body which Firecrawl wrapped in success:true.
+    const forbidden = mockFetch(200, {
+      success: true,
+      data: { markdown: "Forbidden\n\nYou don't have permission to access this resource.", metadata: { title: "403 Forbidden", statusCode: 403 } },
+    });
+    const e403 = await expectProviderError(scrapePage({ apiKey: "k", url: "https://inn.example/", fetchImpl: forbidden.fetch }), {
+      kind: "invalid_response",
+      retryable: false,
+      ambiguous: false,
+    });
+    expect(e403.message).toContain("403");
+    expect(e403.message).not.toContain("permission");
+    const serverError = mockFetch(200, {
+      success: true,
+      data: { markdown: "# Internal Server Error", metadata: { statusCode: 500 } },
+    });
+    const e500 = await expectProviderError(scrapePage({ apiKey: "k", url: "https://inn.example/", fetchImpl: serverError.fetch }), {
+      kind: "invalid_response",
+      retryable: true,
+    });
+    expect(e500.message).toContain("500");
+    const flagged = mockFetch(200, { success: true, data: { markdown: "# Home", metadata: { statusCode: 200, error: "blocked by bot protection" } } });
+    const eFlag = await expectProviderError(scrapePage({ apiKey: "k", url: "https://inn.example/", fetchImpl: flagged.fetch }), {
+      kind: "invalid_response",
+    });
+    expect(eFlag.message).not.toContain("bot protection");
+  });
+
+  it("accepts a legitimate 200 and a missing status code, without filtering prose by content", async () => {
+    const withStatus = await scrapePage({ apiKey: "k", url: "https://inn.example/policies", fetchImpl: mockFetch(200, ok).fetch });
+    expect(withStatus.metadata.statusCode).toBe(200);
+    expect(withStatus.markdown).toBe(ok.data.markdown);
+    // Fixtures and older payloads omit metadata.statusCode entirely.
+    const noStatus = await scrapePage({ apiKey: "k", url: "https://inn.example/", fetchImpl: mockFetch(200, { success: true, data: { markdown: "# Home\n\nWelcome." } }).fetch });
+    expect(noStatus.metadata.statusCode).toBeUndefined();
+    expect(noStatus.markdown).toBe("# Home\n\nWelcome.");
+    // A page that merely talks about errors is ordinary prose when the target answered 200.
+    const prose = "# Access policy\n\nGuests who arrive after 10 pm get a 403 Forbidden-style locked door; call us.";
+    const talksAboutErrors = await scrapePage({ apiKey: "k", url: "https://inn.example/access", fetchImpl: mockFetch(200, { success: true, data: { markdown: prose, metadata: { statusCode: 200 } } }).fetch });
+    expect(talksAboutErrors.markdown).toBe(prose);
+  });
+
   it("sanitizes non-2xx and marks 429/5xx retryable", async () => {
     const e = await expectProviderError(
       scrapePage({ apiKey: "k", url: "https://inn.example/", fetchImpl: mockFetch(402, { error: "PAYMENT" }).fetch }),
