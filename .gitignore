@@ -1,0 +1,20 @@
+# added by tokenstash — never commit injected secrets
+.env.local
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+
+# private planning / research / throwaway PoCs
+.context/
+poc/
+docs/superpowers/
+findings.md
+progress.md
+task_plan.md
+.playwright-mcp/
