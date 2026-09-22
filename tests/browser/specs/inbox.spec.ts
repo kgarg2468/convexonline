@@ -172,6 +172,41 @@ test.describe("inbox", () => {
     await expect(page.getByText(/What should we tell j\.nakamura@example\.com about/)).toBeVisible();
   });
 
+  test("keyboard: j/k move through the queue, Enter opens the focused row, and ⌘⏎ cannot send an unclaimed thread", async ({ page }) => {
+    await enterDemo(page);
+    await openInbox(page);
+    const rows = queue(page).locator("[data-queue-row]");
+    await expect(rows.first()).toBeVisible();
+
+    // `j` starts at the first row (nothing was selected), then walks down; `k` walks back up.
+    await page.keyboard.press("j");
+    await expect(rows.first()).toBeFocused();
+    await page.keyboard.press("j");
+    await expect(rows.nth(1)).toBeFocused();
+    await page.keyboard.press("k");
+    await expect(rows.first()).toBeFocused();
+
+    // Walk down to the ready thread (the seed's order is not assumed), then Enter opens it
+    // as a keyboard selection: `aria-current` on the row, no bar animation, the heading up.
+    const ready = rows.filter({ hasText: THREADS.ready });
+    const count = await rows.count();
+    for (let i = 0; i < count && !(await ready.evaluate((el) => el === document.activeElement)); i += 1) {
+      await page.keyboard.press("j");
+    }
+    await expect(ready).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(ready).toHaveAttribute("aria-current", "true");
+    await expect(ready).toHaveAttribute("data-motion", "keyboard");
+    await expect(page.getByRole("heading", { level: 2, name: THREADS.ready })).toBeVisible();
+
+    // ⌘⏎ / Ctrl+Enter must never get past the claim gate: the thread is not
+    // taken, so nothing is sent and the send button stays disabled.
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(page.getByRole("button", { name: "Send (simulated)" })).toBeDisabled();
+    await expect(page.locator("#fd-send-why")).toContainText("Take this thread to send.");
+    await expect(deliveryList(page, "Reply delivery").getByText(/Delivered/)).toHaveCount(0);
+  });
+
   test("search matches subject, guest email and message text", async ({ page }) => {
     await enterDemo(page);
     await openInbox(page);

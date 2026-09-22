@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { ThreadStats } from "../types";
 import { formatDuration } from "../lib/format";
-import { Separator } from "@/components/ui/separator";
 
 /**
  * Short zone label for "today" so staff know the count follows the inn's
@@ -29,12 +28,14 @@ function Value({ children }: { children: ReactNode }) {
 
 /**
  * One stat. The list item's text is the sentence the specs read, so the
- * divider is a decorative separator inside the item and never a text node.
+ * divider is a `::before` hairline, never a text node. It sits in the middle
+ * of the 12px column gap to the item's left, so an item that starts a wrapped
+ * line has its divider outside the list's box, where the list's clip-path
+ * (left edge only) hides it: no stray tick at the start of a continuation line.
  */
-function Stat({ first, children }: { first?: boolean; children: ReactNode }) {
+function Stat({ children }: { children: ReactNode }) {
   return (
-    <li className="whitespace-nowrap">
-      {first ? null : <Separator orientation="vertical" className="mr-3 inline-block h-3 align-[-1px] bg-border-2" />}
+    <li className="relative whitespace-nowrap before:absolute before:top-1/2 before:left-[-6.5px] before:h-3 before:w-px before:-translate-y-1/2 before:bg-border-2 before:content-['']">
       {children}
     </li>
   );
@@ -51,9 +52,9 @@ export function InboxStats({ stats, timezone }: { stats: ThreadStats; timezone: 
   return (
     <ul
       aria-label="Inbox statistics"
-      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] leading-4 text-ink-2 tabular-nums max-[900px]:text-[12px]"
+      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] leading-4 text-ink-2 tabular-nums [clip-path:inset(0_-100vw_0_0)] max-[900px]:text-[12px]"
     >
-      <Stat first>
+      <Stat>
         <Value>{stats.sentToday}</Value> {plural(stats.sentToday, "reply", "replies")} today
         {zone ? <span> (inn time, {zone})</span> : null}
       </Stat>

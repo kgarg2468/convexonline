@@ -30,8 +30,9 @@ export function StatusChip({ status }: { status: ThreadStatus }) {
  * snippet, chips. The button's accessible name is its text, so the subject
  * stays a substring of it (the specs open threads by subject).
  *
- * The row is the only element `j`/`k` focus (`data-queue-row`); the selected
- * row carries `data-motion` so the left bar scales in only after a click.
+ * The row is the only element `j`/`k` focus (`data-queue-row`, found again by
+ * `data-thread-id` when a phone comes back from the thread); the selected row
+ * carries `data-motion` so the left bar scales in only after a click.
  */
 export function QueueRow({
   thread,
@@ -53,6 +54,7 @@ export function QueueRow({
       <button
         type="button"
         data-queue-row=""
+        data-thread-id={thread._id}
         data-selected={selected ? "true" : undefined}
         data-motion={selected ? motion : undefined}
         aria-current={selected ? "true" : undefined}
@@ -60,14 +62,23 @@ export function QueueRow({
         className={cn(
           "relative block w-full cursor-pointer border-b border-border-1 p-3 text-left outline-hidden transition-colors duration-micro",
           // Selection bar: present on every row at scaleY(0) so a pointer selection can grow it.
-          "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:scale-y-0 before:bg-accent-9 before:transition-transform before:duration-small before:ease-out before:content-['']",
+          "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:scale-y-0 before:bg-accent-9 before:duration-small before:ease-out before:content-[''] motion-safe:before:transition-transform",
           "data-[motion=keyboard]:before:transition-none",
           selected ? "bg-bg-3 before:scale-y-100" : "hover:bg-bg-2 focus-visible:bg-bg-2",
           "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-9",
         )}
       >
         <span className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-[14px] leading-5 font-semibold text-ink-1">{guestName(thread.guestEmail)}</span>
+          <span className="min-w-0 truncate text-[14px] leading-5 font-semibold text-ink-1">
+            {thread.status === "new" ? (
+              <>
+                {/* Unread dot (design-spec §4.2): 6px accent, centred on the x-height. */}
+                <span aria-hidden="true" className="mr-1.5 inline-block size-1.5 rounded-full bg-accent-9 align-middle" />
+                <span className="sr-only">New </span>
+              </>
+            ) : null}
+            {guestName(thread.guestEmail)}
+          </span>
           <span className="shrink-0 text-[12px] leading-4 text-ink-3 tabular-nums">{formatWhen(thread.lastInboundAt, now)}</span>
         </span>
         <span className="mt-0.5 block truncate text-[14px] leading-5 font-medium text-ink-1">{thread.subject}</span>

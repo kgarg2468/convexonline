@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { useDelayedFlag, useIsNarrow } from "../lib/hooks";
 import { cn } from "@/lib/utils";
-import { QueueList, type QueueKeyHandler } from "./QueueList";
+import { QueueList, type QueueFilter, type QueueKeyHandler, type QueueRestore } from "./QueueList";
 import type { SelectSource } from "./QueueRow";
 import { ThreadSkeleton } from "./QueueSkeleton";
 import { ThreadDetail } from "./ThreadDetail";
@@ -61,14 +61,56 @@ export function InboxView({
   const showList = !narrow || (selected === null && !composing);
   const showDetail = !narrow || selected !== null || composing;
 
+  // The queue's filter and search live here, not in QueueList: a phone
+  // unmounts the list to show a thread and must find it as it was on the way back.
+  const [filter, setFilter] = useState<QueueFilter>("all");
+  const [search, setSearch] = useState("");
+
   // Same subscription the thread pane opens (the client shares it), read here
-  // only to hold a skeleton in the pane until the thread has arrived.
+  // only to know when the selected thread has arrived.
   const detail = useQuery(
     api.threads.get,
     selected && !composing ? { threadId: selected } : "skip",
   ) as ThreadDetailData | undefined;
-  const threadLoading = selected !== null && !composing && detail === undefined;
+  const arrived = selected !== null && !composing && detail !== undefined;
+
+  // The thread whose pane is on screen. While a newly selected thread is still
+  // loading the previous thread stays up (its own subscription is still live),
+  // so a switch never flashes blank; the skeleton is only for the case where
+  // there is nothing to keep (first open, or after the pane was empty).
+  const [shownThread, setShownThread] = useState<Id<"threads"> | null>(null);
+  if (arrived && shownThread !== selected) setShownThread(selected);
+  if ((selected === null || composing) && shownThread !== null) setShownThread(null);
+  const threadLoading = selected !== null && !composing && shownThread === null;
   const showThreadSkeleton = useDelayedFlag(threadLoading);
+
+  // Phone focus management. Opening a thread replaces the list, so focus
+  // would land on <body>: it goes to the thread's heading instead (and the
+  // page starts at the top, where the heading and "All threads" are). Going
+  // back replaces the thread: the row that was opened gets focus and the
+  // page's scroll again, once the list has rendered (QueueList consumes it).
+  const root = useRef<HTMLDivElement | null>(null);
+  const opened = useRef<{ threadId: Id<"threads">; scrollY: number } | null>(null);
+  const [restore, setRestore] = useState<QueueRestore | null>(null);
+  const onRestored = useCallback(() => setRestore(null), []);
+  const focusedHeadingFor = useRef<Id<"threads"> | null>(null);
+  useEffect(() => {
+    if (!narrow || !arrived || selected === null || focusedHeadingFor.current === selected) return;
+    const heading = root.current?.querySelector<HTMLElement>("h2");
+    if (!heading) return;
+    focusedHeadingFor.current = selected;
+    window.scrollTo({ top: 0 });
+    if (!heading.hasAttribute("tabindex")) heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }, [narrow, arrived, selected]);
+  useEffect(() => {
+    if (selected !== null) return;
+    focusedHeadingFor.current = null;
+    if (!narrow || !opened.current) return;
+    setRestore(opened.current);
+    opened.current = null;
+  }, [narrow, selected]);
+
   const back = narrow ? () => onSelect(null) : null;
 
   // Beside the rail the frame fills whatever the sticky header leaves of the
@@ -77,6 +119,7 @@ export function InboxView({
   // header may be as tall as its stats and actions need.
   return (
     <div
+      ref={root}
       className={cn(
         "min-w-0 flex-1",
         narrow ? "flex min-h-0 flex-col" : "relative",
@@ -97,11 +140,18 @@ export function InboxView({
             onSelect={(id, source) => {
               setSelectSource(source);
               setComposing(false);
+              if (narrow) opened.current = { threadId: id, scrollY: window.scrollY };
               onSelect(id);
             }}
             viewerId={viewerId}
             registerKeys={registerKeys}
             narrow={narrow}
+            filter={filter}
+            onFilterChange={setFilter}
+            search={search}
+            onSearchChange={setSearch}
+            restore={restore}
+            onRestored={onRestored}
             onCompose={
               isDemo
                 ? () => {
@@ -126,7 +176,7 @@ export function InboxView({
               <SourcesPlaceholder />
             </>
           ) : selected ? (
-            threadLoading ? (
+            shownThread === null ? (
               <>
                 {showThreadSkeleton ? (
                   <ThreadSkeleton onBack={back} />
@@ -137,8 +187,8 @@ export function InboxView({
               </>
             ) : (
               <ThreadDetail
-                key={selected}
-                threadId={selected}
+                key={shownThread}
+                threadId={shownThread}
                 innId={innId}
                 viewerId={viewerId}
                 liveMail={liveMail}

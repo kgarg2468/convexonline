@@ -39,6 +39,19 @@ export function useDelayedFlag(active: boolean, delayMs = 150): boolean {
   return on && active;
 }
 
+/**
+ * `value` as it stood `delayMs` ago (or now, if it has been still that long).
+ * Feeds a query from a controlled input without subscribing per keystroke.
+ */
+export function useDebouncedValue<T>(value: T, delayMs = 180): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export type AsyncState = { busy: boolean; error: string | null };
 
 /**
