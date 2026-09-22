@@ -17,67 +17,41 @@ body {
   min-height: 100dvh;
 }
 
+/* Legacy token names, aliased onto the design tokens defined in styles/app.css
+   so the existing views re-skin from the same source of truth. */
 .fd-root {
-  --fd-ink: #183c3a;
-  --fd-pine: #245b50;
-  --fd-pine-deep: #1b4a40;
-  --fd-sea: #e9f1ee;
-  --fd-paper: #fafcfb;
-  --fd-line: #dce6e1;
-  --fd-caution: #a76817;
-  --fd-caution-bg: #fbf3e6;
-  --fd-error: #8f2f2f;
-  --fd-error-bg: #f9ecec;
-  --fd-muted: #5a6e69;
+  --fd-ink: var(--ink-1);
+  --fd-pine: var(--accent-9);
+  --fd-pine-deep: var(--rail-bg);
+  --fd-sea: var(--bg-3);
+  --fd-paper: var(--bg-1);
+  --fd-line: var(--border-1);
+  --fd-caution: var(--warning-10);
+  --fd-caution-bg: var(--warning-3);
+  --fd-error: var(--danger-10);
+  --fd-error-bg: var(--danger-3);
+  --fd-muted: var(--ink-2);
   --fd-white: #ffffff;
-  --fd-focus: #245b50;
-  --fd-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --fd-serif: Georgia, "Times New Roman", serif;
-  --fd-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --fd-rail: 216px;
+  --fd-focus: var(--accent-9);
+  --fd-sans: var(--font-sans);
+  --fd-serif: var(--font-serif);
+  --fd-mono: var(--font-mono);
   --fd-radius: 6px;
 
   color: var(--fd-ink);
   background: var(--fd-paper);
   font-family: var(--fd-sans);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
   min-height: 100vh;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
-}
-
-.fd-root *,
-.fd-root *::before,
-.fd-root *::after {
-  box-sizing: border-box;
 }
 
 .fd-root :focus-visible {
   outline: 2px solid var(--fd-focus);
   outline-offset: 2px;
   border-radius: 3px;
-}
-
-.fd-root button,
-.fd-root input,
-.fd-root textarea,
-.fd-root select {
-  font: inherit;
-  color: inherit;
-}
-
-.fd-root p,
-.fd-root h1,
-.fd-root h2,
-.fd-root h3,
-.fd-root ul {
-  margin: 0;
-}
-
-.fd-root ul {
-  padding: 0;
-  list-style: none;
 }
 
 .fd-sr-only {
@@ -107,7 +81,7 @@ body {
   font-size: 14px;
   line-height: 1.2;
   text-decoration: none;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color var(--dur-micro) ease, border-color var(--dur-micro) ease;
 }
 .fd-btn:hover:not(:disabled) {
   background: var(--fd-sea);
@@ -116,8 +90,7 @@ body {
   cursor: not-allowed;
   opacity: 0.55;
 }
-/* .fd-root selector so this outranks the `.fd-root button { color: inherit }` reset above. */
-.fd-root .fd-btn--primary {
+.fd-btn--primary {
   background: var(--fd-pine);
   border-color: var(--fd-pine);
   color: var(--fd-white);
@@ -291,6 +264,7 @@ body {
   font-family: var(--fd-mono);
   font-size: 12.5px;
   color: var(--fd-muted);
+  font-variant-numeric: tabular-nums;
 }
 .fd-muted {
   color: var(--fd-muted);
@@ -424,7 +398,7 @@ body {
 
 .fd-shell {
   display: grid;
-  grid-template-columns: var(--fd-rail) minmax(0, 1fr);
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -517,6 +491,7 @@ body {
   outline-color: #ffffff;
 }
 .fd-rail__count {
+  font-variant-numeric: tabular-nums;
   min-width: 22px;
   padding: 0 6px;
   border-radius: 999px;
@@ -593,6 +568,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: var(--header-h);
   padding: 14px 24px;
   border-bottom: 1px solid var(--fd-line);
   background: var(--fd-paper);
@@ -626,6 +602,7 @@ body {
   font-size: 13px;
   color: var(--fd-muted);
   min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 .fd-stats__item {
   white-space: nowrap;
@@ -658,9 +635,6 @@ body {
 }
 
 /* mobile shell */
-.fd-mobilebar {
-  display: none;
-}
 @media (max-width: 900px) {
   .fd-shell {
     grid-template-columns: 1fr;
@@ -816,6 +790,7 @@ body {
   font-size: 14.5px;
 }
 .fd-quote {
+  margin: 1em 40px; /* the UA <blockquote> margin Preflight removes; keeps the pre-Tailwind layout */
   font-family: var(--fd-serif);
   font-size: 15px;
   line-height: 1.5;
@@ -941,8 +916,8 @@ body {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   flex: 1;
-  min-height: calc(100vh - 57px);
-  min-height: calc(100dvh - 57px);
+  min-height: calc(100vh - var(--header-h));
+  min-height: calc(100dvh - var(--header-h));
 }
 .fd-queue {
   border-right: 1px solid var(--fd-line);
@@ -1001,6 +976,7 @@ body {
   font-size: 12px;
   color: var(--fd-muted);
   flex: none;
+  font-variant-numeric: tabular-nums;
 }
 .fd-queue__subject {
   font-size: 14px;
@@ -1279,6 +1255,7 @@ body {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px 18px;
+  margin: 1em 0; /* the UA <dl> margin Preflight removes; keeps the pre-Tailwind spacing */
   font-size: 14.5px;
 }
 .fd-kv dt {
@@ -1301,14 +1278,9 @@ body {
   font-size: 14.5px;
 }
 
+/* Reduced motion: durations collapse via the --dur-* tokens in styles/app.css;
+   the spinner is the only looping animation in the legacy sheet. */
 @media (prefers-reduced-motion: reduce) {
-  .fd-root *,
-  .fd-root *::before,
-  .fd-root *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
   .fd-loading__dot {
     animation: none;
     border-top-color: var(--fd-line);
@@ -1349,9 +1321,11 @@ body {
   color: var(--fd-muted);
   font-size: 14px;
 }
+/* Rendered without bullets or indent before Preflight (the old `.fd-root ul` reset won). */
 .fd-hero__list {
   margin: 0 0 12px;
-  padding-left: 20px;
+  padding-left: 0;
+  list-style: none;
   font-size: 14px;
 }
 .fd-hero__list li {

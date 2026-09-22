@@ -19,7 +19,6 @@ import { errorMessage } from "./lib/format";
 import { useNow, useStoredState } from "./lib/hooks";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
-import "./workspace.css";
 
 const INN_KEY = "frontdesk.innId";
 export const STALL_AFTER_MS = 20_000;
