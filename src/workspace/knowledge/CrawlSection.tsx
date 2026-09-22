@@ -84,7 +84,7 @@ function LiveCrawl({ innId, siteUrl, firecrawl }: { innId: Id<"inns">; siteUrl: 
         </Hint>
         {action.error ? <InlineNotice tone="error">{action.error}</InlineNotice> : null}
         {last ? (
-          <InlineNotice tone={last.affectedClaims > 0 ? "caution" : "success"}>
+          <InlineNotice tone={last.affectedClaims > 0 ? "caution" : "success"} role="status">
             Crawl finished: {last.pagesStored} {last.pagesStored === 1 ? "page" : "pages"} stored, {last.pagesSkipped} skipped
             {last.affectedClaims > 0 ? `, ${last.affectedClaims} sent ${last.affectedClaims === 1 ? "claim" : "claims"} now need review.` : "."}
           </InlineNotice>

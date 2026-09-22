@@ -92,7 +92,7 @@ export function PageRow({ page }: { page: PageSummary }) {
         <div className="flex flex-col gap-2.5 px-4 pb-3">
           {watchAction.error ? <InlineNotice tone="error">{watchAction.error}</InlineNotice> : null}
           {result ? (
-            <InlineNotice tone={result.changeStatus === "changed" ? "caution" : "success"}>
+            <InlineNotice tone={result.changeStatus === "changed" ? "caution" : "success"} role="status">
               {result.changeStatus === "same"
                 ? "That text matches the stored version. Nothing changed."
                 : result.changeStatus === "new"
