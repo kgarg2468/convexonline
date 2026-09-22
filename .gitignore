@@ -13,6 +13,8 @@ coverage/
 # private planning / research / throwaway PoCs
 .context/
 poc/
+PRODUCT.md
+docs/
 docs/superpowers/
 findings.md
 progress.md
