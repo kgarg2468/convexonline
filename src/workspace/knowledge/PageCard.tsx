@@ -83,7 +83,9 @@ export function PageCard({ page }: { page: PageSummary }) {
 
       {watchAction.error ? (
         <div style={{ marginTop: 8 }}>
-          <Notice tone="error">{watchAction.error}</Notice>
+          <Notice tone="error" role="alert">
+            {watchAction.error}
+          </Notice>
         </div>
       ) : null}
 
@@ -93,7 +95,7 @@ export function PageCard({ page }: { page: PageSummary }) {
 
       {result ? (
         <div style={{ marginTop: 10 }}>
-          <Notice tone={result.changeStatus === "changed" ? "caution" : "success"}>
+          <Notice tone={result.changeStatus === "changed" ? "caution" : "success"} role="status">
             {result.changeStatus === "same"
               ? "That text matches the stored version. Nothing changed."
               : result.changeStatus === "new"
@@ -122,7 +124,9 @@ export function PageCard({ page }: { page: PageSummary }) {
           />
           {action.error ? (
             <div style={{ marginTop: 8 }}>
-              <Notice tone="error">{action.error}</Notice>
+              <Notice tone="error" role="alert">
+                {action.error}
+              </Notice>
             </div>
           ) : null}
           <div className="fd-btn-row" style={{ marginTop: 10 }}>

@@ -52,7 +52,9 @@ export class WorkspaceAccessBoundary extends Component<Props, State> {
               the owner for a new invitation.
             </p>
           ) : (
-            <Notice tone="error">{errorMessage(error)}</Notice>
+            <Notice tone="error" role="alert">
+              {errorMessage(error)}
+            </Notice>
           )}
           <div className="fd-btn-row" style={{ marginTop: 16 }}>
             <button type="button" className="fd-btn fd-btn--primary" onClick={this.props.onReturn}>

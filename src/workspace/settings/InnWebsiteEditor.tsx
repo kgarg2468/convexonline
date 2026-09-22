@@ -280,7 +280,11 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
             here; discard to load the latest.
           </Notice>
         ) : null}
-        {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+        {action.error ? (
+          <Notice tone="error" role="alert">
+            {action.error}
+          </Notice>
+        ) : null}
         <ActionRow className="border-t border-border-1 pt-4">
           <Button type="submit" disabled={!dirty || action.busy}>
             {action.busy ? "Saving…" : "Save website"}
@@ -308,7 +312,7 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
 /** "Open the public website", the page links, and a hint under them. */
 function SiteLinks({ siteUrl, pages, children }: { siteUrl: string; pages: string[]; children?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border-1 bg-white px-3 py-2.5">
+    <div className="flex flex-col gap-2 rounded-[10px] border border-border-1 bg-white px-3 py-2.5">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 text-[14px] leading-5">
         <ExternalLink href={siteUrl} className="font-medium">
           Open the public website

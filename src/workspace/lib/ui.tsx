@@ -12,8 +12,10 @@ const NOTICE_TONE = {
 } as const;
 
 /**
- * A tinted message block: status by default, `role="alert"` for errors so
- * screen readers announce them. Same tones as the inbox's InlineNotice, but
+ * A tinted message block. No live-region role by default: state that is simply
+ * true on load should not announce itself. Pass `role="status"` where a notice
+ * answers an action (invite created, page stored) and `role="alert"` for the
+ * error a submit came back with. Same tones as the inbox's InlineNotice, but
  * this one may hold inline markup (the sign-in banner uses <strong>).
  */
 export function Notice({
@@ -30,7 +32,7 @@ export function Notice({
   return (
     <div
       className={cn("rounded-md border px-3 py-2 text-[13px] leading-5", NOTICE_TONE[tone], className)}
-      role={role ?? (tone === "error" ? "alert" : "status")}
+      role={role}
     >
       {children}
     </div>

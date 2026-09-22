@@ -26,12 +26,13 @@ export function AuthCard({ className, children, ...props }: ComponentProps<"div"
   );
 }
 
+/** The card's h1: the signed-out screens have no other page title, so the wordmark is it. */
 export function Wordmark() {
   return (
-    <div className="flex items-center gap-2.5 text-ink-1">
+    <h1 className="flex items-center gap-2.5 text-ink-1">
       <Mark size={26} />
       <span className="font-serif text-[20px] leading-6 font-medium">Front Desk</span>
-    </div>
+    </h1>
   );
 }
 

@@ -71,6 +71,49 @@ export function AuthView({ banner }: { banner?: ReactNode } = {}) {
     }
   }
 
+  const form = (
+    <form id="fd-auth-form" onSubmit={submit} className="flex flex-col gap-4">
+      {flow === "signUp" ? (
+        <Field label="Your name" htmlFor="fd-auth-name" hint="Shown to other staff on the threads you claim.">
+          <Input id="fd-auth-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+      ) : null}
+      <Field label="Email" htmlFor="fd-auth-email">
+        <Input
+          id="fd-auth-email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </Field>
+      <Field
+        label="Password"
+        htmlFor="fd-auth-password"
+        hint={flow === "signUp" ? "At least 8 characters." : undefined}
+      >
+        <Input
+          id="fd-auth-password"
+          type="password"
+          autoComplete={flow === "signUp" ? "new-password" : "current-password"}
+          required
+          minLength={flow === "signUp" ? 8 : undefined}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </Field>
+      {error ? (
+        <Notice tone="error" role="alert">
+          {error}
+        </Notice>
+      ) : null}
+      <Button type="submit" size="lg" className="w-full" disabled={busy !== null}>
+        {busy === "password" ? "Signing in…" : flow === "signIn" ? "Sign in" : "Create account"}
+      </Button>
+    </form>
+  );
+
   return (
     <AuthScreen>
       <AuthCard>
@@ -78,8 +121,10 @@ export function AuthView({ banner }: { banner?: ReactNode } = {}) {
 
         {banner ? <div>{banner}</div> : null}
 
-        {/* One form serves both tabs: the panel's value follows the flow, so the
-            typed email and password survive switching tabs. */}
+        {/* One form serves both tabs: it lives in whichever panel is active, so
+            the typed email and password survive switching tabs. Both panels stay
+            mounted (the inactive one hidden) so each trigger's aria-controls
+            resolves and the panel ids never change. */}
         <Tabs value={flow} onValueChange={(value) => setFlow(value as Flow)} className="gap-5">
           <TabsList variant="line" aria-label="Staff sign in" className="h-9 w-full gap-0 border-b border-border-1 p-0">
             <TabsTrigger value="signIn" className={tabClass}>
@@ -89,43 +134,11 @@ export function AuthView({ banner }: { banner?: ReactNode } = {}) {
               Create staff account
             </TabsTrigger>
           </TabsList>
-          <TabsContent value={flow}>
-            <form id="fd-auth-form" onSubmit={submit} className="flex flex-col gap-4">
-              {flow === "signUp" ? (
-                <Field label="Your name" htmlFor="fd-auth-name" hint="Shown to other staff on the threads you claim.">
-                  <Input id="fd-auth-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-                </Field>
-              ) : null}
-              <Field label="Email" htmlFor="fd-auth-email">
-                <Input
-                  id="fd-auth-email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Password"
-                htmlFor="fd-auth-password"
-                hint={flow === "signUp" ? "At least 8 characters." : undefined}
-              >
-                <Input
-                  id="fd-auth-password"
-                  type="password"
-                  autoComplete={flow === "signUp" ? "new-password" : "current-password"}
-                  required
-                  minLength={flow === "signUp" ? 8 : undefined}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </Field>
-              {error ? <Notice tone="error">{error}</Notice> : null}
-              <Button type="submit" size="lg" className="w-full" disabled={busy !== null}>
-                {busy === "password" ? "Signing in…" : flow === "signIn" ? "Sign in" : "Create account"}
-              </Button>
-            </form>
+          <TabsContent value="signIn" forceMount hidden={flow !== "signIn"}>
+            {flow === "signIn" ? form : null}
+          </TabsContent>
+          <TabsContent value="signUp" forceMount hidden={flow !== "signUp"}>
+            {flow === "signUp" ? form : null}
           </TabsContent>
         </Tabs>
 
@@ -136,7 +149,7 @@ export function AuthView({ banner }: { banner?: ReactNode } = {}) {
             Look around a fictional inn with seeded guest threads. The demo is private to your browser
             session and never sends real email.
           </CardText>
-          <Button type="button" variant="outline" className="w-full bg-white" disabled={busy !== null} onClick={enterDemo}>
+          <Button type="button" variant="outline" size="lg" className="w-full bg-white" disabled={busy !== null} onClick={enterDemo}>
             {busy === "anonymous" ? "Opening demo…" : "Open the demo workspace"}
           </Button>
         </div>

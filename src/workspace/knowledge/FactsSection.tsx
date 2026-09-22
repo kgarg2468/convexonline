@@ -43,7 +43,11 @@ export function FactsSection({ innId, facts }: { innId: Id<"inns">; facts: Staff
           <Field label="Answer" htmlFor="fd-fact-a" hint="Drafts may quote this as a staff-provided fact.">
             <textarea id="fd-fact-a" className="fd-textarea" style={{ minHeight: 80 }} required maxLength={5000} value={answer} onChange={(e) => setAnswer(e.target.value)} />
           </Field>
-          {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+          {action.error ? (
+            <Notice tone="error" role="alert">
+              {action.error}
+            </Notice>
+          ) : null}
           <div className="fd-btn-row" style={{ marginTop: 8 }}>
             <button type="submit" className="fd-btn fd-btn--primary" disabled={action.busy || !question.trim() || !answer.trim()}>
               {action.busy ? "Saving…" : "Save fact"}

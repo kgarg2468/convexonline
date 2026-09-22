@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Copy } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { InnDetail, Viewer } from "../types";
+import type { InnDetail, MembershipRole, Viewer } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,6 +30,16 @@ type InviteRow = {
 /** The link the owner just minted. Held in component state only: the server never returns it again. */
 type FreshLink = { link: string; label: string | null; expiresAt: number };
 
+/** One label per role, used by the member chip and the "Your role" hint alike (design-spec §5: sentence case). */
+const ROLE_LABEL: Record<MembershipRole, string> = {
+  owner: "Owner",
+  staff: "Staff",
+  demo: "Demo visitor",
+};
+
+/** True when a stored name already says it is you ("You (demo)"), so no " (you)" suffix is needed. */
+const saysYou = (name: string) => /\byou\b/i.test(name);
+
 const STATE_LABEL: Record<InviteState, { label: string; tone: ChipTone }> = {
   pending: { label: "Open", tone: "success" },
   used: { label: "Used", tone: "muted" },
@@ -51,7 +61,7 @@ export function TeamSettings({ viewer, detail }: { viewer: Viewer; detail: InnDe
     <SettingsSection id="fd-settings-team" title="Team">
       <MemberList viewer={viewer} detail={detail} canManage={canManage} />
       <Hint>
-        Your role: {role}.{" "}
+        Your role: {ROLE_LABEL[role]}.{" "}
         {inn.isDemo
           ? "Invitations are not available on the demo property; a real property lets its owner create one-use invitation links."
           : canManage
@@ -84,10 +94,10 @@ function MemberList({ viewer, detail, canManage }: { viewer: Viewer; detail: Inn
             <Row key={member.userId}>
               <span className="min-w-0 break-words">
                 {member.name}
-                {isSelf ? <span className="text-ink-2"> (you)</span> : null}
+                {isSelf && !saysYou(member.name) ? <span className="text-ink-2"> (you)</span> : null}
               </span>
               <span className="inline-flex items-center gap-2">
-                <Chip tone={member.role === "owner" ? "accentOutline" : "muted"}>{member.role}</Chip>
+                <Chip tone={member.role === "owner" ? "accentOutline" : "muted"}>{ROLE_LABEL[member.role]}</Chip>
                 {removable ? (
                   <Popover
                     open={confirming === member.userId}
@@ -111,6 +121,11 @@ function MemberList({ viewer, detail, canManage }: { viewer: Viewer; detail: Inn
                           Remove {member.name} from {inn.name}? They lose access immediately and any threads they are
                           working on are released.
                         </p>
+                        {action.error ? (
+                          <Notice tone="error" role="alert">
+                            {action.error}
+                          </Notice>
+                        ) : null}
                         <ActionRow className="gap-2">
                           <Button type="button" variant="destructive" size="sm" disabled={action.busy} onClick={() => void remove(member.userId)}>
                             {action.busy ? "Removing…" : "Yes, remove"}
@@ -128,7 +143,6 @@ function MemberList({ viewer, detail, canManage }: { viewer: Viewer; detail: Inn
           );
         })}
       </RowList>
-      {action.error ? <Notice tone="error">{action.error}</Notice> : null}
     </>
   );
 }
@@ -186,7 +200,11 @@ function Invitations({ innId }: { innId: Id<"inns"> }) {
         >
           <Input id="fd-invite-label" maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} />
         </Field>
-        {create.error ? <Notice tone="error">{create.error}</Notice> : null}
+        {create.error ? (
+          <Notice tone="error" role="alert">
+            {create.error}
+          </Notice>
+        ) : null}
         <ActionRow>
           <Button type="submit" disabled={create.busy}>
             {create.busy ? "Creating…" : "Create invitation link"}
@@ -225,7 +243,11 @@ function Invitations({ innId }: { innId: Id<"inns"> }) {
         </div>
       ) : null}
 
-      {revoke.error ? <Notice tone="error">{revoke.error}</Notice> : null}
+      {revoke.error ? (
+        <Notice tone="error" role="alert">
+          {revoke.error}
+        </Notice>
+      ) : null}
 
       {invites === undefined ? (
         <Hint>Loading invitations…</Hint>

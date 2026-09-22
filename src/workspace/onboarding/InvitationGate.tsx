@@ -56,15 +56,19 @@ export function InvitationGate({
         {preview === undefined ? (
           <Spinner label="Checking the invitation" />
         ) : preview.state === "invalid" ? (
-          <Notice tone="error">This invitation link is not valid. Ask the property owner for a new one.</Notice>
+          <Notice tone="error" role="alert">
+            This invitation link is not valid. Ask the property owner for a new one.
+          </Notice>
         ) : preview.state === "expired" ? (
-          <Notice tone="error">
+          <Notice tone="error" role="alert">
             The invitation to {preview.innName} expired on {formatStamp(preview.expiresAt)}. Ask the owner for a new one.
           </Notice>
         ) : preview.state === "revoked" ? (
-          <Notice tone="error">The invitation to {preview.innName} was revoked by the owner.</Notice>
+          <Notice tone="error" role="alert">
+            The invitation to {preview.innName} was revoked by the owner.
+          </Notice>
         ) : preview.state === "used" && !preview.acceptedByYou ? (
-          <Notice tone="error">
+          <Notice tone="error" role="alert">
             This invitation to {preview.innName} has already been used. Each link admits one person; ask the owner for
             your own.
           </Notice>
@@ -81,7 +85,11 @@ export function InvitationGate({
           </div>
         )}
 
-        {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+        {action.error ? (
+          <Notice tone="error" role="alert">
+            {action.error}
+          </Notice>
+        ) : null}
 
         <div className="flex flex-col gap-2">
           {joinable ? (

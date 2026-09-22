@@ -101,7 +101,11 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                   ? "."
                   : "; this deployment has no registered webhook id, so deployment setup is needed before it can be repaired here."}
               </Notice>
-              {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+              {action.error ? (
+                <Notice tone="error" role="alert">
+                  {action.error}
+                </Notice>
+              ) : null}
               {canRepair ? (
                 <ActionRow>
                   <Button type="button" disabled={action.busy} onClick={() => void runProvision()}>
@@ -118,7 +122,11 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
               Front Desk creates a dedicated mailbox at the mail provider and binds it to this property. The
               server chooses the address; nothing is typed here.
             </Hint>
-            {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+            {action.error ? (
+              <Notice tone="error" role="alert">
+                {action.error}
+              </Notice>
+            ) : null}
             <ActionRow>
               <Button
                 type="button"

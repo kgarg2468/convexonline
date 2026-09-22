@@ -180,7 +180,11 @@ export function InnPicker({
                 creating the inn does not start either.
               </Notice>
             ) : null}
-            {action.error ? <Notice tone="error">{action.error}</Notice> : null}
+            {action.error ? (
+              <Notice tone="error" role="alert">
+                {action.error}
+              </Notice>
+            ) : null}
             <div className="flex flex-col gap-2">
               <Button type="submit" size="lg" className="w-full" disabled={action.busy}>
                 {action.busy ? "Creating…" : kind === "fictional" ? "Create fictional inn" : "Create property"}

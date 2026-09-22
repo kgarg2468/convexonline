@@ -26,7 +26,7 @@ export function SettingsSection({
         {title}
       </h2>
       {description ? <p className="mt-1 max-w-[64ch] text-[13px] leading-5 text-ink-2">{description}</p> : null}
-      <div className="mt-4 flex flex-col gap-3">{children}</div>
+      <div className={cn("flex flex-col gap-3", description ? "mt-4" : "mt-3")}>{children}</div>
     </section>
   );
 }
@@ -42,7 +42,7 @@ export function SubHeading({ id, className, children }: { id?: string; className
 
 /** Two-column definition list: term in ink-2 on the left, value on the right; stacked under 600px. */
 export function KeyValueList({ children, className }: { children: ReactNode; className?: string }) {
-  return <dl className={cn("divide-y divide-border-1 rounded-md border border-border-1 bg-white", className)}>{children}</dl>;
+  return <dl className={cn("divide-y divide-border-1 rounded-[10px] border border-border-1 bg-white", className)}>{children}</dl>;
 }
 
 export function KeyValue({ term, children }: { term: string; children: ReactNode }) {
@@ -57,7 +57,7 @@ export function KeyValue({ term, children }: { term: string; children: ReactNode
 /** A hairline list whose rows are name + chip (providers) or name + actions (team). */
 export function RowList({ className, children, ...props }: { className?: string; children: ReactNode; "aria-label"?: string }) {
   return (
-    <ul className={cn("divide-y divide-border-1 rounded-md border border-border-1 bg-white", className)} {...props}>
+    <ul className={cn("divide-y divide-border-1 rounded-[10px] border border-border-1 bg-white", className)} {...props}>
       {children}
     </ul>
   );
