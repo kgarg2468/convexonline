@@ -269,7 +269,8 @@ test.describe("public inn website", () => {
       await page.getByRole("radio", { name: /fictional inn/i }).check();
       await page.getByLabel("Property name").fill(property);
       await page.getByRole("button", { name: "Create fictional inn" }).click();
-      await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      // A real inn lands on Overview.
+      await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible({ timeout: 30_000 });
 
       await rail(page).getByRole("button", { name: "Settings" }).click();
       await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();

@@ -183,7 +183,10 @@ export function replaceUrl(path: string, state: RouteState | null = historyState
  * the `<ViewTransition>` around the routed view can animate by kind.
  * Back/forward restore the route through `popstate`; each entry carries an
  * index in `history.state.fdIndex` so the two directions can be told apart.
- * The fragment and query string are never read or rewritten here.
+ * The fragment and query string are never read here. The fragment is carried
+ * to every new entry; the query string only to an inbox route, since the one
+ * query the app knows (`?filter=`) belongs to the inbox and must not follow
+ * the visitor to another view.
  */
 export function useRoute(isDemo: boolean): {
   route: Route;
@@ -230,7 +233,7 @@ export function useRoute(isDemo: boolean): {
       const path = formatRoute(to);
       if (path !== window.location.pathname) {
         try {
-          const url = path + window.location.search + window.location.hash;
+          const url = path + (to.view === "inbox" ? window.location.search : "") + window.location.hash;
           // A rewritten entry keeps its index but not the old route's keys.
           if (options?.replace) {
             window.history.replaceState({ ...options.state, fdIndex: index.current }, "", url);

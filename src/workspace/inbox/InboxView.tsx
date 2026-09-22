@@ -3,6 +3,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { LiveMailDecision } from "../types";
 import { useDelayedFlag, useIsNarrow, useQueryResult } from "../lib/hooks";
+import { parseInboxFilter } from "../lib/router";
 import { cn } from "@/lib/utils";
 import { QueueList, type QueueFilter, type QueueKeyHandler, type QueueRestore } from "./QueueList";
 import type { SelectSource } from "./QueueRow";
@@ -51,8 +52,30 @@ export function InboxView({
 
   // The queue's filter and search live here, not in QueueList: a phone
   // unmounts the list to show a thread and must find it as it was on the way back.
-  const [filter, setFilter] = useState<QueueFilter>("all");
+  // The filter is also the entry's `?filter=` query (lib/router.ts): a deep
+  // link from the Overview's needs-action tiles or a bookmark sets it, the
+  // status select rewrites it in place, and back/forward re-read it, so a
+  // reload or a shared address opens the same queue. `navigate` carries the
+  // query only between inbox routes, so it never follows the visitor elsewhere.
+  const [filter, setFilterState] = useState<QueueFilter>(() => parseInboxFilter(window.location.search) ?? "all");
   const [search, setSearch] = useState("");
+  const setFilter = useCallback((next: QueueFilter) => {
+    setFilterState(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "all") params.delete("filter");
+    else params.set("filter", next);
+    const rest = params.toString();
+    try {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+    } catch {
+      /* history unavailable; the filter still applies */
+    }
+  }, []);
+  useEffect(() => {
+    const onPopState = () => setFilterState(parseInboxFilter(window.location.search) ?? "all");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Same subscription the thread pane opens (the client shares it), read here
   // only to know when the selected thread has arrived, or was refused: a stale

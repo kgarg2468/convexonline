@@ -1,13 +1,18 @@
-import { BookOpen, GitCompareArrows, Inbox, Settings, type LucideIcon } from "lucide-react";
+import { BookOpen, GitCompareArrows, Inbox, LayoutDashboard, Settings, type LucideIcon } from "lucide-react";
 import type { MembershipRole, WorkspaceView } from "../types";
 
-/** One rail / tab-bar entry. `chord` is the second key of the `g …` shortcut. */
-export type NavItem = { view: WorkspaceView; label: string; icon: LucideIcon; chord: string };
+/**
+ * One rail / tab-bar entry. `chord` is the second key of the `g …` shortcut;
+ * `short` is the tab bar's label when the full one will not fit a phone's
+ * column at 11px (the accessible name stays `label`).
+ */
+export type NavItem = { view: WorkspaceView; label: string; short?: string; icon: LucideIcon; chord: string };
 
-/** Rail order (design-spec §3, minus Overview which lands with its own PR). Labels are spec contracts. */
+/** Rail order (design-spec §3). Labels are spec contracts. */
 export const NAV: NavItem[] = [
+  { view: "overview", label: "Overview", icon: LayoutDashboard, chord: "o" },
   { view: "inbox", label: "Inbox", icon: Inbox, chord: "i" },
-  { view: "corrections", label: "Policy changes", icon: GitCompareArrows, chord: "p" },
+  { view: "corrections", label: "Policy changes", short: "Changes", icon: GitCompareArrows, chord: "p" },
   { view: "knowledge", label: "Knowledge", icon: BookOpen, chord: "k" },
   { view: "settings", label: "Settings", icon: Settings, chord: "s" },
 ];

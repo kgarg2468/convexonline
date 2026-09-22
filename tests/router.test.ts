@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { THREAD_ID, formatRoute, landingRoute, parsePath, routeFor, sameRoute } from "../src/workspace/lib/router";
+import { THREAD_ID, formatRoute, inboxFilterSearch, landingRoute, parseInboxFilter, parsePath, routeFor, sameRoute } from "../src/workspace/lib/router";
 
 const ID = "j57c2m3k9x1p0q8w4r6t5y2n3b7v1a0z";
 
 describe("parsePath", () => {
   test("names each view", () => {
+    expect(parsePath("/overview")).toEqual({ view: "overview" });
     expect(parsePath("/inbox")).toEqual({ view: "inbox", threadId: null });
     expect(parsePath("/changes")).toEqual({ view: "corrections" });
     expect(parsePath("/knowledge")).toEqual({ view: "knowledge" });
@@ -29,7 +30,8 @@ describe("parsePath", () => {
   test("returns null for the root and unknown paths so the caller can pick the landing view", () => {
     expect(parsePath("/")).toBeNull();
     expect(parsePath("")).toBeNull();
-    expect(parsePath("/overview")).toBeNull();
+    expect(parsePath("/dashboard")).toBeNull();
+    expect(parsePath("/overview/extra")).toBeNull();
     expect(parsePath("/changes/extra")).toBeNull();
     expect(parsePath("/settings/team/x")).toBeNull();
     expect(parsePath("/Inbox")).toBeNull();
@@ -39,6 +41,7 @@ describe("parsePath", () => {
 describe("formatRoute", () => {
   test("round-trips every route", () => {
     for (const route of [
+      routeFor("overview"),
       routeFor("inbox"),
       routeFor("inbox", ID),
       routeFor("corrections"),
@@ -56,9 +59,27 @@ describe("formatRoute", () => {
 });
 
 describe("landingRoute", () => {
-  test("demo visitors land on the policy-change review, staff on the inbox", () => {
+  test("demo visitors land on the policy-change review, staff on the Overview", () => {
     expect(landingRoute(true)).toEqual({ view: "corrections" });
-    expect(landingRoute(false)).toEqual({ view: "inbox", threadId: null });
+    expect(landingRoute(false)).toEqual({ view: "overview" });
+  });
+});
+
+describe("inbox filter query", () => {
+  test("reads a known status from ?filter= and ignores anything else", () => {
+    expect(parseInboxFilter("?filter=needs_staff")).toBe("needs_staff");
+    expect(parseInboxFilter("?filter=ready")).toBe("ready");
+    expect(parseInboxFilter("?x=1&filter=closed")).toBe("closed");
+    expect(parseInboxFilter("")).toBeNull();
+    expect(parseInboxFilter("?filter=")).toBeNull();
+    expect(parseInboxFilter("?filter=all")).toBeNull();
+    expect(parseInboxFilter("?filter=<script>")).toBeNull();
+    expect(parseInboxFilter("?other=needs_staff")).toBeNull();
+  });
+
+  test("round-trips the search it writes", () => {
+    expect(inboxFilterSearch("needs_staff")).toBe("?filter=needs_staff");
+    expect(parseInboxFilter(inboxFilterSearch("ready"))).toBe("ready");
   });
 });
 

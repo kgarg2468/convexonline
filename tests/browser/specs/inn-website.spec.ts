@@ -39,7 +39,7 @@ async function createExternalProperty(page: Page, name: string) {
   await page.getByLabel("Property name").fill(name);
   await page.getByLabel("Website").fill("https://example.com/");
   await page.getByRole("button", { name: "Create property" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 }
 
 async function createFictionalInn(page: Page, name: string) {
@@ -50,7 +50,7 @@ async function createFictionalInn(page: Page, name: string) {
   await expect(page.getByText("This creates a public website with illustrative policies.")).toBeVisible();
   await page.getByLabel("Property name").fill(name);
   await page.getByRole("button", { name: "Create fictional inn" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible({ timeout: 30_000 });
 }
 
 async function openSettings(page: Page) {
@@ -243,7 +243,7 @@ test.describe("hosted fictional inn website", () => {
       await b.page.goto(link);
       await signUp(b.page, staff);
       await b.page.getByRole("button", { name: `Join ${property}` }).click();
-      await expect(b.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+      await expect(b.page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
       await openSettings(b.page);
       const staffView = website(b.page);
       await expect(staffView).toBeVisible();
@@ -304,7 +304,7 @@ test.describe("hosted fictional inn website", () => {
       await expect(a.page.getByLabel("Website")).toHaveCount(0);
       await a.page.screenshot({ path: test.info().outputPath("create-pending.png"), fullPage: true });
       gate.release();
-      await expect(a.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      await expect(a.page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible({ timeout: 30_000 });
       await expect(a.page.getByRole("navigation", { name: "Workspace" })).toContainText(property);
       await openSettings(a.page);
       const editorA = website(a.page);
@@ -316,7 +316,7 @@ test.describe("hosted fictional inn website", () => {
       // Session B: the same owner signs in elsewhere and lands in the same editor.
       await b.page.goto("/");
       await signIn(b.page, owner);
-      await expect(b.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      await expect(b.page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible({ timeout: 30_000 });
       await openSettings(b.page);
       const editorB = website(b.page);
       const saveB = editorB.getByRole("button", { name: "Save website" });
@@ -439,7 +439,7 @@ test.describe("hosted fictional inn website", () => {
     await expect(notice).toContainText("is not recognized");
     await expect(notice).toContainText("America/New_York");
     await expect(notice).not.toContainText("The server rejected that request");
-    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toHaveCount(0);
     // The form is still there with what was typed, so it can simply be corrected.
     await expect(page.getByLabel("Property name")).toHaveValue(property);
     await expect(page.getByLabel("Website")).toHaveValue("https://example.com/");
@@ -450,7 +450,9 @@ test.describe("hosted fictional inn website", () => {
     await page.getByLabel("Time zone").fill("America/New_York");
     await createExternalProperty(page, property);
     await expect(page.getByRole("navigation", { name: "Workspace" })).toContainText(property);
-    // A brand-new inn: honest zero counts and no median rather than "0 min".
+    // A brand-new inn lands on the Overview; its inbox strip shows honest zero counts and no median rather than "0 min".
+    await page.getByRole("navigation", { name: "Workspace" }).getByRole("button", { name: "Inbox" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
     const statsStrip = page.getByRole("list", { name: "Inbox statistics" });
     await expect(statsStrip).toContainText("0 replies today");
     await expect(statsStrip).toContainText("No first responses yet");
