@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -20,6 +21,8 @@ export function ThreadDetail({
   liveMail,
   onBack,
   onOpenCorrections,
+  onForeign,
+  onBackToInbox,
 }: {
   threadId: Id<"threads">;
   innId: Id<"inns">;
@@ -27,8 +30,17 @@ export function ThreadDetail({
   liveMail: LiveMailDecision | undefined;
   onBack: (() => void) | null;
   onOpenCorrections: () => void;
+  /** The thread belongs to another of the viewer's properties: the workspace drops it from the address bar. */
+  onForeign?: () => void;
+  /** Leaves such a thread for the inbox. */
+  onBackToInbox?: () => void;
 }) {
   const detail = useQuery(api.threads.get, { threadId }) as ThreadDetailData | undefined;
+  // A deep link can name a thread from another inn the viewer belongs to; it is never shown inside this one.
+  const foreign = detail !== undefined && detail.inn._id !== innId;
+  useEffect(() => {
+    if (foreign) onForeign?.();
+  }, [foreign, onForeign]);
   const claim = useMutation(api.threads.claim);
   const release = useMutation(api.threads.release);
   const setStatus = useMutation(api.threads.setStatus);
@@ -43,6 +55,22 @@ export function ThreadDetail({
       <div className="fd-thread__main">
         {onBack ? <BackButton onBack={onBack} /> : null}
         <Spinner label="Loading thread" />
+      </div>
+    );
+  }
+
+  if (foreign) {
+    return (
+      <div className="fd-thread__main">
+        {onBack ? <BackButton onBack={onBack} /> : null}
+        <Empty title="This thread belongs to another property.">
+          The link you opened points at a thread in one of your other properties. Switch property to read it there.
+        </Empty>
+        <div className="fd-btn-row" style={{ marginTop: 12 }}>
+          <button type="button" className="fd-btn" onClick={onBackToInbox}>
+            Back to inbox
+          </button>
+        </div>
       </div>
     );
   }

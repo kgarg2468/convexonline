@@ -1,22 +1,17 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { DemoStatus, PageSummary, RecordVersionResult } from "../types";
-import { useAsyncAction } from "../lib/hooks";
+import type { PageSummary, RecordVersionResult } from "../types";
 import { VersionPane } from "../knowledge/VersionPane";
-
-/** The sentence shown after a scripted page edit; the result is owned by the workspace so it outlives the control that ran it. */
-function demoChangeNotice(last: RecordVersionResult): string {
-  return last.changeStatus === "changed"
-    ? `Policies page changed: ${last.affectedReplies} ${last.affectedReplies === 1 ? "reply" : "replies"} to review, ${last.unaffectedReplies} unaffected.`
-    : "Policies page unchanged.";
-}
+import { useIsNarrow } from "../lib/hooks";
+import { cn } from "@/lib/utils";
+import { demoChangeNotice, type DemoPolicy } from "./useDemoPolicy";
 
 /**
- * The demo's scripted website edit. `demo.changePolicyPage` toggles the
- * policies page between its two stored versions, so the same button resets
- * the demo once the change has been made.
+ * The demo's scripted website edit. The mutation and its status live in the
+ * workspace's `useDemoPolicy` instance (`demo`, shared with the command
+ * palette); this is the control.
  *
  * `variant="compact"` is the header control. `variant="hero"` is the
  * zero-state panel on the review screen: it explains what the edit will do
@@ -28,31 +23,33 @@ function demoChangeNotice(last: RecordVersionResult): string {
  */
 export function DemoActions({
   innId,
+  demo,
   last,
   onResult,
   variant = "compact",
 }: {
   innId: Id<"inns">;
+  demo: DemoPolicy;
   last: RecordVersionResult | null;
   onResult: (result: RecordVersionResult) => void;
   variant?: "compact" | "hero";
 }) {
-  const status = useQuery(api.demo.status, { innId }) as DemoStatus | undefined;
-  const change = useMutation(api.demo.changePolicyPage);
-  const action = useAsyncAction();
-  const changed = status?.policyVersion === "changed";
+  const narrow = useIsNarrow();
 
   async function run() {
-    const r = (await action.run(() => change({ innId }))) as RecordVersionResult | undefined;
+    const r = await demo.run();
     if (r) onResult(r);
   }
 
-  const feedback = action.error ? (
-    <span className="fd-small" role="alert" style={{ color: "var(--fd-error)" }}>
-      {action.error}
+  // In the 56px header the sentence truncates rather than wrapping; in the
+  // narrow strip and the review page it may take its own line.
+  const feedbackClass = cn("fd-small min-w-0", variant === "compact" && !narrow && "truncate");
+  const feedback = demo.error ? (
+    <span className={feedbackClass} role="alert" style={{ color: "var(--fd-error)" }}>
+      {demo.error}
     </span>
   ) : last ? (
-    <span className="fd-small fd-muted" role="status">
+    <span className={cn(feedbackClass, "fd-muted")} role="status">
       {demoChangeNotice(last)}
     </span>
   ) : null;
@@ -60,22 +57,18 @@ export function DemoActions({
   const button = (
     <button
       type="button"
-      className={`fd-btn${changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
-      disabled={action.busy || status === undefined}
+      className={`fd-btn shrink-0${demo.changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
+      disabled={demo.busy || !demo.ready}
       onClick={() => void run()}
-      title={
-        changed
-          ? "Restores the original policies page. Replies already reviewed stay reviewed."
-          : "Edits the demo inn's policies page (pet fee and check-in window) as the website owner would."
-      }
+      title={demo.description}
     >
-      {action.busy ? "Updating page…" : changed ? "Restore original policy page" : "Change the policy page"}
+      {demo.busy ? "Updating page…" : demo.label}
     </button>
   );
 
   if (variant === "compact") {
     return (
-      <div className="fd-header__actions">
+      <div className={cn("flex min-w-0 items-center justify-end gap-2", narrow && "flex-wrap")}>
         {feedback}
         {button}
       </div>
