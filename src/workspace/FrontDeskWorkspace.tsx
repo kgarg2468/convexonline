@@ -31,7 +31,6 @@ import { SourcesSheet } from "./inbox/SourcesSheet";
 import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { KnowledgeStats } from "./knowledge/KnowledgeStats";
 import { OverviewView } from "./overview/OverviewView";
-import { OverviewStats } from "./overview/OverviewStats";
 import { overviewSubtitle } from "./overview/metrics";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
@@ -396,8 +395,10 @@ function Workspace({
 
   /**
    * A needs-action tile: the inbox, nothing selected, on one status. `navigate`
-   * writes only the pathname, so the filter is added to the entry it has just
-   * pushed; InboxView reads `?filter=` once when it mounts (lib/router.ts).
+   * writes the pathname (and, for an inbox route, whatever query the current
+   * entry has, none here), so the filter is added to the entry it has just
+   * pushed; InboxView reads `?filter=` when it mounts (lib/router.ts) and keeps
+   * it in the address bar from there.
    */
   function openInboxFiltered(filter: ThreadStatus) {
     navigate({ view: "inbox", threadId: null });
@@ -454,8 +455,7 @@ function Workspace({
       case "overview":
         return {
           title: "Overview",
-          sub: overviewSubtitle(detail?.inn.timezone),
-          meta: overview ? <OverviewStats summary={overview} timezone={detail?.inn.timezone} now={now} /> : undefined,
+          sub: overviewSubtitle(now, detail?.inn.timezone),
         };
       case "corrections":
         return {

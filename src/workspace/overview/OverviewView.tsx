@@ -11,8 +11,8 @@ import { UpNextList } from "./UpNextList";
 /**
  * The Overview dashboard (design-spec §4.1): a vertical stack, needs-action
  * strip first, then the up-next list, KPI tiles, breakdowns and comparisons.
- * The summary is one server object; the workspace owns the subscription (its
- * header line reads the same counts) and hands it down. The root is the one
+ * The summary is one server object; the workspace owns the subscription and
+ * hands it down. The root is the one
  * `@container`: every grid below sizes off the content width, so a collapsed
  * rail gets more columns, not a different breakpoint.
  */
@@ -37,7 +37,7 @@ export function OverviewView({
     <div className="@container flex max-w-[1200px] flex-col gap-6">
       <NeedsActionStrip needsAction={summary.needsAction} onOpenInbox={onOpenInbox} onOpenCorrections={onOpenCorrections} />
       <UpNextList items={summary.upNext} now={now} onOpenThread={onOpenThread} />
-      <KpiRow kpis={summary.kpis} series={summary.series} />
+      <KpiRow kpis={summary.kpis} />
       <Breakdown series={summary.series} breakdown={summary.breakdown} timezone={timezone} />
       <Comparisons comparisons={summary.comparisons} now={now} />
     </div>

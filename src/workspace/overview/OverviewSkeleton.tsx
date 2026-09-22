@@ -1,13 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cardClass, tileClass } from "./styles";
 
-function TileSkeleton({ tall }: { tall?: boolean }) {
+function TileSkeleton() {
   return (
     <div className={tileClass}>
       <Skeleton className="h-3 w-24" />
       <Skeleton className="mt-2 h-7 w-12" />
       <Skeleton className="mt-2 h-3 w-32" />
-      {tall ? <Skeleton className="mt-3 h-8 w-full" /> : null}
     </div>
   );
 }
@@ -16,10 +15,13 @@ function TileSkeleton({ tall }: { tall?: boolean }) {
 export function OverviewSkeleton() {
   return (
     <div role="status" aria-label="Loading overview" className="@container flex max-w-[1200px] flex-col gap-6">
-      <div aria-hidden="true" className="grid gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <TileSkeleton key={i} />
-        ))}
+      <div aria-hidden="true">
+        <Skeleton className="mb-2 h-3 w-20" />
+        <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <TileSkeleton key={i} />
+          ))}
+        </div>
       </div>
       <div aria-hidden="true">
         <Skeleton className="mb-2 h-3 w-16" />
@@ -36,10 +38,13 @@ export function OverviewSkeleton() {
           ))}
         </div>
       </div>
-      <div aria-hidden="true" className="grid gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <TileSkeleton key={i} tall />
-        ))}
+      <div aria-hidden="true">
+        <Skeleton className="mb-2 h-3 w-20" />
+        <div className="grid gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <TileSkeleton key={i} />
+          ))}
+        </div>
       </div>
       <div aria-hidden="true" className="grid gap-3 @3xl:grid-cols-[3fr_2fr]">
         <div className={cardClass}>

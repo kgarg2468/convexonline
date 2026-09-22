@@ -52,23 +52,29 @@ export function InboxView({
 
   // The queue's filter and search live here, not in QueueList: a phone
   // unmounts the list to show a thread and must find it as it was on the way back.
-  // A deep link (`/inbox?filter=needs_staff`, from the Overview's needs-action
-  // tiles or a bookmark) sets the filter once, when the inbox mounts. The
-  // query is then dropped from the entry: `navigate` carries the search string
-  // to every later URL, and the filter is this view's state from here on, so
-  // it must not follow the visitor to another view and re-apply on the way back.
-  const [filter, setFilter] = useState<QueueFilter>(() => parseInboxFilter(window.location.search) ?? "all");
+  // The filter is also the entry's `?filter=` query (lib/router.ts): a deep
+  // link from the Overview's needs-action tiles or a bookmark sets it, the
+  // status select rewrites it in place, and back/forward re-read it, so a
+  // reload or a shared address opens the same queue. `navigate` carries the
+  // query only between inbox routes, so it never follows the visitor elsewhere.
+  const [filter, setFilterState] = useState<QueueFilter>(() => parseInboxFilter(window.location.search) ?? "all");
   const [search, setSearch] = useState("");
-  useEffect(() => {
-    if (parseInboxFilter(window.location.search) === null) return;
+  const setFilter = useCallback((next: QueueFilter) => {
+    setFilterState(next);
     const params = new URLSearchParams(window.location.search);
-    params.delete("filter");
+    if (next === "all") params.delete("filter");
+    else params.set("filter", next);
     const rest = params.toString();
     try {
       window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
     } catch {
-      /* history unavailable; the filter is applied regardless */
+      /* history unavailable; the filter still applies */
     }
+  }, []);
+  useEffect(() => {
+    const onPopState = () => setFilterState(parseInboxFilter(window.location.search) ?? "all");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   // Same subscription the thread pane opens (the client shares it), read here

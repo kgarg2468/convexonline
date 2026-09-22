@@ -22,13 +22,8 @@ test.describe("overview", () => {
     await enterDemo(page);
     await openOverview(page);
 
-    // Header line: the inn's local date, then the four counts as sentences.
-    const stats = page.getByRole("list", { name: "Overview statistics" });
-    await expect(stats).toContainText("(inn time, ");
-    await expect(stats).toContainText("1 needs you");
-    await expect(stats).toContainText("1 ready to send");
-    await expect(stats).toContainText("0 policy changes to review");
-    await expect(stats).toContainText("0 follow-ups due");
+    // Header line: scope only (the inn's local date, its zone, the window); the counts are the strip's.
+    await expect(page.locator("header")).toContainText(/\w{3}, \w{3} \d{1,2} · inn time, \w+ · last 7 days/);
 
     // Needs-action strip: four real buttons; zero tiles read "Clear".
     await expect(strip(page).getByRole("button")).toHaveCount(4);
@@ -61,12 +56,10 @@ test.describe("overview", () => {
       const numeric = await tiles.nth(i).locator("span").nth(1).evaluate((el) => getComputedStyle(el).fontVariantNumeric);
       expect(numeric, `KPI value ${i} uses tabular figures`).toContain("tabular-nums");
     }
-    // The only day series is the replies one; it is described for screen readers.
-    await expect(tiles.nth(0)).toContainText(/Replies per day over the last 14 days, oldest first: (\d+, ){13}\d+\./);
-
-    // Breakdown: the day series and both categorical bars carry their numbers in text.
+    // Breakdown: the day series (described for screen readers) and both categorical bars carry their numbers in text.
     const breakdown = page.getByRole("region", { name: "Breakdown" });
     await expect(breakdown).toContainText("Replies per day · last 14 days");
+    await expect(breakdown).toContainText(/Replies per day, oldest first: (\d+, ){13}\d+\. 6 in total\./);
     await expect(breakdown).toContainText("Verified and sent as written 6");
     await expect(breakdown).toContainText("Inquiries 7");
     await expect(breakdown).toContainText("Booked stays 1");
@@ -105,15 +98,26 @@ test.describe("overview", () => {
     const queue = page.getByRole("region", { name: "Guest threads" });
     await expect(queue.getByRole("button", { name: THREADS.gap })).toBeVisible();
     await expect(queue.getByRole("button", { name: THREADS.ready })).toHaveCount(0);
-    // The filter is applied and consumed: it does not ride along to the next view.
-    await expect(page).toHaveURL(/\/inbox$/);
+    // The filter stays in the address bar, so the entry is shareable and survives back/forward.
+    await expect(page).toHaveURL(/\/inbox\?filter=needs_staff$/);
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page).toHaveURL(/\/overview$/);
+    await page.goForward();
+    await expect(page.getByLabel("Filter by status")).toHaveValue("needs_staff");
+    await expect(page).toHaveURL(/\/inbox\?filter=needs_staff$/);
 
     // Back to the dashboard, then the other tile.
     await openOverview(page);
     await strip(page).getByRole("button", { name: /^Ready to send/ }).click();
     await expect(page.getByLabel("Filter by status")).toHaveValue("ready");
+    await expect(page).toHaveURL(/\/inbox\?filter=ready$/);
     await expect(queue.getByRole("button", { name: THREADS.ready })).toBeVisible();
     await expect(queue.getByRole("button", { name: THREADS.gap })).toHaveCount(0);
+
+    // The status select writes the filter back to the address bar in place.
+    await page.getByLabel("Filter by status").selectOption("all");
+    await expect(page).toHaveURL(/\/inbox$/);
   });
 
   test("the filtered inbox is bookmarkable and the `g o` chord reaches the Overview", async ({ page }) => {
@@ -132,7 +136,7 @@ test.describe("overview", () => {
     await expect(rail(page).getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
   });
 
-  test("on a phone the tiles stack, the comparisons put A above B, and nothing overflows", async ({ browser }) => {
+  test("on a phone the tiles sit two per row, the comparisons put A above B, and nothing overflows", async ({ browser }) => {
     const context = await browser.newContext({ ...devices["iPhone 13"] });
     const page = await context.newPage();
     try {
@@ -142,8 +146,10 @@ test.describe("overview", () => {
 
       const tiles = strip(page).getByRole("button");
       await expect(tiles).toHaveCount(4);
-      const [first, second] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox()]);
-      expect(second!.y, "tiles are one per row").toBeGreaterThan(first!.y + first!.height - 1);
+      const [first, second, third] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox(), tiles.nth(2).boundingBox()]);
+      expect(Math.abs(second!.y - first!.y), "the first two tiles share a row").toBeLessThan(2);
+      expect(second!.x, "the second tile sits to the right of the first").toBeGreaterThan(first!.x + first!.width - 1);
+      expect(third!.y, "the third tile starts the second row").toBeGreaterThan(first!.y + first!.height - 1);
 
       const comparisons = page.getByRole("region", { name: "Comparisons" });
       const [a, b] = await Promise.all([

@@ -78,10 +78,13 @@ export function shortDayLabel(ms: number, timezone: string | undefined): string 
   }
 }
 
-/** The header sub line while the summary loads (the statistics line replaces it once numbers arrive). */
-export function overviewSubtitle(timezone: string | undefined): string {
+/**
+ * The header's sub line: scope only ("Tue, Sep 22 · inn time, PDT · last 7
+ * days"). The counts live in the needs-action strip below it, not here.
+ */
+export function overviewSubtitle(now: number, timezone: string | undefined): string {
   const zone = zoneLabel(timezone);
-  return zone ? `Last 7 days · ${zone}` : "Last 7 days";
+  return [localDateLabel(now, timezone), zone ? `inn time, ${zone}` : null, "last 7 days"].filter(Boolean).join(" · ");
 }
 
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);

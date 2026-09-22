@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { OverviewSummary } from "../types";
 import { formatDuration, formatWhen, pathOf } from "../lib/format";
 import { cn } from "@/lib/utils";
-import { Chip } from "../inbox/primitives";
 import { pathLinkClass, sectionHeadingClass } from "../corrections/styles";
 import { wordDiff } from "../corrections/wordDiff";
 import { cardClass, chartTitleClass } from "./styles";
@@ -75,6 +74,16 @@ function WeekOverWeek({ w }: { w: OverviewSummary["comparisons"]["weekOverWeek"]
   );
 }
 
+/** A number inside the page-change sentence: ink-1, 600, tabular. */
+function Count({ children }: { children: ReactNode }) {
+  return <strong className="font-semibold text-ink-1 tabular-nums">{children}</strong>;
+}
+
+/**
+ * The latest page change as one sentence: how many sent replies quoted the
+ * page before it changed, and what became of them. The four numbers are one
+ * set, not two columns, so nothing reads as a drop from one side to the other.
+ */
 function PageChange({ change, now }: { change: OverviewSummary["comparisons"]["latestPageChange"]; now: number }) {
   return (
     <div className={cardClass}>
@@ -86,24 +95,20 @@ function PageChange({ change, now }: { change: OverviewSummary["comparisons"]["l
       ) : (
         <>
           <p className="mt-0.5 truncate text-[12px] leading-4 text-ink-2">
-            <a href={change.pageUrl} target="_blank" rel="noreferrer noopener" className={pathLinkClass}>
-              {pathOf(change.pageUrl)}
-            </a>
-            {" · "}
             {change.pageTitle} · changed {formatWhen(change.changedAt, now)}
           </p>
-          <div className="mt-3 grid gap-3 @md:grid-cols-2">
-            <Column side="a" label="Before the change" rows={[{ label: "Sent replies quoting the page", value: String(change.repliesQuotingBefore) }]} />
-            <Column
-              side="b"
-              label="After the change"
-              rows={[
-                { label: "Affected", value: String(change.affected) },
-                { label: "Still true", value: String(change.stillTrue) },
-                { label: "Corrections sent", value: String(change.correctionsSent) },
-              ]}
-            />
-          </div>
+          {/* Each figure is one unbreakable unit, so a wrap falls between items, never inside one. */}
+          <p className="mt-3 text-[13px] leading-5 text-ink-2">
+            <Count>{change.repliesQuotingBefore}</Count> sent {plural(change.repliesQuotingBefore, "reply", "replies")} quoted{" "}
+            <a href={change.pageUrl} target="_blank" rel="noreferrer noopener" className={pathLinkClass}>
+              {pathOf(change.pageUrl)}
+            </a>{" "}
+            before the change · <span className="whitespace-nowrap"><Count>{change.stillTrue}</Count> still true</span> ·{" "}
+            <span className="whitespace-nowrap"><Count>{change.affected}</Count> affected</span> ·{" "}
+            <span className="whitespace-nowrap">
+              <Count>{change.correctionsSent}</Count> {plural(change.correctionsSent, "correction", "corrections")} sent
+            </span>
+          </p>
         </>
       )}
     </div>
@@ -123,10 +128,7 @@ function DiffPair({ item, now }: { item: OverviewSummary["comparisons"]["drafted
     <li className="pt-3 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span className="min-w-0 truncate text-[13px] leading-5 font-medium text-ink-1">{item.subject || "(no subject)"}</span>
-        <span className="flex items-center gap-2 text-[12px] leading-4 text-ink-3 tabular-nums">
-          <Chip tone="secondary">Edited by staff</Chip>
-          {formatWhen(item.sentAt, now)}
-        </span>
+        <span className="shrink-0 text-[12px] leading-4 text-ink-3 tabular-nums">{formatWhen(item.sentAt, now)}</span>
       </div>
       <div className="mt-2 grid gap-3 @md:grid-cols-2">
         <div className={cn("min-w-0 rounded-md border px-3 py-2", SIDE.a.box)}>
@@ -163,8 +165,9 @@ function DiffPair({ item, now }: { item: OverviewSummary["comparisons"]["drafted
 }
 
 /**
- * Drafted vs sent for the newest sent replies. Replies sent as written are
- * counted, not repeated: when none was edited the card says so in one line.
+ * Drafted vs sent for the newest sent replies. Only edited replies are shown,
+ * so no row needs an "edited" chip; replies sent as written are counted, not
+ * repeated, and when none was edited the card says so in one line.
  */
 function DraftedVsSent({ items, now }: { items: OverviewSummary["comparisons"]["draftedVsSent"]; now: number }) {
   const edited = items.filter((i) => i.edited);

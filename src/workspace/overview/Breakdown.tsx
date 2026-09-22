@@ -20,19 +20,29 @@ function Swatch({ color }: { color: BarColor }) {
   return <span aria-hidden="true" className={cn("inline-block size-2 rounded-[2px]", BAR[color])} />;
 }
 
+/** The bars and their ticks share one 14-column grid, so a tick sits under the bar it names. */
+const dayGridClass = "grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5";
+
 /**
  * Replies per day, 14 inn-local days, oldest first: vertical bars as plain
- * divs, the current 7 days in accent, the previous 7 in ink-3. Three sparse
- * ticks (first day, start of this week, today); no gridlines, no axis line.
+ * divs, the current 7 days in accent, the previous 7 in ink-3. The plot is a
+ * fixed 140px at every width, the peak bar carries its value, and three sparse
+ * ticks (first day, start of this week, today) sit centred under their bars;
+ * no gridlines, no axis line.
  */
 function RepliesPerDay({ series, timezone }: { series: OverviewSummary["series"]["repliesPerDay14"]; timezone: string | undefined }) {
   const counts = series.map((d) => d.count);
   const total = counts.reduce((a, b) => a + b, 0);
   const max = Math.max(1, ...counts);
+  const peak = counts.indexOf(max);
   const split = series.length - 7;
-  // The card is as tall as the two cards beside it; the bars take that height.
+  const ticks = [
+    { col: 1, label: shortDayLabel(series[0]!.dayStart, timezone) },
+    ...(split > 0 && split < series.length ? [{ col: split + 1, label: shortDayLabel(series[split]!.dayStart, timezone) }] : []),
+    { col: series.length, label: "Today" },
+  ];
   return (
-    <div className={cn(cardClass, "flex flex-col")}>
+    <div className={cn(cardClass, "self-start")}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <ChartTitle>Replies per day · last 14 days</ChartTitle>
         <p className="flex items-center gap-3 text-[12px] leading-4 text-ink-2">
@@ -48,20 +58,31 @@ function RepliesPerDay({ series, timezone }: { series: OverviewSummary["series"]
         <p className="mt-4 text-[13px] leading-5 text-ink-2">No replies sent in the last 14 days yet.</p>
       ) : (
         <>
-          <div aria-hidden="true" className="mt-4 flex min-h-28 flex-1 items-end gap-1 border-b border-border-1">
+          {/* 18px of top padding is the peak label's room, so a full-height bar never pushes it out. */}
+          <div aria-hidden="true" className={cn(dayGridClass, "mt-4 h-[140px] items-end border-b border-border-1 pt-[18px]")}>
             {series.map((d, i) => (
-              <div key={d.dayStart} className="flex h-full min-w-0 flex-1 flex-col justify-end">
+              <div key={d.dayStart} className="relative flex h-full min-w-0 flex-col items-center justify-end">
+                {i === peak ? (
+                  <span
+                    className="absolute inset-x-0 text-center text-[11px] leading-4 font-medium text-ink-2 tabular-nums"
+                    style={{ bottom: `calc(${(d.count / max) * 100}% + 2px)` }}
+                  >
+                    {d.count}
+                  </span>
+                ) : null}
                 <div
-                  className={cn("w-full rounded-t-[2px]", i >= split ? BAR.accent : BAR.ink, barMotion)}
+                  className={cn("w-4 rounded-t-[2px]", i >= split ? BAR.accent : BAR.ink, barMotion)}
                   style={{ height: `${(d.count / max) * 100}%` }}
                 />
               </div>
             ))}
           </div>
-          <div aria-hidden="true" className="mt-1 flex justify-between text-[11px] leading-4 text-ink-3 tabular-nums">
-            <span>{shortDayLabel(series[0]!.dayStart, timezone)}</span>
-            <span>{split > 0 && split < series.length ? shortDayLabel(series[split]!.dayStart, timezone) : ""}</span>
-            <span>Today</span>
+          <div aria-hidden="true" className={cn(dayGridClass, "mt-1 text-[11px] leading-4 text-ink-3 tabular-nums")}>
+            {ticks.map((t) => (
+              <span key={t.col} className="justify-self-center whitespace-nowrap" style={{ gridColumnStart: t.col }}>
+                {t.label}
+              </span>
+            ))}
           </div>
           <p className="sr-only">Replies per day, oldest first: {counts.join(", ")}. {total} in total.</p>
         </>
@@ -106,7 +127,8 @@ function HorizontalBars({ title, rows, empty }: { title: string; rows: Row[]; em
 /**
  * Breakdown (design-spec §4.1 item 4): the day series on the left; draft
  * outcomes and the inquiry mix on the right. Staff-edited replies carry the
- * secondary colour, the staff-written marker everywhere else in the app.
+ * secondary colour, the staff-written marker everywhere else in the app; the
+ * inquiry mix is two plain counts, so neither row takes a colour.
  */
 export function Breakdown({
   series,
@@ -142,7 +164,7 @@ export function Breakdown({
             empty="No guest threads in the last 30 days yet."
             rows={[
               { label: "Inquiries", value: mix.inquiry, color: "ink" },
-              { label: "Booked stays", value: mix.booked, color: "accent" },
+              { label: "Booked stays", value: mix.booked, color: "ink" },
             ]}
           />
         </div>
