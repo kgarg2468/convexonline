@@ -172,7 +172,9 @@ function DraftedVsSent({ items, now }: { items: OverviewSummary["comparisons"]["
   return (
     <div className={cardClass}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className={chartTitleClass}>Drafted vs sent · last {n === 0 ? 5 : n} {plural(n === 0 ? 5 : n, "reply", "replies")}</h3>
+        <h3 className={chartTitleClass}>
+          Drafted vs sent{n === 0 ? "" : ` · last ${n} ${plural(n, "reply", "replies")}`}
+        </h3>
         {edited.length > 0 && edited.length < n ? (
           <p className="text-[12px] leading-4 text-ink-2 tabular-nums">
             {n - edited.length} sent as written
