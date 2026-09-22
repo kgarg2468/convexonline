@@ -4,7 +4,7 @@ import type { OutboxRow } from "../types";
 import { OUTBOX_LABEL, formatStamp } from "../lib/format";
 import { cn } from "@/lib/utils";
 import { Chip, SectionLabel } from "./primitives";
-import { LEGACY_TONE } from "./styles";
+import { LEGACY_TONE, inboxLabelClass } from "./styles";
 
 const KIND_LABEL: Record<OutboxRow["kind"], string> = {
   reply: "Reply",
@@ -60,7 +60,7 @@ export function OutboxList({
           onClick={() => setOpen((o) => !o)}
           className="-mx-1 flex cursor-pointer items-center gap-1.5 rounded-sm px-1 py-0.5 text-left outline-hidden transition-colors duration-micro hover:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2"
         >
-          <SectionLabel as="p">
+          <SectionLabel as="p" className={inboxLabelClass}>
             {title} <span className="ml-0.5 font-medium tabular-nums normal-case tracking-normal text-ink-3">· {sorted.length}</span>
           </SectionLabel>
           <ChevronDown
@@ -69,7 +69,7 @@ export function OutboxList({
           />
         </button>
       ) : hideTitle ? null : (
-        <SectionLabel>{title}</SectionLabel>
+        <SectionLabel className={inboxLabelClass}>{title}</SectionLabel>
       )}
       {expanded ? (
         <ul id={listId} className={cn("divide-y divide-border-1", !(hideTitle && !foldable) && "mt-1")}>

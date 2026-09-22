@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import * as m from "motion/react-m";
-import { CalendarDays, Lock, Tag, Users } from "lucide-react";
+import { Lock } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { LiveMailDecision, ThreadDetail as ThreadDetailData } from "../types";
@@ -19,7 +19,7 @@ import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
 import { ThreadPresence } from "./ThreadPresence";
 import { BackButton, InlineNotice, SourcesPlaceholder } from "./primitives";
-import { threadMainClass, threadPadClass } from "./styles";
+import { threadMainClass, threadPadClass, touchControlClass } from "./styles";
 
 /** The send FLIP: 260ms ease-out on a click, instant after ⌘⏎ (research-motion §3: keyboard never animates). */
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -34,7 +34,8 @@ function formatExpiry(ms: number, now: number): string {
 }
 
 /**
- * The thread pane: sticky head, claim bar, messages, gap form, the draft
+ * The thread pane: one sticky head (subject, status, claim actions, guest and
+ * stay meta, claim and presence line), the messages, gap form, the draft
  * review surface, follow-up and delivery history, then status actions. Beside
  * the queue it renders its main column and the sources pane as two grid items
  * of the inbox frame (each scrolling on its own); under 900px it is a single
@@ -135,50 +136,105 @@ export function ThreadDetail({
       ? [...messages].reverse().find((msg) => msg.direction === "out" && msg.text.trim() === draft.answer.trim())?._id ?? null
       : null;
 
+  const claimLine = mine
+    ? `You have this thread until ${formatExpiry(holder!.expiresAt, now)}.`
+    : heldByOther
+      ? `${holder!.name ?? "Another staff member"} is working on this until ${formatExpiry(holder!.expiresAt, now)}.`
+      : "Nobody is working on this thread.";
+
   const main = (
     <div className={threadMainClass}>
+      {/* One compact head: subject + status + claim actions, the guest and stay meta, the claim and presence line.
+          It sticks beside the queue, where the column scrolls on its own; on phones the page scrolls and it scrolls with it.
+          It is also the container the head row queries so the actions can wrap under the subject in a narrow pane. */}
       <div
         className={cn(
-          "fd-thread__head sticky top-0 z-10 border-b border-border-1 bg-bg-1 py-3 max-[900px]:top-(--header-h)",
+          "fd-thread__head @container z-10 border-b border-border-1 bg-bg-1 py-2 min-[901px]:sticky min-[901px]:top-0",
           threadPadClass,
         )}
       >
         {onBack ? <BackButton onBack={onBack} /> : null}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-[18px] leading-6 font-semibold text-balance text-ink-1">{thread.subject}</h2>
-            <p className="mt-0.5 truncate text-[13px] leading-5 text-ink-2">
-              {guestName(thread.guestEmail)} · {thread.guestEmail}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-1.5 pt-0.5">
+        {/* Under ~700px of pane the subject keeps the whole first line and the actions wrap beneath it, so it never truncates
+            just because the claim actions grew. Wider than that, both share the line. */}
+        <div className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h2 title={thread.subject} className="min-w-0 flex-1 basis-full truncate text-[18px] leading-6 font-semibold text-ink-1 @min-[660px]:basis-0">
+            {thread.subject}
+          </h2>
+          <div className="flex shrink-0 items-center gap-2">
             <StatusChip status={thread.status} />
+            {mine ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn("text-[13px] text-ink-2", touchControlClass)}
+                  disabled={lock.busy}
+                  onClick={() => void lock.run(() => claim({ threadId }))}
+                >
+                  Extend
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn("bg-white text-[13px]", touchControlClass)}
+                  disabled={lock.busy}
+                  onClick={() => void lock.run(() => release({ threadId }))}
+                >
+                  Release
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn("bg-white text-[13px] text-ink-1", touchControlClass)}
+                disabled={lock.busy || heldByOther}
+                onClick={() => void lock.run(() => claim({ threadId }))}
+              >
+                {lock.busy ? "Taking…" : "Take this thread"}
+              </Button>
+            )}
           </div>
         </div>
-        {thread.stay ? (
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5 text-ink-2">
-            <span className="inline-flex items-center gap-1.5">
-              <Tag aria-hidden="true" className="size-3.5 text-ink-3" />
+        <p className="mt-0.5 truncate text-[13px] leading-5 text-ink-2">
+          <span className="font-medium text-ink-1">{guestName(thread.guestEmail)}</span>
+          {" · "}
+          {thread.guestEmail}
+          {thread.stay ? (
+            <>
+              {" · "}
               {thread.stay.status === "booked" ? "Booked" : "Inquiry"}
-            </span>
-            {thread.stay.checkIn ? (
-              <span className="inline-flex items-center gap-1.5 tabular-nums">
-                <CalendarDays aria-hidden="true" className="size-3.5 text-ink-3" />
-                {formatDate(thread.stay.checkIn)}
-                {thread.stay.checkOut ? ` to ${formatDate(thread.stay.checkOut)}` : ""}
-              </span>
-            ) : null}
-            {thread.stay.party ? (
-              <span className="inline-flex items-center gap-1.5 tabular-nums">
-                <Users aria-hidden="true" className="size-3.5 text-ink-3" />
-                {thread.stay.party} {thread.stay.party === 1 ? "guest" : "guests"}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+              {thread.stay.checkIn ? (
+                <span className="tabular-nums">
+                  {" · "}
+                  {formatDate(thread.stay.checkIn)}
+                  {thread.stay.checkOut ? ` to ${formatDate(thread.stay.checkOut)}` : ""}
+                </span>
+              ) : null}
+              {thread.stay.party ? (
+                <span className="tabular-nums">
+                  {" · "}
+                  {thread.stay.party} {thread.stay.party === 1 ? "guest" : "guests"}
+                </span>
+              ) : null}
+            </>
+          ) : null}
+        </p>
+        <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-3">
+          {heldByOther ? <Lock aria-hidden="true" className="size-3 shrink-0" /> : null}
+          <span className="truncate" title={holder ? formatStamp(holder.expiresAt) : undefined}>
+            {claimLine}
+          </span>
+          <ThreadPresence key={`${threadId}:${viewerId}`} threadId={threadId} />
+        </p>
       </div>
 
-      <div className={cn(threadPadClass, "flex flex-col gap-4 pt-4 pb-10")}>
+      {/* One measure for the whole stack (68ch of content, padding outside it) so every section shares a right edge. */}
+      <div className={cn(threadPadClass, "box-content flex max-w-[68ch] flex-col gap-4 pt-4 pb-10")}>
+        {lock.error ? <InlineNotice tone="error">{lock.error}</InlineNotice> : null}
         {openCorrections > 0 ? (
           <InlineNotice tone="caution" className="flex flex-wrap items-center justify-between gap-2">
             <span>A reply sent in this thread quoted a page that has since changed.</span>
@@ -194,75 +250,20 @@ export function ThreadDetail({
           </InlineNotice>
         ) : null}
 
-        <div>
-          <div className="flex items-center justify-between gap-3 rounded-md border border-border-1 bg-bg-2 py-1.5 pr-1.5 pl-3">
-            <p className="flex min-w-0 items-center gap-2 text-[13px] leading-5 text-ink-1">
-              {heldByOther ? <Lock aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" /> : null}
-              <span title={holder ? formatStamp(holder.expiresAt) : undefined}>
-                {mine
-                  ? `You have this thread until ${formatExpiry(holder!.expiresAt, now)}.`
-                  : heldByOther
-                    ? `${holder!.name ?? "Another staff member"} is working on this until ${formatExpiry(holder!.expiresAt, now)}.`
-                    : "Nobody is working on this thread."}
-              </span>
-            </p>
-            <div className="flex shrink-0 items-center gap-1">
-              {mine ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-[13px] text-ink-2"
-                    disabled={lock.busy}
-                    onClick={() => void lock.run(() => claim({ threadId }))}
-                  >
-                    Extend
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="bg-white text-[13px]"
-                    disabled={lock.busy}
-                    onClick={() => void lock.run(() => release({ threadId }))}
-                  >
-                    Release
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="text-[13px]"
-                  disabled={lock.busy || heldByOther}
-                  onClick={() => void lock.run(() => claim({ threadId }))}
-                >
-                  {lock.busy ? "Taking…" : "Take this thread"}
-                </Button>
-              )}
-            </div>
-          </div>
-          <ThreadPresence key={`${threadId}:${viewerId}`} threadId={threadId} />
-          {lock.error ? (
-            <InlineNotice tone="error" className="mt-2">
-              {lock.error}
-            </InlineNotice>
-          ) : null}
-        </div>
-
         {messages.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-border-2 px-4 py-6 text-center">
-            <p className="text-[14px] leading-5 font-semibold text-ink-1">No messages stored for this thread</p>
-          </div>
+          <p className="text-[13px] leading-5 text-ink-2">No messages stored for this thread.</p>
         ) : (
-          <ol className="flex max-w-[68ch] flex-col gap-3">
+          // The conversation: flat messages separated by hairlines (Gmail/Front), never bordered cards.
+          <ol className="divide-y divide-border-1 [&>li:first-child>article]:pt-0">
             {messages.map((msg) => {
               const out = msg.direction === "out";
               const meta = (
-                <div className="mb-1 flex items-baseline justify-between gap-3 text-[12px] leading-4 text-ink-3 tabular-nums">
-                  <span className="truncate font-medium text-ink-2">{out ? `Front desk to ${guestName(msg.to)}` : guestName(msg.from)}</span>
-                  <time dateTime={new Date(msg.at).toISOString()} title={formatStamp(msg.at)} className="shrink-0">
+                <div className="flex items-baseline gap-2 text-[13px] leading-5">
+                  <span className="truncate font-semibold text-ink-1">{out ? `Front desk to ${guestName(msg.to)}` : guestName(msg.from)}</span>
+                  <span aria-hidden="true" className="text-ink-3">
+                    ·
+                  </span>
+                  <time dateTime={new Date(msg.at).toISOString()} title={formatStamp(msg.at)} className="shrink-0 text-[12px] leading-4 text-ink-3 tabular-nums">
                     {formatWhen(msg.at, now)}
                   </time>
                 </div>
@@ -270,23 +271,23 @@ export function ThreadDetail({
               const body = (
                 <div
                   className={cn(
-                    "whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1",
-                    out ? "text-[14px] leading-[1.55]" : "font-serif text-[15px] leading-[1.55] italic",
+                    "mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1",
+                    out ? "text-[14px] leading-6" : "font-serif text-[15px] leading-6 italic",
                   )}
                 >
                   {msg.text}
                 </div>
               );
-              const bubble = cn("rounded-[10px] px-4 py-3", out ? "fd-msg--out border border-border-1 bg-white" : "bg-bg-2");
+              const article = cn("py-4", out && "fd-msg--out");
               return (
                 <li key={msg._id}>
                   {msg._id === sentMessageId && draft ? (
-                    <m.article layoutId={`draft-${draft._id}`} transition={sendTransition(sendSource)} className={bubble}>
+                    <m.article layoutId={`draft-${draft._id}`} transition={sendTransition(sendSource)} className={article}>
                       {meta}
                       {body}
                     </m.article>
                   ) : (
-                    <article className={bubble}>
+                    <article className={article}>
                       {meta}
                       {body}
                     </article>
@@ -334,44 +335,47 @@ export function ThreadDetail({
         {earlierReplyOutbox.length > 0 ? <OutboxList rows={earlierReplyOutbox} title="Earlier reply delivery" /> : null}
         {correctionOutbox.length > 0 ? <OutboxList rows={correctionOutbox} title="Correction delivery" /> : null}
 
-        <div className="flex flex-wrap items-center gap-1 border-t border-border-1 pt-3">
-          {thread.status !== "closed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[13px] text-ink-2"
-              disabled={!mine || statusAction.busy}
-              onClick={() => void statusAction.run(() => setStatus({ threadId, status: "closed" }))}
-            >
-              Close thread
-            </Button>
-          ) : null}
-          {thread.status !== "waiting_guest" && thread.status !== "closed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[13px] text-ink-2"
-              disabled={!mine || statusAction.busy}
-              onClick={() => void statusAction.run(() => setStatus({ threadId, status: "waiting_guest" }))}
-            >
-              Mark waiting on guest
-            </Button>
-          ) : null}
-          {canRegenerate ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[13px] text-ink-2"
-              disabled={regenAction.busy}
-              onClick={() => void regenAction.run(() => regenerate({ threadId }))}
-            >
-              {regenAction.busy ? "Requesting…" : "Redraft from the latest message"}
-            </Button>
-          ) : null}
-          {!mine ? <span className="ml-1 text-[13px] leading-5 text-ink-3">Take the thread to change its status.</span> : null}
+        <div className="border-t border-border-1 pt-3">
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+            {thread.status !== "closed" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("-ml-2.5 text-[13px] text-ink-2", touchControlClass)}
+                disabled={!mine || statusAction.busy}
+                onClick={() => void statusAction.run(() => setStatus({ threadId, status: "closed" }))}
+              >
+                Close thread
+              </Button>
+            ) : null}
+            {thread.status !== "waiting_guest" && thread.status !== "closed" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("text-[13px] text-ink-2", touchControlClass)}
+                disabled={!mine || statusAction.busy}
+                onClick={() => void statusAction.run(() => setStatus({ threadId, status: "waiting_guest" }))}
+              >
+                Mark waiting on guest
+              </Button>
+            ) : null}
+            {canRegenerate ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("text-[13px] text-ink-2", touchControlClass)}
+                disabled={regenAction.busy}
+                onClick={() => void regenAction.run(() => regenerate({ threadId }))}
+              >
+                {regenAction.busy ? "Requesting…" : "Redraft from the latest message"}
+              </Button>
+            ) : null}
+          </div>
+          {/* The hint sits on its own line under the buttons, never on their baseline where it reads as a third button. */}
+          {!mine ? <p className="mt-1 text-[12px] leading-4 text-ink-3">Take the thread to change its status.</p> : null}
         </div>
         {regenAction.error ? <InlineNotice tone="error">{regenAction.error}</InlineNotice> : null}
         {statusAction.error ? <InlineNotice tone="error">{statusAction.error}</InlineNotice> : null}

@@ -14,6 +14,7 @@ import { CitedText } from "./CitedText";
 import { OutboxList } from "./OutboxList";
 import { isInFlight, latestOutbox, outboxForDraft } from "../lib/outbox";
 import { Chip, DisclosureButton, Hint, InlineNotice, type ChipTone } from "./primitives";
+import { inboxHintClass, touchControlClass } from "./styles";
 
 type Draft = NonNullable<ThreadDetail["draft"]>;
 
@@ -65,7 +66,7 @@ export function DraftPanel({
   /** The claim whose sentence or source card is hovered or focused. */
   activeClaimId?: string | null;
   onActiveClaim?: (claimId: string | null) => void;
-  /** False while the source cards are not in the document (900–1199px, sheet closed). */
+  /** False while the source cards are not in the document (900–1439px, sheet closed). */
   describeSources?: boolean;
 }) {
   const draft = detail.draft!;
@@ -167,7 +168,7 @@ export function DraftPanel({
   const folded = sent && unfoldedId !== draft._id;
 
   return (
-    <section aria-labelledby="fd-draft-title" className="rounded-[10px] border border-border-1 bg-white p-4">
+    <section aria-labelledby="fd-draft-title" className="rounded-lg border border-border-1 bg-white p-4">
       <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h3 id="fd-draft-title" className="text-[14px] leading-5 font-semibold text-ink-1">
           {sent ? (
@@ -178,7 +179,7 @@ export function DraftPanel({
             "Draft reply"
           )}
         </h3>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 [&_[data-slot=badge]]:text-[11px]">
           <Chip tone={status.tone}>{status.label}</Chip>
           {folded ? (
             <Chip tone={verifiedCount > 0 ? "success" : "muted"}>
@@ -209,7 +210,7 @@ export function DraftPanel({
         <OutboxList rows={draftOutbox} title="Reply delivery" hideTitle className="mt-1" />
       ) : (
         <div id="fd-draft-body">
-          {draft.statusReason ? <Hint className="mt-1.5">{draft.statusReason}</Hint> : null}
+          {draft.statusReason ? <Hint className={cn(inboxHintClass, "mt-1.5")}>{draft.statusReason}</Hint> : null}
 
           {serverMoved && dirty ? (
             <InlineNotice tone="caution" className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -242,7 +243,7 @@ export function DraftPanel({
                     disabled={action.busy || sendAction.busy}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={onEditorKey}
-                    className="min-h-36 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+                    className="min-h-36 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-6 text-ink-1 md:text-[14px]"
                   />
                 </>
               ) : draft.answer ? (
@@ -252,10 +253,11 @@ export function DraftPanel({
                   activeClaimId={activeClaimId}
                   onActiveClaim={onActiveClaim}
                   describeCards={describeSources}
-                  className="rounded-md border border-border-1 bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1"
+                  // Same border and padding as the editor, so claiming the thread never shifts the text.
+                  className="rounded-lg border border-transparent px-3 py-2.5 text-[14px] leading-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1"
                 />
               ) : (
-                <div className="rounded-md border border-border-1 bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-3">No answer text.</div>
+                <div className="text-[14px] leading-6 text-ink-3">No answer text.</div>
               )}
               {sending ? (
                 <p className="mt-1.5 text-[12px] leading-4 text-ink-3" aria-live="polite">
@@ -274,7 +276,7 @@ export function DraftPanel({
           {editable && staffEdited && !dirty ? (
             <label
               htmlFor="fd-staff-authored"
-              className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-warning-10/20 bg-warning-3 px-3 py-2 text-[13px] leading-5 text-warning-10"
+              className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md bg-warning-3 px-3 py-2 text-[13px] leading-5 text-warning-10"
             >
               <input
                 id="fd-staff-authored"
@@ -297,7 +299,7 @@ export function DraftPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-[13px]"
+                  className={cn("text-[13px]", touchControlClass)}
                   disabled={!dirty || action.busy || sendAction.busy || text.trim().length === 0}
                   onClick={() => void save()}
                 >
@@ -308,7 +310,7 @@ export function DraftPanel({
                 <Button
                   type="button"
                   size="sm"
-                  className="text-[13px]"
+                  className={cn("text-[13px]", touchControlClass)}
                   disabled={!canSend}
                   aria-describedby="fd-send-why"
                   onClick={(event) => void send(event.detail === 0 ? "keyboard" : "pointer")}
@@ -323,11 +325,11 @@ export function DraftPanel({
                 </Button>
               ) : null}
               <span className="ml-auto text-[13px] leading-5 text-ink-2">
-                {savedAt && !dirty ? "Saved." : dirty ? "Unsaved edits." : !canEdit && !done ? "Take the thread to edit or send." : ""}
+                {savedAt && !dirty ? "Saved." : dirty ? "Unsaved edits." : ""}
               </span>
             </div>
           )}
-          <Hint id="fd-send-why" className="mt-2">
+          <Hint id="fd-send-why" className={cn(inboxHintClass, "mt-2")}>
             {blocked ??
               (isDemo
                 ? "Simulated send: the reply is recorded in this demo only. No real email is sent."

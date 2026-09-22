@@ -1,6 +1,6 @@
 # Verification record
 
-Verified on September 21, 2026 against the
+Verified on September 21 and 22, 2026 against the
 [Convex-hosted app](https://outgoing-zebra-720.convex.site).
 This record distinguishes production provider checks, isolated real-model
 experiments and tests with mocked provider transport.
@@ -18,6 +18,14 @@ experiments and tests with mocked provider transport.
   before merging. The [deployed browser run](https://github.com/kgarg2468/convexonline/actions/runs/35664565718)
   tested application revision `e80454b`; subsequent changes at the time of the
   provider walkthrough were documentation only.
+- Interface revamp (September 22): after each of the shell, inbox, policy
+  changes, knowledge, settings, security, overview and polish PRs, 437 offline
+  tests, lint, both TypeScript projects and the build passed, and the browser
+  suite (44 scenarios at 1440 by 900, 1000 by 800 and iPhone 13) passed against
+  a local build before merge. Each PR had GitHub CI, a Greptile review and a
+  separate taste review; a security pass typed injection payloads through every
+  free-text field and checked ids, rate limits and response headers
+  (`tests/browser/specs/security.spec.ts`, `tests/security.test.ts`).
 - A production dependency audit reported zero known vulnerabilities at the time
   of the audit. This is an audit result, not a security guarantee.
 

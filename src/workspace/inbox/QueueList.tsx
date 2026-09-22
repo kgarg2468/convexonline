@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { QueueRow, type SelectSource } from "./QueueRow";
 import { QueueSkeleton } from "./QueueSkeleton";
+import { touchControlClass } from "./styles";
 
 const FILTERS: { value: ThreadStatus | "all"; label: string }[] = [
   { value: "all", label: "All threads" },
@@ -153,7 +154,7 @@ export function QueueList({
         <label className="sr-only" htmlFor="fd-queue-search">
           Search subject, guest email or message
         </label>
-        <InputGroup className="bg-bg-1">
+        <InputGroup className={cn("bg-bg-1", touchControlClass)}>
           <InputGroupAddon>
             <Search aria-hidden="true" className="text-ink-3" />
           </InputGroupAddon>
@@ -166,7 +167,7 @@ export function QueueList({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </InputGroup>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <label className="sr-only" htmlFor="fd-queue-filter">
             Filter by status
           </label>
@@ -176,7 +177,7 @@ export function QueueList({
               value={filter}
               disabled={searching}
               onChange={(e) => onFilterChange(e.target.value as QueueFilter)}
-              className="h-7 cursor-pointer appearance-none rounded-full border border-border-1 bg-bg-1 pr-6 pl-2.5 text-[13px] font-medium text-ink-1 outline-hidden transition-colors duration-micro hover:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-50"
+              className="h-7 max-[900px]:h-11 cursor-pointer appearance-none rounded-full border border-border-1 bg-bg-1 pr-6 pl-2.5 text-[13px] font-medium text-ink-1 outline-hidden transition-colors duration-micro hover:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-50"
             >
               {FILTERS.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -187,8 +188,9 @@ export function QueueList({
             <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-ink-3" />
           </span>
           {onCompose ? (
-            <Button type="button" variant="outline" size="sm" className="px-2 text-[13px]" onClick={onCompose}>
-              Simulate a guest inquiry
+            // Short visible label so the row never wraps at 300px; the accessible name stays the full one.
+            <Button type="button" variant="outline" size="sm" aria-label="Simulate a guest inquiry" className={cn("ml-auto shrink-0 px-2 text-[13px]", touchControlClass)} onClick={onCompose}>
+              Simulate inquiry
             </Button>
           ) : null}
         </div>

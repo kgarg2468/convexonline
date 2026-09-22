@@ -14,8 +14,8 @@ import { ThreadDetail } from "./ThreadDetail";
 import { DemoInbound } from "../shell/DemoInbound";
 
 /**
- * The inbox frame. From 1200px: queue 340 | thread | sources 320, each pane
- * scrolling on its own under the sticky header. 900–1199px: queue + thread,
+ * The inbox frame. From 1440px: queue 300 | thread | sources 288, each pane
+ * scrolling on its own under the sticky header. 900–1439px: queue + thread,
  * the sources pane opens as a sheet from the header (SourcesSheet). Under
  * 900px the list and the thread are separate screens that scroll with the
  * page. ThreadDetail renders its main column and the sources pane as two
@@ -139,7 +139,7 @@ export function InboxView({
         className={cn(
           narrow
             ? "contents"
-            : "absolute inset-0 grid grid-cols-[340px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] min-[1200px]:grid-cols-[340px_minmax(0,1fr)_320px]",
+            : "absolute inset-0 grid grid-cols-[300px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] min-[1440px]:grid-cols-[300px_minmax(0,1fr)_288px]",
         )}
       >
         {showList ? (
@@ -229,7 +229,7 @@ export function InboxView({
           ) : (
             <>
               <div className="flex min-h-0 min-w-0 items-center justify-center overflow-y-auto p-6">
-                <div className="max-w-sm rounded-[10px] border border-dashed border-border-2 px-6 py-8 text-center">
+                <div className="max-w-sm px-6 text-center">
                   <p className="text-[14px] leading-5 font-semibold text-ink-1">
                     Pick a thread
                   </p>
