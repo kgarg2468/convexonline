@@ -419,6 +419,7 @@ export default defineSchema({
     cancelledBy: v.optional(v.id("users")),
   })
     .index("by_thread", ["threadId"])
+    .index("by_thread_status", ["threadId", "status"])
     /** Email approvals made under one membership row, so removing it never scans the inn's history. */
     .index("by_approver_membership_status", ["approvedByMembershipId", "status"]),
 
