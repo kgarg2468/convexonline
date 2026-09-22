@@ -440,7 +440,7 @@ function Workspace({
       case "knowledge":
         return { title: "Knowledge", sub: current.siteUrl };
       case "settings":
-        return { title: "Settings" };
+        return { title: "Settings", sub: "Property, guest inbox, providers and team" };
     }
   })();
 

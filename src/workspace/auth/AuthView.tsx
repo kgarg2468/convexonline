@@ -1,13 +1,20 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field, Notice } from "../lib/ui";
-import { Mark } from "../lib/Mark";
 import { errorMessage } from "../lib/format";
+import { AuthCard, AuthScreen, CardText, OrDivider, Wordmark } from "./AuthCard";
 
 type Flow = "signIn" | "signUp";
 
 /** How long a resolved sign-in may sit without the provider turning authenticated before staff are told. */
 const HANDOFF_TIMEOUT_MS = 20_000;
+
+/** Tab underline in the accent, on the card's hairline. */
+const tabClass =
+  "h-9 flex-1 rounded-none px-2 text-[14px] text-ink-2 hover:text-ink-1 data-active:text-ink-1 after:bottom-[-1px] after:bg-accent-9";
 
 /**
  * Staff sign in with email and password (Convex Auth Password provider).
@@ -65,99 +72,75 @@ export function AuthView({ banner }: { banner?: ReactNode } = {}) {
   }
 
   return (
-    <div className="fd-center">
-      <div className="fd-center__panel">
-        <div className="fd-wordmark">
-          <Mark size={26} />
-          <span>Front Desk</span>
-        </div>
+    <AuthScreen>
+      <AuthCard>
+        <Wordmark />
 
-        {banner ? <div className="fd-auth__banner">{banner}</div> : null}
+        {banner ? <div>{banner}</div> : null}
 
-        <div className="fd-tabs" role="tablist" aria-label="Staff sign in">
-          <button
-            type="button"
-            role="tab"
-            id="fd-tab-signin"
-            aria-selected={flow === "signIn"}
-            aria-controls="fd-auth-form"
-            className="fd-tabs__tab"
-            onClick={() => setFlow("signIn")}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="fd-tab-signup"
-            aria-selected={flow === "signUp"}
-            aria-controls="fd-auth-form"
-            className="fd-tabs__tab"
-            onClick={() => setFlow("signUp")}
-          >
-            Create staff account
-          </button>
-        </div>
+        {/* One form serves both tabs: the panel's value follows the flow, so the
+            typed email and password survive switching tabs. */}
+        <Tabs value={flow} onValueChange={(value) => setFlow(value as Flow)} className="gap-5">
+          <TabsList variant="line" aria-label="Staff sign in" className="h-9 w-full gap-0 border-b border-border-1 p-0">
+            <TabsTrigger value="signIn" className={tabClass}>
+              Sign in
+            </TabsTrigger>
+            <TabsTrigger value="signUp" className={tabClass}>
+              Create staff account
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value={flow}>
+            <form id="fd-auth-form" onSubmit={submit} className="flex flex-col gap-4">
+              {flow === "signUp" ? (
+                <Field label="Your name" htmlFor="fd-auth-name" hint="Shown to other staff on the threads you claim.">
+                  <Input id="fd-auth-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                </Field>
+              ) : null}
+              <Field label="Email" htmlFor="fd-auth-email">
+                <Input
+                  id="fd-auth-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </Field>
+              <Field
+                label="Password"
+                htmlFor="fd-auth-password"
+                hint={flow === "signUp" ? "At least 8 characters." : undefined}
+              >
+                <Input
+                  id="fd-auth-password"
+                  type="password"
+                  autoComplete={flow === "signUp" ? "new-password" : "current-password"}
+                  required
+                  minLength={flow === "signUp" ? 8 : undefined}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+              {error ? <Notice tone="error">{error}</Notice> : null}
+              <Button type="submit" size="lg" className="w-full" disabled={busy !== null}>
+                {busy === "password" ? "Signing in…" : flow === "signIn" ? "Sign in" : "Create account"}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
 
-        <form id="fd-auth-form" role="tabpanel" aria-labelledby={flow === "signIn" ? "fd-tab-signin" : "fd-tab-signup"} onSubmit={submit}>
-          {flow === "signUp" ? (
-            <Field label="Your name" htmlFor="fd-auth-name" hint="Shown to other staff on the threads you claim.">
-              <input
-                id="fd-auth-name"
-                className="fd-input"
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </Field>
-          ) : null}
-          <Field label="Email" htmlFor="fd-auth-email">
-            <input
-              id="fd-auth-email"
-              className="fd-input"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Password"
-            htmlFor="fd-auth-password"
-            hint={flow === "signUp" ? "At least 8 characters." : undefined}
-          >
-            <input
-              id="fd-auth-password"
-              className="fd-input"
-              type="password"
-              autoComplete={flow === "signUp" ? "new-password" : "current-password"}
-              required
-              minLength={flow === "signUp" ? 8 : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
-          {error ? <Notice tone="error">{error}</Notice> : null}
-          <div className="fd-btn-row" style={{ marginTop: 14 }}>
-            <button type="submit" className="fd-btn fd-btn--primary" disabled={busy !== null}>
-              {busy === "password" ? "Signing in…" : flow === "signIn" ? "Sign in" : "Create account"}
-            </button>
-          </div>
-        </form>
+        <OrDivider>or</OrDivider>
 
-        <div className="fd-divider">or</div>
-
-        <div className="fd-demo-callout">
-          <p>
+        <div className="flex flex-col gap-3 rounded-[10px] bg-bg-2 p-4">
+          <CardText>
             Look around a fictional inn with seeded guest threads. The demo is private to your browser
             session and never sends real email.
-          </p>
-          <button type="button" className="fd-btn" disabled={busy !== null} onClick={enterDemo}>
+          </CardText>
+          <Button type="button" variant="outline" className="w-full bg-white" disabled={busy !== null} onClick={enterDemo}>
             {busy === "anonymous" ? "Opening demo…" : "Open the demo workspace"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthScreen>
   );
 }

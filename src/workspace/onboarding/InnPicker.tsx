@@ -5,10 +5,14 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { InnSummary, Viewer } from "../types";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Field, Notice } from "../lib/ui";
-import { Mark } from "../lib/Mark";
 import { useAsyncAction } from "../lib/hooks";
 import { errorMessage, hostOf } from "../lib/format";
+import { SectionLabel } from "../inbox/primitives";
+import { AuthCard, AuthScreen, CardText, OrDivider, Wordmark } from "../auth/AuthCard";
 
 /**
  * "external": a real property whose own public site is crawled later.
@@ -81,86 +85,68 @@ export function InnPicker({
   }
 
   return (
-    <div className="fd-center">
-      <div className="fd-center__panel fd-center__panel--wide">
-        <div className="fd-wordmark">
-          <Mark size={26} />
-          <span>Front Desk</span>
+    <AuthScreen>
+      <AuthCard>
+        <div className="flex flex-col gap-3">
+          <Wordmark />
+          <CardText>
+            Signed in as {viewer.name ?? viewer.email ?? "staff"}.{" "}
+            {inns.length > 0 ? "Choose the property to work in." : "Set up your first property."}
+          </CardText>
         </div>
-        <p className="fd-lede">
-          Signed in as {viewer.name ?? viewer.email ?? "staff"}.{" "}
-          {inns.length > 0 ? "Choose the property to work in." : "Set up your first property."}
-        </p>
 
         {inns.length > 0 ? (
-          <div className="fd-section">
-            <p className="fd-section__title">Your properties</p>
-            <ul className="fd-staff">
+          <section aria-labelledby="fd-picker-list-title" className="flex flex-col gap-2">
+            <SectionLabel id="fd-picker-list-title" as="h3">
+              Your properties
+            </SectionLabel>
+            <ul className="divide-y divide-border-1 rounded-md border border-border-1">
               {inns.map((inn) => (
-                <li key={inn.innId}>
-                  <span>
-                    <strong>{inn.name}</strong>{" "}
-                    <span className="fd-muted fd-small">
+                <li key={inn.innId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="flex min-w-0 flex-col">
+                    <strong className="truncate text-[14px] leading-5 font-semibold text-ink-1">{inn.name}</strong>
+                    <span className="truncate text-[12px] leading-4 text-ink-2">
                       {hostOf(inn.siteUrl)} · {inn.role}
                       {inn.isDemo ? " · demo" : ""}
                     </span>
                   </span>
-                  <button type="button" className="fd-btn fd-btn--small" onClick={() => onSelect(inn.innId)}>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0 text-ink-1" onClick={() => onSelect(inn.innId)}>
                     Open
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         ) : null}
 
         {showForm ? (
-          <form onSubmit={submit}>
-            <p className="fd-section__title">New property</p>
+          <form onSubmit={submit} className="flex flex-col gap-4" aria-labelledby="fd-picker-form-title">
+            <SectionLabel id="fd-picker-form-title" as="h3">
+              New property
+            </SectionLabel>
             {/* Option labels deliberately avoid the words "Website" and
                 "Property name": those are the labels of the inputs below.
                 The kind is locked while a create is pending so the selected
                 mode cannot diverge from the request already in flight. */}
-            <fieldset className="fd-kind">
-              <legend className="fd-field__label">What are you setting up?</legend>
-              <label className="fd-kind__option">
-                <input
-                  type="radio"
-                  name="fd-inn-kind"
-                  checked={kind === "external"}
-                  disabled={action.busy}
-                  onChange={() => chooseKind("external")}
-                />
-                <span>
-                  <strong>A real property with its own site</strong>
-                  <span className="fd-muted fd-small">Replies are drafted only from what its public pages say.</span>
-                </span>
-              </label>
-              <label className="fd-kind__option">
-                <input
-                  type="radio"
-                  name="fd-inn-kind"
-                  checked={kind === "fictional"}
-                  disabled={action.busy}
-                  onChange={() => chooseKind("fictional")}
-                />
-                <span>
-                  <strong>A fictional inn with a hosted example site</strong>
-                  <span className="fd-muted fd-small">
-                    Front Desk hosts a small example site for it that you edit in Settings.
-                  </span>
-                </span>
-              </label>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1.5 text-[13px] leading-5 font-medium text-ink-1">What are you setting up?</legend>
+              <KindOption
+                checked={kind === "external"}
+                disabled={action.busy}
+                onChange={() => chooseKind("external")}
+                title="A real property with its own site"
+                body="Replies are drafted only from what its public pages say."
+              />
+              <KindOption
+                checked={kind === "fictional"}
+                disabled={action.busy}
+                onChange={() => chooseKind("fictional")}
+                title="A fictional inn with a hosted example site"
+                body="Front Desk hosts a small example site for it that you edit in Settings."
+              />
             </fieldset>
             <Field label="Property name" htmlFor="fd-inn-name">
-              <input
-                id="fd-inn-name"
-                className="fd-input"
-                required
-                maxLength={120}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <Input id="fd-inn-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             {kind === "external" ? (
               <Field
@@ -168,9 +154,8 @@ export function InnPicker({
                 htmlFor="fd-inn-url"
                 hint="Replies are drafted only from what this site says. Must be a public site starting with https://."
               >
-                <input
+                <Input
                   id="fd-inn-url"
-                  className="fd-input"
                   type="url"
                   required
                   pattern="[Hh][Tt][Tt][Pp][Ss]://.*"
@@ -186,48 +171,76 @@ export function InnPicker({
               htmlFor="fd-inn-tz"
               hint="The property's local time zone, stored on the inn record. An IANA name like America/New_York; leave blank for America/Los_Angeles."
             >
-              <input
-                id="fd-inn-tz"
-                className="fd-input"
-                placeholder="America/Los_Angeles"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-              />
+              <Input id="fd-inn-tz" placeholder="America/Los_Angeles" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
             </Field>
             {kind === "fictional" ? (
-              <div style={{ marginBottom: 14 }}>
-                <Notice tone="info">
-                  This creates a public website with illustrative policies. Every page is labelled as a fictional inn.
-                  Edit it in Settings, then use Knowledge to crawl it. Email and crawling require provider setup;
-                  creating the inn does not start either.
-                </Notice>
-              </div>
+              <Notice tone="info">
+                This creates a public website with illustrative policies. Every page is labelled as a fictional inn.
+                Edit it in Settings, then use Knowledge to crawl it. Email and crawling require provider setup;
+                creating the inn does not start either.
+              </Notice>
             ) : null}
             {action.error ? <Notice tone="error">{action.error}</Notice> : null}
-            <div className="fd-btn-row" style={{ marginTop: 14 }}>
-              <button type="submit" className="fd-btn fd-btn--primary" disabled={action.busy}>
+            <div className="flex flex-col gap-2">
+              <Button type="submit" size="lg" className="w-full" disabled={action.busy}>
                 {action.busy ? "Creating…" : kind === "fictional" ? "Create fictional inn" : "Create property"}
-              </button>
+              </Button>
               {inns.length > 0 ? (
-                <button type="button" className="fd-btn fd-btn--quiet" onClick={() => setShowForm(false)}>
+                <Button type="button" variant="ghost" size="lg" className="w-full text-ink-1" onClick={() => setShowForm(false)}>
                   Cancel
-                </button>
+                </Button>
               ) : null}
             </div>
           </form>
         ) : (
-          <div className="fd-btn-row">
-            <button type="button" className="fd-btn" onClick={() => setShowForm(true)}>
-              Add another property
-            </button>
-          </div>
+          <Button type="button" variant="outline" size="lg" className="w-full text-ink-1" onClick={() => setShowForm(true)}>
+            Add another property
+          </Button>
         )}
 
-        <div className="fd-divider" />
-        <button type="button" className="fd-btn fd-btn--quiet" onClick={() => void signOut()}>
+        <OrDivider />
+        <Button type="button" variant="ghost" size="sm" className="self-start text-[13px] text-ink-2" onClick={() => void signOut()}>
           Sign out
-        </button>
-      </div>
-    </div>
+        </Button>
+      </AuthCard>
+    </AuthScreen>
+  );
+}
+
+/** One kind of property: a bordered radio row whose whole surface is the label. */
+function KindOption({
+  checked,
+  disabled,
+  onChange,
+  title,
+  body,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: () => void;
+  title: string;
+  body: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors duration-micro",
+        checked ? "border-accent-9 bg-accent-2" : "border-border-1 bg-white hover:bg-bg-2",
+        disabled && "cursor-default opacity-70",
+      )}
+    >
+      <input
+        type="radio"
+        name="fd-inn-kind"
+        className="mt-1 size-3.5 shrink-0 accent-accent-9"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <strong className="text-[14px] leading-5 font-semibold text-ink-1">{title}</strong>
+        <span className="text-[12px] leading-4 text-ink-2">{body}</span>
+      </span>
+    </label>
   );
 }
