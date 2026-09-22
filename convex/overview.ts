@@ -25,7 +25,6 @@ import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireInnAccess } from "./access";
-import { threadAwaitingGuest } from "./followUps";
 import { aggregatesReady, correctionStatusCounts, sentRepliesBySentAt, threadStatusCounts } from "./aggregates";
 import { localDayOf } from "./lib/localDay";
 
@@ -43,6 +42,7 @@ const FACT_SCAN = 200;
 const PAGE_SCAN = 60;
 /** Most needs_staff threads whose reminder rows are checked for `followUpsDue`. */
 const FOLLOW_UP_THREADS = 100;
+const DUE_ROWS_PER_THREAD = 5;
 
 const UP_NEXT = 5;
 const DRAFTED_VS_SENT = 5;
@@ -95,6 +95,18 @@ async function threadsByStatus(ctx: QueryCtx, innId: Id<"inns">, status: Doc<"th
     .query("threads")
     .withIndex("by_inn_status", (q) => q.eq("innId", innId).eq("status", status))
     .take(THREAD_SCAN);
+}
+
+/**
+ * Only reminders ever reach `due` (emails go scheduled → reserved → sent),
+ * so the indexed lookup reads at most the few due rows a thread can hold.
+ */
+async function hasDueReminder(ctx: QueryCtx, threadId: Id<"threads">) {
+  const due = await ctx.db
+    .query("followUps")
+    .withIndex("by_thread_status", (q) => q.eq("threadId", threadId).eq("status", "due"))
+    .take(DUE_ROWS_PER_THREAD);
+  return due.some((r) => r.kind !== "email");
 }
 
 /**
@@ -175,9 +187,7 @@ export async function overviewSummary(ctx: QueryCtx, inn: Doc<"inns">, now: numb
   // checked; there is no per-inn index on followUps to count them directly.
   let followUpsDue = 0;
   for (const thread of needsStaffThreads.slice(0, FOLLOW_UP_THREADS)) {
-    // Same per-thread read the thread view uses: a thread holds a handful of
-    // follow-up rows (one reminder per guest turn), so no cap is needed there.
-    if (await threadAwaitingGuest(ctx, thread)) followUpsDue += 1;
+    if (await hasDueReminder(ctx, thread._id)) followUpsDue += 1;
   }
 
   const upNext = [...needsStaffThreads, ...readyThreads].slice(0, UP_NEXT).map((t) => ({
