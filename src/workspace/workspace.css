@@ -254,7 +254,10 @@ body {
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  /* The pane is also portaled (knowledge content sheet) outside `.fd-root`, so the design token is read directly. */
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-1);
+  margin-bottom: 8px;
 }
 .fd-version-pane pre {
   margin: 0;

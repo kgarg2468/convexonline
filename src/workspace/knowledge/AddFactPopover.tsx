@@ -47,11 +47,16 @@ export function AddFactPopover({ innId }: { innId: Id<"inns"> }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent
+        side="bottom"
         align="end"
         sideOffset={6}
         collisionPadding={16}
+        aria-labelledby="fd-fact-title"
         className="w-[400px] max-w-[calc(100vw-2rem)] gap-0 rounded-[12px] p-4 shadow-pop ring-border-1 duration-(--dur-small) ease-out-expo"
       >
+        <h3 id="fd-fact-title" className="mb-3 text-[14px] leading-5 font-semibold text-ink-1">
+          Add a fact
+        </h3>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div>
             <label className="text-[13px] leading-5 font-medium text-ink-1" htmlFor="fd-fact-q">

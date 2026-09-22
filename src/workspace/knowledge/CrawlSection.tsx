@@ -91,18 +91,28 @@ function LiveCrawl({ innId, siteUrl, firecrawl }: { innId: Id<"inns">; siteUrl: 
         ) : null}
       </div>
       {runs && runs.length > 0 ? (
-        <ul aria-label="Crawl runs" className="border-t border-border-1">
-          {runs.map((r) => (
-            <li key={r._id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border-1 px-4 py-2 last:border-b-0">
-              <Chip tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Chip>
-              <span className="min-w-0 text-[13px] leading-5 text-ink-1 [overflow-wrap:anywhere]">
-                {r.trigger === "cron" ? "Scheduled re-check" : "Staff crawl"} · started {formatWhen(r.startedAt, now)}
-                {r.finishedAt ? ` · finished ${formatStamp(r.finishedAt)}` : ""} · {r.pagesStored} stored, {r.pagesSkipped} skipped
-              </span>
-              {r.reason ? <span className={cn(metaClass, "min-w-0 [overflow-wrap:anywhere]")}>{r.reason}</span> : null}
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="flex items-baseline gap-2 border-t border-border-1 px-4 py-2">
+            <SectionLabel id="fd-crawl-runs-title" as="h4">
+              Run history
+            </SectionLabel>
+            <span className={metaClass}>
+              {runs.length} {runs.length === 1 ? "run" : "runs"}
+            </span>
+          </div>
+          <ul aria-labelledby="fd-crawl-runs-title" className="border-t border-border-1">
+            {runs.map((r) => (
+              <li key={r._id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border-1 px-4 py-2 last:border-b-0">
+                <Chip tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Chip>
+                <span className="min-w-0 text-[13px] leading-5 text-ink-1 [overflow-wrap:anywhere]">
+                  {r.trigger === "cron" ? "Scheduled re-check" : "Staff crawl"} · started {formatWhen(r.startedAt, now)}
+                  {r.finishedAt ? ` · finished ${formatStamp(r.finishedAt)}` : ""} · {r.pagesStored} stored, {r.pagesSkipped} skipped
+                </span>
+                {r.reason ? <span className={cn(metaClass, "min-w-0 [overflow-wrap:anywhere]")}>{r.reason}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
     </section>
   );

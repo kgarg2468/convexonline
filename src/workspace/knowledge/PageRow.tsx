@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Chip, Hint, InlineNotice } from "../inbox/primitives";
 import { ContentSheet } from "./ContentSheet";
 import { WatchSwitch } from "./WatchSwitch";
-import { CHANGE_STATUS, metaClass, pageGridClass } from "./styles";
+import { CHANGE_STATUS, metaClass, pageGridClass, rowEnterClass } from "./styles";
 
 /**
  * One row of the page table (design-spec §4.4): title + kind chip | path |
@@ -42,7 +42,7 @@ export function PageRow({ page }: { page: PageSummary }) {
   const below = watchAction.error || result || editing;
 
   return (
-    <li className="border-b border-border-1 transition-[opacity,translate] duration-small ease-out last:border-b-0 starting:-translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
+    <li className={cn(rowEnterClass, "border-b border-border-1 last:border-b-0")}>
       <div className={pageGridClass}>
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate text-[14px] leading-5 font-medium text-ink-1">{page.title}</span>

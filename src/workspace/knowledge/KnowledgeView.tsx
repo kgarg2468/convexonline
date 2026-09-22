@@ -9,6 +9,7 @@ import { CrawlSection } from "./CrawlSection";
 import { FactsSection } from "./FactsSection";
 import { PageRow } from "./PageRow";
 import { pageGridClass, panelClass } from "./styles";
+import { useMounted } from "./useMounted";
 
 /** Column headings over the page table; hidden on phones, where each row stacks its cells. */
 const COLUMNS = ["Page", "Path", "Watched", "Latest version"] as const;
@@ -22,6 +23,8 @@ export function KnowledgeView({ innId, siteUrl, isDemo }: { innId: Id<"inns">; s
   const pages = useQuery(api.pages.list, { innId }) as PageSummary[] | undefined;
   const facts = useQuery(api.facts.list, { innId }) as StaffFact[] | undefined;
   const integrations = useQuery(api.integrations.status, { innId }) as IntegrationStatus | undefined;
+  // Counts from the render that has both lists, not from this component's mount: until then only the spinner is on screen.
+  const mounted = useMounted(pages !== undefined && facts !== undefined);
 
   if (pages === undefined || facts === undefined) return <Spinner label="Loading knowledge" />;
 
@@ -60,7 +63,7 @@ export function KnowledgeView({ innId, siteUrl, isDemo }: { innId: Id<"inns">; s
               ))}
               <span />
             </div>
-            <ul className="border-t border-border-1">
+            <ul data-mounted={mounted || undefined} className="group/list border-t border-border-1">
               {pages.map((p) => (
                 <PageRow key={p._id} page={p} />
               ))}

@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 /**
  * The "watched for changes" toggle on a page row. Built on the Radix Switch
  * primitive (already a dependency through `radix-ui`) because the project has
- * no shadcn `switch` component yet; the visible label keeps the words the
- * checkbox used to show, so the row still reads the same.
+ * no shadcn `switch` component yet. The switch's accessible name is always
+ * "Watched for changes" (the switch role carries on/off); the visible label
+ * still shows the state in words, so the stacked phone row reads the same.
  */
 export function WatchSwitch({
   id,
@@ -17,7 +18,7 @@ export function WatchSwitch({
   id: string;
   checked: boolean;
   disabled?: boolean;
-  /** Keep the words for the switch's name but show only the control (the table's "Watched" column). */
+  /** Show only the control from 901px (the table's "Watched" column names it). */
   labelHidden?: boolean;
   onChange: (checked: boolean) => void;
 }) {
@@ -27,6 +28,7 @@ export function WatchSwitch({
         id={id}
         checked={checked}
         disabled={disabled}
+        aria-label="Watched for changes"
         onCheckedChange={onChange}
         className={cn(
           "inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-border-2 outline-hidden transition-colors duration-micro",
@@ -37,7 +39,8 @@ export function WatchSwitch({
       </SwitchPrimitive.Root>
       <label
         htmlFor={id}
-        className={cn("cursor-pointer text-[12px] leading-4 text-ink-3 select-none", disabled && "cursor-default", labelHidden && "min-[901px]:sr-only")}
+        aria-hidden="true"
+        className={cn("cursor-pointer text-[12px] leading-4 text-ink-3 select-none", disabled && "cursor-default", labelHidden && "min-[901px]:hidden")}
       >
         {checked ? "Watched for changes" : "Not watched"}
       </label>
