@@ -47,6 +47,7 @@ import type * as lib_webhookSignature from "../lib/webhookSignature.js";
 import type * as migrations from "../migrations.js";
 import type * as modelBudget from "../modelBudget.js";
 import type * as outbox from "../outbox.js";
+import type * as overview from "../overview.js";
 import type * as pages from "../pages.js";
 import type * as presence from "../presence.js";
 import type * as providers_agentmail from "../providers/agentmail.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   modelBudget: typeof modelBudget;
   outbox: typeof outbox;
+  overview: typeof overview;
   pages: typeof pages;
   presence: typeof presence;
   "providers/agentmail": typeof providers_agentmail;
