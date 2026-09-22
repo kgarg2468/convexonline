@@ -18,6 +18,12 @@ experiments and tests with mocked provider transport.
   before merging. The [deployed browser run](https://github.com/kgarg2468/convexonline/actions/runs/35664565718)
   tested application revision `e80454b`; subsequent changes at the time of the
   provider walkthrough were documentation only.
+- On September 22 the current browser suite ran against the deployed app at
+  revision `b10de58`: 44 scenarios passed and two optional screenshot captures
+  were skipped. The one difference from a local run is that the host's edge
+  refuses doubly encoded traversal paths with its own 400 page before the app
+  loads; the hostile-id scenario accepts that refusal after checking that no
+  payload is reflected.
 - Interface revamp (September 22): after each of the shell, inbox, policy
   changes, knowledge, settings, security, overview and polish PRs, 437 offline
   tests, lint, both TypeScript projects and the build passed, and the browser
