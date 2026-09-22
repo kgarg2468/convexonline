@@ -91,11 +91,12 @@ export function QueueRow({
             ) : null}
             {guestName(thread.guestEmail)}
           </span>
-          <span className="flex shrink-0 items-baseline gap-2 text-[12px] leading-4 text-ink-3">
+          {/* The claim label may hold any staff name, so it truncates at a cap; the time never shrinks. */}
+          <span className="flex min-w-0 shrink items-baseline gap-2 text-[12px] leading-4 text-ink-3">
             {thread.claim ? (
-              <span className="text-[11px]">{thread.claim.userId === viewerId ? "You have it" : `${thread.claim.name ?? "Someone"} has it`}</span>
+              <span className="min-w-0 max-w-24 truncate text-[11px]">{thread.claim.userId === viewerId ? "You have it" : `${thread.claim.name ?? "Someone"} has it`}</span>
             ) : null}
-            <span className="tabular-nums">{formatWhen(thread.lastInboundAt, now)}</span>
+            <span className="shrink-0 tabular-nums">{formatWhen(thread.lastInboundAt, now)}</span>
           </span>
         </span>
         <span className="flex w-full items-center justify-between gap-3">
