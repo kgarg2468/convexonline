@@ -29,13 +29,13 @@ export function SourcesSheet({ threadId }: { threadId: Id<"threads"> }) {
       {/* Portalled outside the workspace root: `fd-root` brings the legacy tokens the panel's pills read. */}
       <SheetContent
         side="right"
-        className="fd-root min-h-0 w-[360px] gap-0 overflow-y-auto bg-popover p-0 sm:max-w-[360px] [&_.fd-thread__side]:border-0 [&_.fd-thread__side]:bg-transparent [&_.fd-thread__side]:px-4 [&_.fd-thread__side]:pt-0 [&_#fd-sources-title]:sr-only"
+        className="fd-root min-h-0 w-[360px] gap-0 overflow-y-auto bg-popover p-0 sm:max-w-[360px] [&_.fd-thread__side]:border-0 [&_.fd-thread__side]:bg-transparent [&_.fd-thread__side]:px-4 [&_.fd-thread__side]:pt-0 [&_#fd-sources-sheet-title]:sr-only"
       >
         <SheetHeader className="pr-12">
           <SheetTitle className="text-[16px]">Sources for this draft</SheetTitle>
           <SheetDescription className="text-[13px] text-ink-2">Every claim the draft makes and the passage it rests on.</SheetDescription>
         </SheetHeader>
-        {detail ? <SourcePanel detail={detail} /> : null}
+        {detail ? <SourcePanel detail={detail} titleId="fd-sources-sheet-title" /> : null}
       </SheetContent>
     </Sheet>
   );

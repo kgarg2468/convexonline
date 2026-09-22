@@ -76,11 +76,14 @@ export function QueueList({
   const threads = searching ? found : queue;
 
   // Skeleton on the first load only; later loads (filter, search) keep the
-  // last list on screen until the new one arrives, so nothing flashes.
+  // last list on screen until the new one arrives, so nothing flashes. A
+  // cached empty list is the exception: it must not pose as the new query's
+  // "no matches", so that case waits like a first load.
   const [last, setLast] = useState<ThreadSummary[] | undefined>(undefined);
   if (threads !== undefined && threads !== last) setLast(threads);
   const shown = threads ?? last;
-  const showSkeleton = useDelayedFlag(shown === undefined);
+  const loading = shown === undefined || (threads === undefined && shown.length === 0);
+  const showSkeleton = useDelayedFlag(loading);
 
   const listRef = useRef<HTMLUListElement | null>(null);
   useEffect(() => {
@@ -156,7 +159,7 @@ export function QueueList({
       </div>
 
       <div className={cn("min-w-0", !narrow && "min-h-0 flex-1 overflow-y-auto")}>
-        {shown === undefined ? (
+        {shown === undefined || loading ? (
           showSkeleton ? <QueueSkeleton /> : null
         ) : shown.length === 0 ? (
           searching ? (

@@ -7,12 +7,13 @@ import { CLAIM_STATUS_LABEL, pathOf } from "../lib/format";
  * claims link to the page; fact claims name the staff fact (their `url` is an
  * internal `staff:` reference, never rendered as a link).
  */
-export function SourcePanel({ detail }: { detail: ThreadDetail }) {
+/** `titleId` keeps the header sheet's copy of this panel from sharing an id with the pane beside the thread. */
+export function SourcePanel({ detail, titleId = "fd-sources-title" }: { detail: ThreadDetail; titleId?: string }) {
   const { claims, facts } = detail;
   return (
-    <aside className="fd-thread__side" aria-labelledby="fd-sources-title">
+    <aside className="fd-thread__side" aria-labelledby={titleId}>
       <div className="fd-section">
-        <p className="fd-section__title" id="fd-sources-title">
+        <p className="fd-section__title" id={titleId}>
           Sources for this draft
         </p>
         {claims.length === 0 ? (
