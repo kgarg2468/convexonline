@@ -15,6 +15,10 @@
  * and stop words dropped, token sets compared. Numbers, prices and times
  * are strong tokens — they weigh double and every one in the claim must be
  * present in the sentence, so "$25" never links to a sentence saying "$40".
+ * Negation is kept: "not", "no", "never", "cannot" or an "-n't" mark the
+ * next content word ("not allowed" is the token "!allowed"), and a pair in
+ * which one side has a word the other side negates is refused, so "Smoking
+ * is not allowed" never cites a source that says it is.
  * A pair is accepted at ≥ 60% weighted overlap with at least three shared
  * tokens; a sentence links to at most one claim and a claim to at most one
  * sentence, best score first. Sentences already touched by an exact match
@@ -86,13 +90,24 @@ const MIN_SHARED = 3;
 
 type Tokens = { words: Set<string>; numbers: Set<string> };
 
+/** Words that flip the meaning of the content word after them. Stop words between are skipped; a number ends the reach. */
+const NEGATIONS = new Set(["not", "no", "never", "nor", "cannot", "without", "none", "neither"]);
+const NEGATED = "!";
+
 /** Content tokens of already-folded text. Numbers lose their `$`, `%` and thousands separators, so "$299" equals "299". */
 function tokenize(folded: string): Tokens {
   const words = new Set<string>();
   const numbers = new Set<string>();
+  let negate = false;
   for (const [raw] of folded.matchAll(TOKEN)) {
-    if (/\d/.test(raw)) numbers.add(raw.replace(/[$%,]/g, ""));
-    else if (!STOP_WORDS.has(raw)) words.add(raw);
+    if (/\d/.test(raw)) {
+      numbers.add(raw.replace(/[$%,]/g, ""));
+      negate = false;
+    } else if (NEGATIONS.has(raw) || raw.endsWith("n't")) negate = true;
+    else if (!STOP_WORDS.has(raw)) {
+      words.add(negate ? NEGATED + raw : raw);
+      negate = false;
+    }
   }
   return { words, numbers };
 }
@@ -129,6 +144,10 @@ function sentences(text: string): Span[] {
 /** Weighted share of the claim's content present in the sentence, or null when the pair fails a gate. */
 function score(claim: Tokens, sentence: Tokens): { ratio: number; shared: number } | null {
   for (const n of claim.numbers) if (!sentence.numbers.has(n)) return null;
+  for (const w of claim.words) {
+    const opposite = w.startsWith(NEGATED) ? w.slice(NEGATED.length) : NEGATED + w;
+    if (sentence.words.has(opposite)) return null;
+  }
   let sharedWords = 0;
   for (const w of claim.words) if (sentence.words.has(w)) sharedWords++;
   const shared = sharedWords + claim.numbers.size;

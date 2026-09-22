@@ -53,6 +53,24 @@ describe("matchClaims", () => {
     expect(segments).toEqual([{ text, claimId: null }]);
   });
 
+  it("refuses a paraphrase whose polarity differs, so a negated sentence never cites the opposite claim", () => {
+    const claims = [{ _id: "c1", statement: "Smoking is allowed on the balconies." }];
+    expect(matchClaims("Smoking is not allowed on the balconies.", claims)).toEqual([
+      { text: "Smoking is not allowed on the balconies.", claimId: null },
+    ]);
+    expect(matchClaims("Smoking isn't allowed on the balconies.", claims)).toEqual([
+      { text: "Smoking isn't allowed on the balconies.", claimId: null },
+    ]);
+    // Agreeing negations still link, and a plain sentence never cites a negated claim.
+    const negated = [{ _id: "c2", statement: "Pets are not allowed in the dining room." }];
+    expect(matchClaims("Pets are not permitted in the dining room.", negated)).toEqual([
+      { text: "Pets are not permitted in the dining room.", claimId: "c2" },
+    ]);
+    expect(matchClaims("Pets are allowed in the dining room.", negated)).toEqual([
+      { text: "Pets are allowed in the dining room.", claimId: null },
+    ]);
+  });
+
   it("gives a sentence wanted by two claims to the better-scoring one, whatever the claim order", () => {
     const text = "Check-in is from 3:00 PM to 8:00 PM daily. We look forward to hosting you.";
     const segments = matchClaims(text, [
