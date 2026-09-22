@@ -16,8 +16,7 @@
 
 <p align="center">
   <a href="#try-it"><strong>Try it</strong></a> ·
-  <a href="#using-it"><strong>Using it</strong></a> ·
-  <a href="#how-grounded-replies-work"><strong>Grounding</strong></a> ·
+  <a href="https://www.youtube.com/watch?v=KZyw0ufJyHU&feature=youtu.be"><strong>Live demo</strong></a> ·
   <a href="hackathon.md"><strong>Hackathon log</strong></a>
 </p>
 
