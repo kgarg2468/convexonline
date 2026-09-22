@@ -15,12 +15,60 @@ describe("matchClaims", () => {
     expect(segments.map((s) => s.text).join("")).toBe(ANSWER);
   });
 
-  it("skips claims whose statement is a paraphrase, silently", () => {
+  it("links a paraphrased statement to the sentence sharing its content words", () => {
     const segments = matchClaims(ANSWER, [
       { _id: "c2", statement: "Rates exclude the 10.5% lodging tax." },
       { _id: "c3", statement: "Weekends May through October have a two-night minimum." },
     ]);
-    expect(segments).toEqual([{ text: ANSWER, claimId: null }]);
+    expect(segments).toEqual([
+      { text: "Hi Sam, Harbor View Rooms are $299 per night on Friday and Saturday. ", claimId: null },
+      { text: "Rates include breakfast and parking but not the 10.5% lodging tax.", claimId: "c2" },
+      { text: " ", claimId: null },
+      { text: "Note that a two-night minimum applies on weekends from May through October.", claimId: "c3" },
+    ]);
+    expect(segments.map((s) => s.text).join("")).toBe(ANSWER);
+  });
+
+  it("links all three seeded claims of the demo's ready draft, exact and paraphrased alike", () => {
+    const segments = matchClaims(ANSWER, [
+      { _id: "c1", statement: "Harbor View Rooms are $299 per night on Friday and Saturday." },
+      { _id: "c2", statement: "Rates exclude the 10.5% lodging tax." },
+      { _id: "c3", statement: "Weekends May through October have a two-night minimum." },
+    ]);
+    expect(segments.filter((s) => s.claimId !== null).map((s) => s.claimId)).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("links 'Check-in runs…' to the sentence that says 'Check-in is…'", () => {
+    const text = "Check-in is from 3:00 PM to 8:00 PM. Ask us about late arrival.";
+    const segments = matchClaims(text, [{ _id: "c", statement: "Check-in runs from 3:00 PM to 8:00 PM." }]);
+    expect(segments).toEqual([
+      { text: "Check-in is from 3:00 PM to 8:00 PM.", claimId: "c" },
+      { text: " Ask us about late arrival.", claimId: null },
+    ]);
+  });
+
+  it("refuses a paraphrase whose number differs, even when every word matches", () => {
+    const text = "Well-behaved dogs are welcome in the Garden Rooms for a $40 per night pet fee, limited to one dog per room.";
+    const segments = matchClaims(text, [{ _id: "c", statement: "Dogs stay in the Garden Rooms for a $25 per night pet fee." }]);
+    expect(segments).toEqual([{ text, claimId: null }]);
+  });
+
+  it("gives a sentence wanted by two claims to the better-scoring one, whatever the claim order", () => {
+    const text = "Check-in is from 3:00 PM to 8:00 PM daily. We look forward to hosting you.";
+    const segments = matchClaims(text, [
+      { _id: "weaker", statement: "The check-in desk opens at 3:00 PM for arrivals daily." },
+      { _id: "better", statement: "Check-in runs from 3:00 PM to 8:00 PM." },
+    ]);
+    expect(segments).toEqual([
+      { text: "Check-in is from 3:00 PM to 8:00 PM daily.", claimId: "better" },
+      { text: " We look forward to hosting you.", claimId: null },
+    ]);
+  });
+
+  it("leaves an unrelated sentence unlinked", () => {
+    const text = "Thanks for writing to us. We look forward to hosting you in October.";
+    const segments = matchClaims(text, [{ _id: "c", statement: "Rates exclude the 10.5% lodging tax." }]);
+    expect(segments).toEqual([{ text, claimId: null }]);
   });
 
   it("folds quotes, whitespace and case on both sides and keeps the answer's own characters", () => {
