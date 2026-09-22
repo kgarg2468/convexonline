@@ -1,19 +1,45 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import * as m from "motion/react-m";
+import { CalendarDays, Lock, Tag, Users } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { LiveMailDecision, ThreadDetail as ThreadDetailData } from "../types";
-import { Empty, Notice, Pill, Spinner } from "../lib/ui";
-import { useAsyncAction, useNow } from "../lib/hooks";
-import { STATUS_LABEL, formatDate, formatStamp, formatWhen, guestName } from "../lib/format";
-import { DraftPanel } from "./DraftPanel";
+import { useAsyncAction, useIsMid, useIsNarrow, useNow } from "../lib/hooks";
+import { formatDate, formatStamp, formatWhen, guestName } from "../lib/format";
+import { otherReplyOutbox } from "../lib/outbox";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { StatusChip } from "./QueueRow";
+import { ThreadSkeleton } from "./QueueSkeleton";
+import { DraftPanel, type SendSource } from "./DraftPanel";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { GapForm } from "./GapForm";
 import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
 import { ThreadPresence } from "./ThreadPresence";
-import { otherReplyOutbox } from "../lib/outbox";
+import { BackButton, InlineNotice, SourcesPlaceholder } from "./primitives";
+import { threadMainClass, threadPadClass } from "./styles";
 
+/** The send FLIP: 260ms ease-out on a click, instant after ⌘⏎ (research-motion §3: keyboard never animates). */
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const sendTransition = (source: SendSource) =>
+  source === "keyboard" ? { duration: 0 } : { duration: 0.26, ease: EASE_OUT };
+
+const clockOnly = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
+/** A claim expiry as the bar shows it: the clock alone while it falls today, the dated stamp otherwise. */
+function formatExpiry(ms: number, now: number): string {
+  return new Date(ms).toDateString() === new Date(now).toDateString() ? clockOnly.format(ms) : formatStamp(ms);
+}
+
+/**
+ * The thread pane: sticky head, claim bar, messages, gap form, the draft
+ * review surface, follow-up and delivery history, then status actions. Beside
+ * the queue it renders its main column and the sources pane as two grid items
+ * of the inbox frame (each scrolling on its own); under 900px it is a single
+ * stack that scrolls with the page.
+ */
 export function ThreadDetail({
   threadId,
   innId,
@@ -49,29 +75,40 @@ export function ThreadDetail({
   const statusAction = useAsyncAction();
   const regenAction = useAsyncAction();
   const now = useNow(15_000);
+  const narrow = useIsNarrow();
+  const mid = useIsMid();
+  // How the last send was triggered: the sent message's FLIP reads it.
+  const [sendSource, setSendSource] = useState<SendSource>("pointer");
+  // The claim whose sentence (draft) or card (sources) is hovered or focused; each side highlights the other.
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
 
+  // Both early returns keep the third grid column's ground, as InboxView does.
   if (detail === undefined) {
     return (
-      <div className="fd-thread__main">
-        {onBack ? <BackButton onBack={onBack} /> : null}
-        <Spinner label="Loading thread" />
-      </div>
+      <>
+        <ThreadSkeleton onBack={onBack} />
+        <SourcesPlaceholder />
+      </>
     );
   }
 
   if (foreign) {
     return (
-      <div className="fd-thread__main">
-        {onBack ? <BackButton onBack={onBack} /> : null}
-        <Empty title="This thread belongs to another property.">
-          The link you opened points at a thread in one of your other properties. Switch property to read it there.
-        </Empty>
-        <div className="fd-btn-row" style={{ marginTop: 12 }}>
-          <button type="button" className="fd-btn" onClick={onBackToInbox}>
-            Back to inbox
-          </button>
+      <>
+        <div className={cn(threadMainClass, threadPadClass, "py-4")}>
+          {onBack ? <BackButton onBack={onBack} /> : null}
+          <div className="mx-auto max-w-[440px] pt-12 text-center">
+            <h2 className="text-[16px] leading-6 font-semibold text-ink-1">This thread belongs to another property.</h2>
+            <p className="mt-1 text-[13px] leading-5 text-ink-2">
+              The link you opened points at a thread in one of your other properties. Switch property to read it there.
+            </p>
+            <Button type="button" variant="outline" size="sm" className="mt-4 bg-white text-[13px] text-ink-1" onClick={onBackToInbox}>
+              Back to inbox
+            </Button>
+          </div>
         </div>
-      </div>
+        <SourcesPlaceholder />
+      </>
     );
   }
 
@@ -91,211 +128,269 @@ export function ThreadDetail({
   const isDemo = detail.inn.isDemo;
   const canRegenerate =
     !isDemo && mine && thread.lastInboundMessageId !== null && (draft === null || draft.abstain || draft.status === "needs_edit");
+  // The message the current draft became, so the draft body can hand its box
+  // over to it (shared layoutId). Matched by text: messages carry no draft id.
+  const sentMessageId =
+    draft && draft.status === "sent"
+      ? [...messages].reverse().find((msg) => msg.direction === "out" && msg.text.trim() === draft.answer.trim())?._id ?? null
+      : null;
 
-  return (
-    <div className="fd-thread">
-      <div className="fd-thread__main">
+  const main = (
+    <div className={threadMainClass}>
+      <div
+        className={cn(
+          "fd-thread__head sticky top-0 z-10 border-b border-border-1 bg-bg-1 py-3 max-[900px]:top-(--header-h)",
+          threadPadClass,
+        )}
+      >
         {onBack ? <BackButton onBack={onBack} /> : null}
-        <div className="fd-thread__head">
-          <div style={{ minWidth: 0 }}>
-            <h2 className="fd-thread__subject">{thread.subject}</h2>
-            <div className="fd-thread__guest">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[18px] leading-6 font-semibold text-balance text-ink-1">{thread.subject}</h2>
+            <p className="mt-0.5 truncate text-[13px] leading-5 text-ink-2">
               {guestName(thread.guestEmail)} · {thread.guestEmail}
-            </div>
+            </p>
           </div>
-          <div className="fd-btn-row">
-            <Pill tone={thread.status === "needs_staff" ? "caution" : thread.status === "ready" ? "pine" : "neutral"}>
-              {STATUS_LABEL[thread.status] ?? thread.status}
-            </Pill>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5 pt-0.5">
+            <StatusChip status={thread.status} />
           </div>
         </div>
         {thread.stay ? (
-          <div className="fd-thread__stay">
-            <span>{thread.stay.status === "booked" ? "Booked" : "Inquiry"}</span>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5 text-ink-2">
+            <span className="inline-flex items-center gap-1.5">
+              <Tag aria-hidden="true" className="size-3.5 text-ink-3" />
+              {thread.stay.status === "booked" ? "Booked" : "Inquiry"}
+            </span>
             {thread.stay.checkIn ? (
-              <span>
+              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                <CalendarDays aria-hidden="true" className="size-3.5 text-ink-3" />
                 {formatDate(thread.stay.checkIn)}
                 {thread.stay.checkOut ? ` to ${formatDate(thread.stay.checkOut)}` : ""}
               </span>
             ) : null}
-            {thread.stay.party ? <span>{thread.stay.party} {thread.stay.party === 1 ? "guest" : "guests"}</span> : null}
+            {thread.stay.party ? (
+              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                <Users aria-hidden="true" className="size-3.5 text-ink-3" />
+                {thread.stay.party} {thread.stay.party === 1 ? "guest" : "guests"}
+              </span>
+            ) : null}
           </div>
         ) : null}
+      </div>
 
+      <div className={cn(threadPadClass, "flex flex-col gap-4 pt-4 pb-10")}>
         {openCorrections > 0 ? (
-          <div style={{ marginBottom: 14 }}>
-            <Notice tone="caution">
-              A reply sent in this thread quoted a page that has since changed.{" "}
-              <button type="button" className="fd-btn fd-btn--small" onClick={onOpenCorrections}>
-                Review the correction
-              </button>
-            </Notice>
-          </div>
+          <InlineNotice tone="caution" className="flex flex-wrap items-center justify-between gap-2">
+            <span>A reply sent in this thread quoted a page that has since changed.</span>
+            <Button type="button" variant="outline" size="sm" className="bg-white text-[13px] text-ink-1" onClick={onOpenCorrections}>
+              Review the correction
+            </Button>
+          </InlineNotice>
         ) : null}
         {detail.followUp ? (
-          <div style={{ marginBottom: 14 }}>
-            <Notice tone="info">
-              Reminder {detail.followUp.status === "due" ? "is due" : "set for"} {formatStamp(detail.followUp.dueAt)} if the guest has not
-              replied. The reminder only flags the thread for staff; it never emails the guest.
-            </Notice>
-          </div>
+          <InlineNotice tone="info">
+            Reminder {detail.followUp.status === "due" ? "is due" : "set for"} {formatStamp(detail.followUp.dueAt)} if the guest has not
+            replied. The reminder only flags the thread for staff; it never emails the guest.
+          </InlineNotice>
         ) : null}
 
-        <div className={`fd-claimbar${mine ? " fd-claimbar--mine" : heldByOther ? " fd-claimbar--other" : ""}`}>
-          <span>
-            {mine
-              ? `You have this thread until ${formatStamp(holder!.expiresAt)}.`
-              : heldByOther
-                ? `${holder!.name ?? "Another staff member"} is working on this until ${formatStamp(holder!.expiresAt)}.`
-                : "Nobody is working on this thread."}
-          </span>
-          <div className="fd-btn-row">
-            {mine ? (
-              <>
-                <button
+        <div>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border-1 bg-bg-2 py-1.5 pr-1.5 pl-3">
+            <p className="flex min-w-0 items-center gap-2 text-[13px] leading-5 text-ink-1">
+              {heldByOther ? <Lock aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" /> : null}
+              <span title={holder ? formatStamp(holder.expiresAt) : undefined}>
+                {mine
+                  ? `You have this thread until ${formatExpiry(holder!.expiresAt, now)}.`
+                  : heldByOther
+                    ? `${holder!.name ?? "Another staff member"} is working on this until ${formatExpiry(holder!.expiresAt, now)}.`
+                    : "Nobody is working on this thread."}
+              </span>
+            </p>
+            <div className="flex shrink-0 items-center gap-1">
+              {mine ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-[13px] text-ink-2"
+                    disabled={lock.busy}
+                    onClick={() => void lock.run(() => claim({ threadId }))}
+                  >
+                    Extend
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="bg-white text-[13px]"
+                    disabled={lock.busy}
+                    onClick={() => void lock.run(() => release({ threadId }))}
+                  >
+                    Release
+                  </Button>
+                </>
+              ) : (
+                <Button
                   type="button"
-                  className="fd-btn fd-btn--small"
-                  disabled={lock.busy}
+                  size="sm"
+                  className="text-[13px]"
+                  disabled={lock.busy || heldByOther}
                   onClick={() => void lock.run(() => claim({ threadId }))}
                 >
-                  Extend
-                </button>
-                <button
-                  type="button"
-                  className="fd-btn fd-btn--small"
-                  disabled={lock.busy}
-                  onClick={() => void lock.run(() => release({ threadId }))}
-                >
-                  Release
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="fd-btn fd-btn--small fd-btn--primary"
-                disabled={lock.busy || heldByOther}
-                onClick={() => void lock.run(() => claim({ threadId }))}
-              >
-                {lock.busy ? "Taking…" : "Take this thread"}
-              </button>
-            )}
+                  {lock.busy ? "Taking…" : "Take this thread"}
+                </Button>
+              )}
+            </div>
           </div>
+          <ThreadPresence key={`${threadId}:${viewerId}`} threadId={threadId} />
+          {lock.error ? (
+            <InlineNotice tone="error" className="mt-2">
+              {lock.error}
+            </InlineNotice>
+          ) : null}
         </div>
-        <ThreadPresence key={`${threadId}:${viewerId}`} threadId={threadId} />
-        {lock.error ? (
-          <div style={{ marginBottom: 14 }}>
-            <Notice tone="error">{lock.error}</Notice>
-          </div>
-        ) : null}
 
-        <div className="fd-messages">
-          {messages.length === 0 ? (
-            <Empty title="No messages stored for this thread" />
-          ) : (
-            messages.map((m) => (
-              <article key={m._id} className={`fd-msg${m.direction === "out" ? " fd-msg--out" : ""}`}>
-                <div className="fd-msg__meta">
-                  <span>{m.direction === "in" ? guestName(m.from) : `Front desk to ${guestName(m.to)}`}</span>
-                  <span title={formatStamp(m.at)}>{formatWhen(m.at, now)}</span>
+        {messages.length === 0 ? (
+          <div className="rounded-[10px] border border-dashed border-border-2 px-4 py-6 text-center">
+            <p className="text-[14px] leading-5 font-semibold text-ink-1">No messages stored for this thread</p>
+          </div>
+        ) : (
+          <ol className="flex max-w-[68ch] flex-col gap-3">
+            {messages.map((msg) => {
+              const out = msg.direction === "out";
+              const meta = (
+                <div className="mb-1 flex items-baseline justify-between gap-3 text-[12px] leading-4 text-ink-3 tabular-nums">
+                  <span className="truncate font-medium text-ink-2">{out ? `Front desk to ${guestName(msg.to)}` : guestName(msg.from)}</span>
+                  <time dateTime={new Date(msg.at).toISOString()} title={formatStamp(msg.at)} className="shrink-0">
+                    {formatWhen(msg.at, now)}
+                  </time>
                 </div>
-                <div className="fd-msg__text">{m.text}</div>
-              </article>
-            ))
-          )}
-        </div>
+              );
+              const body = (
+                <div
+                  className={cn(
+                    "whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1",
+                    out ? "text-[14px] leading-[1.55]" : "font-serif text-[15px] leading-[1.55] italic",
+                  )}
+                >
+                  {msg.text}
+                </div>
+              );
+              const bubble = cn("rounded-[10px] px-4 py-3", out ? "fd-msg--out border border-border-1 bg-white" : "bg-bg-2");
+              return (
+                <li key={msg._id}>
+                  {msg._id === sentMessageId && draft ? (
+                    <m.article layoutId={`draft-${draft._id}`} transition={sendTransition(sendSource)} className={bubble}>
+                      {meta}
+                      {body}
+                    </m.article>
+                  ) : (
+                    <article className={bubble}>
+                      {meta}
+                      {body}
+                    </article>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
         {draft?.gapQuestion ? (
           <GapForm innId={innId} threadId={threadId} question={draft.gapQuestion} canAnswer={mine} isDemo={isDemo} />
         ) : null}
 
         {draft && !draft.abstain ? (
-          <DraftPanel detail={detail} canEdit={mine} liveMail={liveMail} />
+          <DraftPanel
+            detail={detail}
+            canEdit={mine}
+            liveMail={liveMail}
+            onSend={setSendSource}
+            activeClaimId={activeClaimId}
+            onActiveClaim={setActiveClaimId}
+            describeSources={!mid}
+          />
         ) : draft ? (
           // An abstained draft with no gap question is a drafting failure
           // (no key, budget used up, provider error): show why, never a
           // made-up question, so staff know to redraft or answer by hand.
           draft.statusReason && !draft.gapQuestion && draft.status !== "sent" && draft.status !== "superseded" ? (
-            <Notice tone="caution">
+            <InlineNotice tone="caution">
               No reply was drafted: {draft.statusReason}.
               {canRegenerate ? " Use “Redraft from the latest message” below to try again." : ""}
-            </Notice>
+            </InlineNotice>
           ) : null
         ) : (
-          <Notice tone="info">
+          <InlineNotice tone="info">
             {thread.status === "drafting"
               ? "Drafting is running on the server. The reply appears here when it finishes."
               : "No draft yet. Drafting runs on the server after a guest message arrives."}
-          </Notice>
+          </InlineNotice>
         )}
 
-        <div style={{ marginTop: 14 }}>
-          <FollowUpPanel threadId={threadId} viewerId={viewerId} canAct={mine} isDemo={isDemo} outbox={followUpOutbox} />
-        </div>
+        <FollowUpPanel threadId={threadId} viewerId={viewerId} canAct={mine} isDemo={isDemo} outbox={followUpOutbox} />
 
-        {earlierReplyOutbox.length > 0 ? (
-          <div style={{ marginTop: 14 }}>
-            <OutboxList rows={earlierReplyOutbox} title="Earlier reply delivery" />
-          </div>
-        ) : null}
-        {correctionOutbox.length > 0 ? (
-          <div style={{ marginTop: 14 }}>
-            <OutboxList rows={correctionOutbox} title="Correction delivery" />
-          </div>
-        ) : null}
+        {earlierReplyOutbox.length > 0 ? <OutboxList rows={earlierReplyOutbox} title="Earlier reply delivery" /> : null}
+        {correctionOutbox.length > 0 ? <OutboxList rows={correctionOutbox} title="Correction delivery" /> : null}
 
-        <div className="fd-btn-row" style={{ marginTop: 18 }}>
+        <div className="flex flex-wrap items-center gap-1 border-t border-border-1 pt-3">
           {thread.status !== "closed" ? (
-            <button
+            <Button
               type="button"
-              className="fd-btn fd-btn--small"
+              variant="ghost"
+              size="sm"
+              className="text-[13px] text-ink-2"
               disabled={!mine || statusAction.busy}
               onClick={() => void statusAction.run(() => setStatus({ threadId, status: "closed" }))}
             >
               Close thread
-            </button>
+            </Button>
           ) : null}
           {thread.status !== "waiting_guest" && thread.status !== "closed" ? (
-            <button
+            <Button
               type="button"
-              className="fd-btn fd-btn--small"
+              variant="ghost"
+              size="sm"
+              className="text-[13px] text-ink-2"
               disabled={!mine || statusAction.busy}
               onClick={() => void statusAction.run(() => setStatus({ threadId, status: "waiting_guest" }))}
             >
               Mark waiting on guest
-            </button>
+            </Button>
           ) : null}
           {canRegenerate ? (
-            <button
+            <Button
               type="button"
-              className="fd-btn fd-btn--small"
+              variant="ghost"
+              size="sm"
+              className="text-[13px] text-ink-2"
               disabled={regenAction.busy}
               onClick={() => void regenAction.run(() => regenerate({ threadId }))}
             >
               {regenAction.busy ? "Requesting…" : "Redraft from the latest message"}
-            </button>
+            </Button>
           ) : null}
-          {!mine ? <span className="fd-muted fd-small">Take the thread to change its status.</span> : null}
+          {!mine ? <span className="ml-1 text-[13px] leading-5 text-ink-3">Take the thread to change its status.</span> : null}
         </div>
-        {regenAction.error ? (
-          <div style={{ marginTop: 10 }}>
-            <Notice tone="error">{regenAction.error}</Notice>
-          </div>
-        ) : null}
-        {statusAction.error ? (
-          <div style={{ marginTop: 10 }}>
-            <Notice tone="error">{statusAction.error}</Notice>
-          </div>
-        ) : null}
+        {regenAction.error ? <InlineNotice tone="error">{regenAction.error}</InlineNotice> : null}
+        {statusAction.error ? <InlineNotice tone="error">{statusAction.error}</InlineNotice> : null}
       </div>
-      <SourcePanel detail={detail} />
     </div>
   );
-}
 
-function BackButton({ onBack }: { onBack: () => void }) {
+  if (narrow) {
+    return (
+      <div className="min-w-0">
+        {main}
+        <SourcePanel detail={detail} activeClaimId={activeClaimId} onActiveClaim={setActiveClaimId} />
+      </div>
+    );
+  }
   return (
-    <button type="button" className="fd-btn fd-btn--quiet fd-btn--small fd-back" onClick={onBack}>
-      ← All threads
-    </button>
+    <>
+      {main}
+      {mid ? null : <SourcePanel detail={detail} activeClaimId={activeClaimId} onActiveClaim={setActiveClaimId} />}
+    </>
   );
 }

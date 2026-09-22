@@ -25,14 +25,24 @@ export type ShortcutEntry = { keys: string[]; label: string };
 export type ShortcutGroup = { heading: string; entries: ShortcutEntry[] };
 
 /**
- * Everything the shortcut sheet lists. View-level keys (j/k to move in the
- * queue, enter to open, t to take, ⌘⏎ to send) are added by the inbox work;
- * append a group here and handle the keys through `useShortcuts`' `onKey`.
+ * Everything the shortcut sheet lists. The inbox keys are handled by the queue
+ * (`j`/`k` through `useShortcuts`' `onKey`, Enter by the focused row) and the
+ * draft editor (⌘⏎). `t` (take the thread, design-spec §3) is not wired yet
+ * and is deliberately not listed until it is.
  */
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     heading: "Go to",
     entries: NAV.map((n) => ({ keys: ["g", n.chord], label: n.label })),
+  },
+  {
+    heading: "Inbox",
+    entries: [
+      { keys: ["j"], label: "Next thread" },
+      { keys: ["k"], label: "Previous thread" },
+      { keys: ["⏎"], label: "Open the focused thread" },
+      { keys: [MOD_LABEL, "⏎"], label: "Send the reply" },
+    ],
   },
   {
     heading: "General",

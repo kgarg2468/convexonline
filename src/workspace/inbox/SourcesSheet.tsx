@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
 import { PanelRight } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { ThreadDetail as ThreadDetailData } from "../types";
+import { useQueryResult } from "../lib/hooks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { SourcePanel } from "./SourcePanel";
@@ -16,7 +16,10 @@ import { SourcePanel } from "./SourcePanel";
  */
 export function SourcesSheet({ threadId }: { threadId: Id<"threads"> }) {
   const [open, setOpen] = useState(false);
-  const detail = useQuery(api.threads.get, { threadId }) as ThreadDetailData | undefined;
+  const result = useQueryResult(api.threads.get, { threadId });
+  // The thread pane explains a refused thread; a sources button for it would only mislead.
+  if (result.status === "error") return null;
+  const detail = result.data as ThreadDetailData | undefined;
   const count = detail?.claims.length;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -26,16 +29,12 @@ export function SourcesSheet({ threadId }: { threadId: Id<"threads"> }) {
           {count === undefined ? "Sources" : `Sources (${count})`}
         </Button>
       </SheetTrigger>
-      {/* Portalled outside the workspace root: `fd-root` brings the legacy tokens the panel's pills read. */}
-      <SheetContent
-        side="right"
-        className="fd-root min-h-0 w-[360px] gap-0 overflow-y-auto bg-popover p-0 sm:max-w-[360px] [&_.fd-thread__side]:border-0 [&_.fd-thread__side]:bg-transparent [&_.fd-thread__side]:px-4 [&_.fd-thread__side]:pt-0 [&_#fd-sources-sheet-title]:sr-only"
-      >
+      <SheetContent side="right" className="min-h-0 w-[360px] gap-0 overflow-y-auto bg-popover p-0 sm:max-w-[360px]">
         <SheetHeader className="pr-12">
           <SheetTitle className="text-[16px]">Sources for this draft</SheetTitle>
           <SheetDescription className="text-[13px] text-ink-2">Every claim the draft makes and the passage it rests on.</SheetDescription>
         </SheetHeader>
-        {detail ? <SourcePanel detail={detail} titleId="fd-sources-sheet-title" /> : null}
+        {detail ? <SourcePanel detail={detail} titleId="fd-sources-sheet-title" embedded /> : null}
       </SheetContent>
     </Sheet>
   );

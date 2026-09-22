@@ -12,7 +12,7 @@ import { errorMessage } from "./format";
  * the property list; anything else is reported as the failure it is. Nothing
  * here ever renders the workspace as if access were still granted.
  */
-type Props = { children: ReactNode; onReturn: () => void };
+type Props = { children: ReactNode; onReturn: () => void; returnLabel?: string };
 type State = { error: unknown | null };
 
 function isAccessError(error: unknown): boolean {
@@ -56,7 +56,7 @@ export class WorkspaceAccessBoundary extends Component<Props, State> {
           )}
           <div className="fd-btn-row" style={{ marginTop: 16 }}>
             <button type="button" className="fd-btn fd-btn--primary" onClick={this.props.onReturn}>
-              Back to properties
+              {this.props.returnLabel ?? "Back to properties"}
             </button>
             {access ? null : (
               <button type="button" className="fd-btn" onClick={() => window.location.reload()}>

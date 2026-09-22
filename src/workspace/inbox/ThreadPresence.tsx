@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { HEARTBEAT_INTERVAL_MS } from "../../../convex/lib/presenceTiming";
+import { cn } from "@/lib/utils";
 
 /**
  * "Who else has this thread open" — distinct from the claim lock, which says
@@ -59,27 +60,36 @@ export function ThreadPresence({ threadId }: { threadId: Id<"threads"> }) {
   const viewers = useQuery(api.presence.list, unavailable ? "skip" : { threadId });
 
   if (unavailable) {
-    return <div className="fd-presence fd-presence--off">Presence unavailable.</div>;
+    return <PresenceLine others={false}>Presence unavailable.</PresenceLine>;
   }
   if (viewers === undefined) return null;
 
   const others = viewers.filter((v) => !v.isYou);
   return (
-    <div className="fd-presence" aria-live="polite">
-      <span className="fd-presence__dot" aria-hidden="true" />
+    <PresenceLine others={others.length > 0} live>
       {others.length === 0 ? (
-        <span>Only you are viewing this thread.</span>
+        "Only you are viewing this thread."
       ) : (
-        <span>
-          Viewing now: <strong>You</strong>
+        <>
+          Viewing now: <strong className="font-medium text-ink-1">You</strong>
           {others.map((v) => (
             <span key={v.userId}>
-              , <strong>{v.name}</strong>
+              , <strong className="font-medium text-ink-1">{v.name}</strong>
             </span>
           ))}
-        </span>
+        </>
       )}
-    </div>
+    </PresenceLine>
+  );
+}
+
+/** One quiet line under the claim bar: a 6px dot (green while others are here) and 13px ink-2 text. */
+function PresenceLine({ others, live, children }: { others: boolean; live?: boolean; children: React.ReactNode }) {
+  return (
+    <p aria-live={live ? "polite" : undefined} className="mt-1.5 flex items-center gap-2 px-1 text-[13px] leading-5 text-ink-2">
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", others ? "bg-success-10" : "bg-ink-3")} />
+      <span>{children}</span>
+    </p>
   );
 }
 
