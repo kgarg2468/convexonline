@@ -110,7 +110,7 @@ test.describe("XSS through the real write paths", () => {
     await page.getByLabel("Answer").fill(answer);
     await page.getByRole("button", { name: "Save fact" }).click();
 
-    await expect(page.locator(".fd-fact__q").filter({ hasText: "Do you allow dogs?" })).toHaveText(question);
+    await expect(page.getByText(question, { exact: true })).toBeVisible();
     await expect(page.getByText(answer)).toBeVisible();
     await expectNoInjectedMarkup(page, "staff fact");
     expectClean(guards, "staff fact");
