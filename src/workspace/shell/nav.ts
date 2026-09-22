@@ -44,6 +44,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   },
 ];
 
+/** The Policy changes count as a sentence; it is part of that button's accessible name, so it holds at 0 too. */
+export function reviewCountLabel(count: number | undefined): string {
+  return count === undefined ? "loading" : count === 1 ? "1 reply needs review" : `${count} replies need review`;
+}
+
 export function initials(name: string | null, email: string | null): string {
   const source = name?.trim() || email || "?";
   const parts = source.split(/\s+/).filter(Boolean);

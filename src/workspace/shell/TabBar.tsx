@@ -1,11 +1,11 @@
 import type { WorkspaceView } from "../types";
 import { cn } from "@/lib/utils";
-import { NAV } from "./nav";
+import { NAV, reviewCountLabel } from "./nav";
 import { ReviewCount } from "./Rail";
 
 /**
- * The rail on narrow screens: a fixed bottom bar with the same four views,
- * icon over label, in one row. It is the same `nav[aria-label="Workspace"]`
+ * The rail on narrow screens: a fixed bottom bar with the same views (one
+ * column per NAV entry), icon over label, in one row, `--tabbar-h` tall. It is the same `nav[aria-label="Workspace"]`
  * the specs read, so nothing about how a view is reached changes with width.
  */
 export function TabBar({
@@ -20,7 +20,8 @@ export function TabBar({
   return (
     <nav
       aria-label="Workspace"
-      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border-1 bg-bg-1 pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-border-1 bg-bg-1 pb-[env(safe-area-inset-bottom)]"
+      style={{ gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }}
     >
       {NAV.map((item) => {
         const active = view === item.view;
@@ -30,9 +31,10 @@ export function TabBar({
             key={item.view}
             type="button"
             aria-current={active ? "page" : undefined}
+            aria-label={item.view === "corrections" ? `${item.label}, ${reviewCountLabel(correctionsCount)}` : undefined}
             onClick={() => onNavigate(item.view)}
             className={cn(
-              "relative flex h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] leading-none outline-hidden transition-colors duration-micro",
+              "relative flex h-(--tabbar-h) min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] leading-none outline-hidden transition-colors duration-micro",
               active ? "font-medium text-accent-9" : "text-ink-2 hover:text-ink-1",
               "focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-inset",
             )}

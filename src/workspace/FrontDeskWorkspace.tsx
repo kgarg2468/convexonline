@@ -7,8 +7,9 @@ import type { Correction, InnDetail, InnSummary, RecordVersionResult, ThreadStat
 import { AuthView } from "./auth/AuthView";
 import { InnPicker } from "./onboarding/InnPicker";
 import { InvitationGate } from "./onboarding/InvitationGate";
-import { Shell, HeaderActions, HeaderTitle } from "./shell/Shell";
+import { Shell, type ShellHeader } from "./shell/Shell";
 import { DemoActions } from "./shell/DemoActions";
+import { useDemoPolicy } from "./shell/useDemoPolicy";
 import { CommandPalette } from "./shell/CommandPalette";
 import { ShortcutsSheet } from "./shell/ShortcutsSheet";
 import { useShortcuts } from "./shell/useShortcuts";
@@ -19,7 +20,7 @@ import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
-import { useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
+import { forgetConsumedUrl, replaceUrl, useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
 import { cn } from "@/lib/utils";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
@@ -27,19 +28,39 @@ import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
 const INN_KEY = "frontdesk.innId";
 export const STALL_AFTER_MS = 20_000;
 
-/** Classes styles/motion.css animates, by the transition type `useRoute` tags each navigation with. */
+/**
+ * Classes styles/motion.css animates, by the transition type `useRoute` tags
+ * each navigation with. The routed view is keyed by view, so a view swap is an
+ * enter/exit pair and the inbox's list ↔ detail (narrow screens) is an update
+ * of the one inbox boundary.
+ */
 const VIEW_ENTER = {
   default: "none",
   "nav-forward": "vt-fade-in",
   "nav-back": "vt-back-in",
-  "nav-mobile-detail": "vt-slide-in",
 };
 const VIEW_EXIT = {
   default: "none",
   "nav-forward": "vt-fade-out",
   "nav-back": "vt-back-out",
-  "nav-mobile-detail": "vt-slide-under",
 };
+const VIEW_UPDATE = {
+  default: "none",
+  "nav-mobile-detail": "vt-detail-in",
+  "nav-back": "vt-detail-out",
+};
+
+/** Marks a history entry pushed by opening a thread from the list on a narrow screen (see selectThread). */
+type ListState = { fdFromList?: boolean } | null;
+
+/** The stored property is per account: it goes when the account does. */
+function forgetStoredInn() {
+  try {
+    window.localStorage.removeItem(INN_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 /** True once `pending` has been continuously true for STALL_AFTER_MS; never fakes success. */
 function useStalled(pending: boolean): boolean {
@@ -161,6 +182,14 @@ function SignedIn({
   const [demoError, setDemoError] = useState<string | null>(null);
   const seeding = useRef(false);
 
+  // Signing out (or the session ending) forgets the stored property and lets a
+  // later sign-in in this tab read the address bar again.
+  const leave = useCallback(() => {
+    forgetStoredInn();
+    void signOut();
+  }, [signOut]);
+  useEffect(() => () => forgetConsumedUrl(), []);
+
   function openInn(innId: string) {
     setStoredInn(innId);
     setChoosingInn(false);
@@ -205,7 +234,7 @@ function SignedIn({
               leave the demo and sign in (or create a staff account) to accept it. The invitation stays in this tab.
             </p>
             <div className="fd-btn-row">
-              <button type="button" className="fd-btn fd-btn--primary" onClick={() => void signOut()}>
+              <button type="button" className="fd-btn fd-btn--primary" onClick={leave}>
                 Leave demo and sign in
               </button>
               <button type="button" className="fd-btn fd-btn--quiet" onClick={onInviteDone}>
@@ -233,7 +262,9 @@ function SignedIn({
         </div>
       );
     }
-    return <Workspace key={demoInn.innId} viewer={viewer} inns={inns} current={demoInn} onSwitchInn={setStoredInn} />;
+    return (
+      <Workspace key={demoInn.innId} viewer={viewer} inns={inns} current={demoInn} onSwitchInn={setStoredInn} onSignOut={leave} />
+    );
   }
 
   if (invite) {
@@ -261,7 +292,7 @@ function SignedIn({
         setChoosingInn(true);
       }}
     >
-      <Workspace viewer={viewer} inns={inns} current={current} onSwitchInn={openInn} />
+      <Workspace viewer={viewer} inns={inns} current={current} onSwitchInn={openInn} onSignOut={leave} />
     </WorkspaceAccessBoundary>
   );
 }
@@ -271,11 +302,13 @@ function Workspace({
   inns,
   current,
   onSwitchInn,
+  onSignOut,
 }: {
   viewer: Viewer;
   inns: InnSummary[];
   current: InnSummary;
   onSwitchInn: (innId: string) => void;
+  onSignOut: () => void;
 }) {
   const innId = current.innId;
   const detail = useQuery(api.inns.get, { innId }) as InnDetail | undefined;
@@ -301,6 +334,9 @@ function Workspace({
   const [lastDemoChange, setLastDemoChange] = useState<RecordVersionResult | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // One instance of the demo's scripted edit, so the header control, the review
+  // hero and the palette share its busy and error state.
+  const demo = useDemoPolicy(innId, current.isDemo);
 
   const goTo = useCallback(
     (next: WorkspaceView) => {
@@ -309,15 +345,35 @@ function Workspace({
     [navigate, narrow],
   );
 
+  // On a narrow screen a thread opened over the list is one history entry
+  // deeper than the list, and is marked so: going back to the list is then a
+  // real `history.back()` and the stack does not grow with every round trip.
+  const atList = route.view === "inbox" && route.threadId === null;
+  const fromList = narrow && atList ? { state: { fdFromList: true } } : undefined;
+
   function openThread(threadId: Id<"threads">) {
-    navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-forward");
+    navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-forward", fromList);
   }
 
   /** Selection inside the inbox: a slide on narrow screens, a plain URL change beside an open queue. */
   function selectThread(threadId: Id<"threads"> | null) {
-    if (threadId === null) navigate({ view: "inbox", threadId: null }, "nav-back");
-    else navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-none");
+    if (threadId !== null) {
+      navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-none", fromList);
+      return;
+    }
+    if ((window.history.state as ListState)?.fdFromList) {
+      window.history.back(); // popstate restores the list with nav-back
+      return;
+    }
+    // Deselecting is not a place to return to: the entry is rewritten, never added.
+    navigate({ view: "inbox", threadId: null }, "nav-back", { replace: true });
   }
+
+  /** The open thread belongs to another property (ThreadDetail says so): drop it from the address bar and from memory. */
+  const onForeignThread = useCallback(() => {
+    replaceUrl("/inbox");
+    lastThread.current = null;
+  }, []);
 
   function demoChanged(result: RecordVersionResult) {
     setLastDemoChange(result);
@@ -339,46 +395,35 @@ function Workspace({
     },
   });
 
-  const header = (() => {
+  const header = ((): ShellHeader => {
     switch (view) {
       case "corrections":
-        return (
-          <>
-            <HeaderTitle title="Policy changes" sub="See which replies need a second look" />
-            <HeaderActions>
-              <button type="button" className="fd-btn" onClick={() => goTo("inbox")}>
-                Go to inbox
-              </button>
-            </HeaderActions>
-          </>
-        );
+        return {
+          title: "Policy changes",
+          sub: "See which replies need a second look",
+          actions: (
+            <button type="button" className="fd-btn" onClick={() => goTo("inbox")}>
+              Go to inbox
+            </button>
+          ),
+        };
       case "inbox":
-        return (
-          <>
-            <div style={{ minWidth: 0 }}>
-              <HeaderTitle
-                title="Inbox"
-                sub={
-                  stats ? undefined : detail?.inn.inboxAddress ?? (current.isDemo ? "Seeded guest threads" : "No inbox set up yet")
-                }
-              />
-              {stats ? <InboxStats stats={stats} timezone={detail?.inn.timezone} /> : null}
-            </div>
-            <HeaderActions>
-              {current.isDemo ? <DemoActions innId={innId} last={lastDemoChange} onResult={demoChanged} /> : null}
-            </HeaderActions>
-          </>
-        );
+        return {
+          title: "Inbox",
+          sub: detail?.inn.inboxAddress ?? (current.isDemo ? "Seeded guest threads" : "No inbox set up yet"),
+          meta: stats ? <InboxStats stats={stats} timezone={detail?.inn.timezone} /> : undefined,
+          actions: current.isDemo ? (
+            <DemoActions innId={innId} demo={demo} last={lastDemoChange} onResult={demoChanged} />
+          ) : undefined,
+        };
       case "knowledge":
-        return <HeaderTitle title="Knowledge" sub={current.siteUrl} />;
+        return { title: "Knowledge", sub: current.siteUrl };
       case "settings":
-        return <HeaderTitle title="Settings" />;
+        return { title: "Settings" };
     }
   })();
 
   const flush = view === "inbox";
-  // On narrow screens the inbox's list and detail are separate views for the transition.
-  const transitionKey = flush && narrow ? (selectedThread ? "inbox-detail" : "inbox-list") : view;
 
   return (
     <>
@@ -394,14 +439,19 @@ function Workspace({
         header={header}
         flush={flush}
         onOpenPalette={() => setPaletteOpen(true)}
+        onSignOut={onSignOut}
       >
-        <ViewTransition key={transitionKey} default="none" enter={VIEW_ENTER} exit={VIEW_EXIT}>
+        {/* Updates inside a view (list ↔ detail) animate on narrow screens only: on wide ones a
+            selection beside the queue must not start a view transition, which would hold the next
+            commits until it settles. */}
+        <ViewTransition key={view} default="none" enter={VIEW_ENTER} exit={VIEW_EXIT} update={narrow ? VIEW_UPDATE : "none"}>
           <div className={cn("min-w-0 flex-1", flush && "flex min-h-0")}>
             {view === "corrections" ? (
               <CorrectionsView
                 innId={innId}
                 viewerId={viewer._id}
                 isDemo={current.isDemo}
+                demo={demo}
                 liveMail={detail?.liveMail}
                 lastDemoChange={lastDemoChange}
                 onDemoChange={setLastDemoChange}
@@ -416,6 +466,7 @@ function Workspace({
                 selected={selectedThread}
                 onSelect={selectThread}
                 onOpenCorrections={() => goTo("corrections")}
+                onForeignThread={onForeignThread}
               />
             ) : view === "knowledge" ? (
               <KnowledgeView innId={innId} siteUrl={current.siteUrl} isDemo={current.isDemo} />
@@ -432,6 +483,7 @@ function Workspace({
         onOpenChange={setPaletteOpen}
         innId={innId}
         isDemo={current.isDemo}
+        demo={demo}
         onGo={goTo}
         onOpenThread={openThread}
         onDemoResult={demoChanged}

@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, LogOut } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { InnSummary, Viewer, WorkspaceView } from "../types";
@@ -17,6 +16,17 @@ import { roleLabel } from "./nav";
 import { Rail } from "./Rail";
 import { TabBar } from "./TabBar";
 
+/** What a view puts in the header. The shell lays it out differently per width. */
+export type ShellHeader = {
+  title: string;
+  /** 13px line under the title; ignored when `meta` is given. */
+  sub?: string;
+  /** A block under the title, e.g. the inbox statistics. */
+  meta?: ReactNode;
+  /** Right-aligned controls. */
+  actions?: ReactNode;
+};
+
 export type ShellProps = {
   viewer: Viewer;
   inns: InnSummary[];
@@ -26,33 +36,56 @@ export type ShellProps = {
   onNavigate: (view: WorkspaceView) => void;
   correctionsCount: number | undefined;
   isDemo: boolean;
-  header: ReactNode;
+  header: ShellHeader;
   children: ReactNode;
   /** The view fills the body edge to edge (the inbox's own panes carry their padding). */
   flush?: boolean;
   onOpenPalette: () => void;
+  onSignOut: () => void;
 };
 
 /** Where the rail's width preference lives between visits. */
-const RAIL_KEY = "fd.rail";
+const RAIL_KEY = "frontdesk.rail";
 
 /**
  * The workspace frame: rail (or bottom tab bar under 900px), sticky header,
  * body. Views own their header content and pass it in; the shell only lays
- * it out. Heights come from `--header-h` (44px on narrow screens) so nothing
- * hard-codes them.
+ * it out. The header bar is exactly `--header-h` tall (56px; 44px on narrow
+ * screens, where the view's sub line, stats and actions move to a strip
+ * under the bar) so panes can size off the variable.
  */
 export function Shell(props: ShellProps) {
-  const { signOut } = useAuthActions();
+  const { header, view, onSignOut } = props;
   const narrow = useIsNarrow();
   const [railState, setRailState] = useStoredState<"open" | "collapsed">(RAIL_KEY, "open");
   const collapsed = railState === "collapsed";
-  const onSignOut = () => void signOut();
+
+  // A route change moves focus to the body and names the new view for screen
+  // readers; selecting a thread inside the inbox does neither.
+  const mainRef = useRef<HTMLElement>(null);
+  const shownView = useRef(view);
+  const [announced, setAnnounced] = useState("");
+  useEffect(() => {
+    if (shownView.current === view) return;
+    shownView.current = view;
+    mainRef.current?.focus({ preventScroll: true });
+    setAnnounced(header.title);
+  }, [view, header.title]);
+
+  const strip =
+    narrow && (header.meta || header.sub || header.actions) ? (
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border-1 bg-bg-1 px-4 py-2">
+        <div className="min-w-0 flex-1">
+          {header.meta ?? (header.sub ? <p className="truncate text-[13px] text-ink-2">{header.sub}</p> : null)}
+        </div>
+        {header.actions ? <HeaderActions className="flex-wrap">{header.actions}</HeaderActions> : null}
+      </div>
+    ) : null;
 
   return (
     <div
       className={cn(
-        "grid min-h-dvh grid-cols-[var(--rail-w)_minmax(0,1fr)] transition-[grid-template-columns] duration-medium ease-in-out",
+        "grid min-h-dvh grid-cols-[var(--rail-w)_minmax(0,1fr)] motion-safe:transition-[grid-template-columns] motion-safe:duration-medium motion-safe:ease-in-out",
         collapsed && "[--rail-w:64px]",
         narrow && "grid-cols-1 [--header-h:44px]",
       )}
@@ -77,32 +110,50 @@ export function Shell(props: ShellProps) {
       <div className="flex min-w-0 flex-col">
         <header
           className={cn(
-            "sticky top-0 z-10 flex min-h-(--header-h) items-center justify-between gap-3 border-b border-border-1 bg-bg-1 px-6 py-2",
-            narrow && "gap-2 px-4 py-1",
+            "sticky top-0 z-10 flex h-(--header-h) items-center justify-between gap-3 border-b border-border-1 bg-bg-1 px-6",
+            narrow && "gap-2 px-4",
           )}
         >
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">{props.header}</div>
           {narrow ? (
-            <MobileMenu
-              viewer={props.viewer}
-              inns={props.inns}
-              currentInn={props.currentInn}
-              onSwitchInn={props.onSwitchInn}
-              isDemo={props.isDemo}
-              onSignOut={onSignOut}
-            />
-          ) : null}
+            <>
+              <HeaderTitle title={header.title} />
+              <MobileMenu
+                viewer={props.viewer}
+                inns={props.inns}
+                currentInn={props.currentInn}
+                onSwitchInn={props.onSwitchInn}
+                isDemo={props.isDemo}
+                onSignOut={onSignOut}
+              />
+            </>
+          ) : (
+            <>
+              {/* Sized by its content so the stats stay on one line; the actions take what is left and truncate. */}
+              <div className="min-w-0 shrink">
+                <HeaderTitle title={header.title} sub={header.meta ? undefined : header.sub} />
+                {header.meta}
+              </div>
+              {header.actions ? <HeaderActions className="flex-1">{header.actions}</HeaderActions> : null}
+            </>
+          )}
         </header>
+        {strip}
         <main
+          ref={mainRef}
+          id="fd-main"
+          tabIndex={-1}
           className={cn(
-            "min-w-0 flex-1",
+            "min-w-0 flex-1 outline-none [contain:layout_paint]",
             props.flush ? "flex min-h-0" : "px-6 pt-5 pb-10",
             narrow && !props.flush && "px-4 pt-4",
-            narrow && "pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)]",
+            narrow && "pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1rem)]",
           )}
         >
           {props.children}
         </main>
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {announced}
+        </div>
       </div>
 
       {narrow ? <TabBar view={props.view} onNavigate={props.onNavigate} correctionsCount={props.correctionsCount} /> : null}
@@ -187,7 +238,7 @@ export function HeaderTitle({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-/** Right-aligned header controls. */
-export function HeaderActions({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>;
+/** Right-aligned header controls, on one line unless a caller allows wrapping. */
+export function HeaderActions({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={cn("flex min-w-0 items-center justify-end gap-2", className)}>{children}</div>;
 }

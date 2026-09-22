@@ -16,7 +16,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MOD_LABEL, NAV, initials, roleLabel } from "./nav";
+import { MOD_LABEL, NAV, initials, reviewCountLabel, roleLabel } from "./nav";
 
 export type RailProps = {
   viewer: Viewer;
@@ -33,9 +33,18 @@ export type RailProps = {
   onSignOut: () => void;
 };
 
-/** Shared look of every rail control: quiet by default, hairline-free, accent focus ring on the dark ground. */
+/**
+ * Shared look of every rail control: quiet by default, hairline-free, and a
+ * focus ring in `--rail-accent` (accent-9 is ≈2:1 on the dark ground). Padding
+ * puts a 16px glyph's centre at 32px from the rail edge (12px rail padding +
+ * 12px + 8px), which is the collapsed rail's centre: glyphs never move when
+ * the rail collapses, only the labels fade.
+ */
 const railControl =
-  "relative flex h-9 w-full items-center gap-3 rounded-md px-2.5 text-left text-[14px] text-rail-muted outline-hidden transition-colors duration-micro ease-out hover:bg-white/6 hover:text-rail-ink focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2 focus-visible:ring-offset-rail-bg";
+  "relative flex h-9 w-full items-center gap-3 rounded-md px-3 text-left text-[14px] text-rail-muted outline-hidden transition-colors duration-micro ease-out hover:bg-white/6 hover:text-rail-ink focus-visible:ring-2 focus-visible:ring-rail-accent focus-visible:ring-offset-2 focus-visible:ring-offset-rail-bg";
+
+/** Rows carrying a 28px avatar glyph: 12px + 6px + 14px = the same 32px centre. */
+const avatarRow = "px-1.5";
 
 /** A label that fades and slides out while the rail collapses; the icon before it never moves. */
 function RailLabel({ collapsed, className, children }: { collapsed: boolean; className?: string; children: ReactNode }) {
@@ -75,18 +84,18 @@ function RailTip({ label, keys, children }: { label: string; keys?: string[]; ch
 }
 
 /**
- * The "needs review" count beside Policy changes. The wrapper's aria-label is
- * the sentence the browser specs read; NumberFlow rolls the digits and starts
- * from 0 on first paint so a count arriving late is seen to arrive.
+ * The "needs review" count beside Policy changes: nothing at 0 (the button's
+ * aria-label still carries the sentence), an ellipsis while loading.
+ * NumberFlow rolls the digits and starts from 0 on first paint so a count
+ * arriving late is seen to arrive.
  */
 export function ReviewCount({ count, className }: { count: number | undefined; className?: string }) {
   // First paint shows 0, the next render the real count: the digits roll in.
   const shown = useDeferredValue(count ?? 0, 0);
-  const label =
-    count === undefined ? "loading" : count === 1 ? "1 reply needs review" : `${count} replies need review`;
+  if (count === 0) return null;
   return (
     <span
-      aria-label={label}
+      aria-hidden="true"
       className={cn(
         "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[12px] leading-5 tabular-nums transition-colors duration-micro",
         count ? "bg-white/12 font-medium text-white" : "text-rail-muted",
@@ -110,7 +119,7 @@ export function ReviewCount({ count, className }: { count: number | undefined; c
 /** The 2px accent bar of the active item, sliding between items with a shared layoutId (a plain bar under reduced motion). */
 function ActiveBar() {
   const reduced = useReducedMotion();
-  const className = "absolute top-2 bottom-2 left-0 w-0.5 rounded-full bg-accent-9";
+  const className = "absolute top-2 bottom-2 left-0 w-0.5 rounded-full bg-rail-accent";
   if (reduced) return <span aria-hidden="true" className={className} />;
   return (
     <m.span
@@ -156,8 +165,10 @@ export function Rail(props: RailProps) {
       aria-label="Workspace"
       className="sticky top-0 flex h-dvh min-h-0 flex-col overflow-hidden bg-rail-bg text-rail-ink"
     >
-      <div className="flex h-14 shrink-0 items-center gap-2.5 px-5">
-        <Mark size={24} />
+      <div className="flex h-14 shrink-0 items-center gap-3 px-5">
+        <span className="flex shrink-0">
+          <Mark size={24} />
+        </span>
         <RailLabel collapsed={collapsed} className="font-serif text-[18px] font-medium text-white">
           Front Desk
         </RailLabel>
@@ -167,7 +178,7 @@ export function Rail(props: RailProps) {
         {inns.length > 1 ? (
           <DropdownMenu>
             <DropdownMenuTrigger
-              className={cn(railControl, "h-11")}
+              className={cn(railControl, "h-11", avatarRow)}
               aria-label={collapsed ? `Switch property (${currentInn.name})` : undefined}
             >
               <PropertyBlock inn={currentInn} collapsed={collapsed} chevron />
@@ -195,7 +206,7 @@ export function Rail(props: RailProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <div className="flex h-11 items-center gap-3 px-2.5">
+          <div className={cn("flex h-11 items-center gap-3", avatarRow)}>
             <PropertyBlock inn={currentInn} collapsed={collapsed} chevron={false} />
           </div>
         )}
@@ -206,15 +217,13 @@ export function Rail(props: RailProps) {
           <button type="button" className={railControl} onClick={props.onOpenPalette}>
             <Search aria-hidden="true" className="size-4 shrink-0" />
             <RailLabel collapsed={collapsed}>Search</RailLabel>
-            <Kbd
+            <KbdGroup
               aria-hidden="true"
-              className={cn(
-                "bg-white/10 text-rail-muted transition-opacity duration-small",
-                collapsed && "opacity-0",
-              )}
+              className={cn("transition-opacity duration-small", collapsed && "opacity-0")}
             >
-              {MOD_LABEL}K
-            </Kbd>
+              <Kbd className="bg-white/10 text-rail-muted">{MOD_LABEL}</Kbd>
+              <Kbd className="bg-white/10 text-rail-muted">K</Kbd>
+            </KbdGroup>
           </button>
         </RailTip>
       </div>
@@ -229,6 +238,7 @@ export function Rail(props: RailProps) {
                 type="button"
                 className={cn(railControl, active && "bg-rail-active font-medium text-rail-ink")}
                 aria-current={active ? "page" : undefined}
+                aria-label={item.view === "corrections" ? `${item.label}, ${reviewCountLabel(correctionsCount)}` : undefined}
                 onClick={() => onNavigate(item.view)}
               >
                 {active ? <ActiveBar /> : null}
@@ -250,7 +260,7 @@ export function Rail(props: RailProps) {
       </div>
 
       <div className="mt-auto flex shrink-0 flex-col gap-1 border-t border-white/10 px-3 py-3">
-        <div className="flex h-9 items-center gap-3 px-2.5">
+        <div className={cn("flex h-9 items-center gap-3", avatarRow)}>
           <span
             aria-hidden="true"
             className="grid size-7 shrink-0 place-items-center rounded-full bg-rail-active text-[12px] font-semibold text-rail-ink"
@@ -265,7 +275,7 @@ export function Rail(props: RailProps) {
         {isDemo ? (
           <p
             className={cn(
-              "px-2.5 text-[12px] leading-4 text-rail-muted transition-opacity duration-small",
+              "px-3 text-[12px] leading-4 text-rail-muted transition-opacity duration-small",
               collapsed && "h-0 overflow-hidden opacity-0",
             )}
           >

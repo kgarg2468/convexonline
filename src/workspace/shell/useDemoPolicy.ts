@@ -7,10 +7,12 @@ import { useAsyncAction } from "../lib/hooks";
 
 /**
  * The demo's scripted website edit, shared by the header control, the review
- * hero and the command palette. `demo.changePolicyPage` toggles the policies
- * page between its two stored versions, so one action both makes the change
- * and undoes it; `changed` says which the next press will do. Convex dedupes
- * identical subscriptions, so several callers cost one `demo.status` query.
+ * hero and the command palette: the workspace calls this once and hands the
+ * result down, so busy and error state are the same everywhere and survive a
+ * control unmounting (the palette closes as soon as something is picked).
+ * `demo.changePolicyPage` toggles the policies page between its two stored
+ * versions, so one action both makes the change and undoes it; `changed` says
+ * which the next press will do.
  */
 export function useDemoPolicy(innId: Id<"inns">, enabled = true) {
   const status = useQuery(api.demo.status, enabled ? { innId } : "skip") as DemoStatus | undefined;
@@ -38,6 +40,9 @@ export function useDemoPolicy(innId: Id<"inns">, enabled = true) {
     run,
   };
 }
+
+/** What `useDemoPolicy` returns: one instance lives in the workspace and is passed to every control. */
+export type DemoPolicy = ReturnType<typeof useDemoPolicy>;
 
 /** The sentence shown after a scripted page edit; the result is owned by the workspace so it outlives the control that ran it. */
 export function demoChangeNotice(last: RecordVersionResult): string {

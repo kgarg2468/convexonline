@@ -16,6 +16,7 @@ export function InboxView({
   selected,
   onSelect,
   onOpenCorrections,
+  onForeignThread,
 }: {
   innId: Id<"inns">;
   viewerId: Id<"users">;
@@ -24,6 +25,8 @@ export function InboxView({
   selected: Id<"threads"> | null;
   onSelect: (threadId: Id<"threads"> | null) => void;
   onOpenCorrections: () => void;
+  /** The selected thread turned out to belong to another property (see ThreadDetail). */
+  onForeignThread?: () => void;
 }) {
   const narrow = useIsNarrow();
   const [composing, setComposing] = useState(false);
@@ -70,6 +73,8 @@ export function InboxView({
             liveMail={liveMail}
             onBack={narrow ? () => onSelect(null) : null}
             onOpenCorrections={onOpenCorrections}
+            onForeign={onForeignThread}
+            onBackToInbox={() => onSelect(null)}
           />
         ) : (
           <div className="fd-thread__main">

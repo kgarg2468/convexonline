@@ -4,12 +4,14 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { PageSummary, RecordVersionResult } from "../types";
 import { VersionPane } from "../knowledge/VersionPane";
-import { HeaderActions } from "./Shell";
-import { demoChangeNotice, useDemoPolicy } from "./useDemoPolicy";
+import { useIsNarrow } from "../lib/hooks";
+import { cn } from "@/lib/utils";
+import { demoChangeNotice, type DemoPolicy } from "./useDemoPolicy";
 
 /**
- * The demo's scripted website edit. The mutation and its status live in
- * `useDemoPolicy` (shared with the command palette); this is the control.
+ * The demo's scripted website edit. The mutation and its status live in the
+ * workspace's `useDemoPolicy` instance (`demo`, shared with the command
+ * palette); this is the control.
  *
  * `variant="compact"` is the header control. `variant="hero"` is the
  * zero-state panel on the review screen: it explains what the edit will do
@@ -21,28 +23,33 @@ import { demoChangeNotice, useDemoPolicy } from "./useDemoPolicy";
  */
 export function DemoActions({
   innId,
+  demo,
   last,
   onResult,
   variant = "compact",
 }: {
   innId: Id<"inns">;
+  demo: DemoPolicy;
   last: RecordVersionResult | null;
   onResult: (result: RecordVersionResult) => void;
   variant?: "compact" | "hero";
 }) {
-  const demo = useDemoPolicy(innId);
+  const narrow = useIsNarrow();
 
   async function run() {
     const r = await demo.run();
     if (r) onResult(r);
   }
 
+  // In the 56px header the sentence truncates rather than wrapping; in the
+  // narrow strip and the review page it may take its own line.
+  const feedbackClass = cn("fd-small min-w-0", variant === "compact" && !narrow && "truncate");
   const feedback = demo.error ? (
-    <span className="fd-small" role="alert" style={{ color: "var(--fd-error)" }}>
+    <span className={feedbackClass} role="alert" style={{ color: "var(--fd-error)" }}>
       {demo.error}
     </span>
   ) : last ? (
-    <span className="fd-small fd-muted" role="status">
+    <span className={cn(feedbackClass, "fd-muted")} role="status">
       {demoChangeNotice(last)}
     </span>
   ) : null;
@@ -50,7 +57,7 @@ export function DemoActions({
   const button = (
     <button
       type="button"
-      className={`fd-btn${demo.changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
+      className={`fd-btn shrink-0${demo.changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
       disabled={demo.busy || !demo.ready}
       onClick={() => void run()}
       title={demo.description}
@@ -61,10 +68,10 @@ export function DemoActions({
 
   if (variant === "compact") {
     return (
-      <HeaderActions>
+      <div className={cn("flex min-w-0 items-center justify-end gap-2", narrow && "flex-wrap")}>
         {feedback}
         {button}
-      </HeaderActions>
+      </div>
     );
   }
 

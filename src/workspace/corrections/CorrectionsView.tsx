@@ -6,6 +6,7 @@ import { Empty, Spinner } from "../lib/ui";
 import { CorrectionCard } from "./CorrectionCard";
 import { UnaffectedControls } from "./UnaffectedControls";
 import { DemoActions } from "../shell/DemoActions";
+import type { DemoPolicy } from "../shell/useDemoPolicy";
 
 /** Sent replies asked for per page; the server caps the walk at the same size. */
 const CONTROLS_PAGE_SIZE = 25;
@@ -14,6 +15,7 @@ export function CorrectionsView({
   innId,
   viewerId,
   isDemo,
+  demo,
   liveMail,
   lastDemoChange,
   onDemoChange,
@@ -22,6 +24,8 @@ export function CorrectionsView({
   innId: Id<"inns">;
   viewerId: Id<"users">;
   isDemo: boolean;
+  /** The workspace's demo-edit instance, shared with the header control and the palette. */
+  demo: DemoPolicy;
   liveMail: LiveMailDecision | undefined;
   /** Result of the last scripted demo edit, held by the workspace so the notice survives this view's re-layout. */
   lastDemoChange: RecordVersionResult | null;
@@ -73,7 +77,7 @@ export function CorrectionsView({
       {isDemo && !untouched ? (
         <div className="fd-demo-bar">
           <span className="fd-small fd-muted">Demo controls</span>
-          <DemoActions innId={innId} last={lastDemoChange} onResult={onDemoChange} />
+          <DemoActions innId={innId} demo={demo} last={lastDemoChange} onResult={onDemoChange} />
         </div>
       ) : null}
 
@@ -108,7 +112,7 @@ export function CorrectionsView({
       {open.length === 0 ? (
         <div className="fd-section">
           {isDemo && untouched ? (
-            <DemoActions innId={innId} variant="hero" last={lastDemoChange} onResult={onDemoChange} />
+            <DemoActions innId={innId} demo={demo} variant="hero" last={lastDemoChange} onResult={onDemoChange} />
           ) : (
             <Empty title="Nothing to review">
               {untouched

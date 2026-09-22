@@ -2,6 +2,11 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { SHORTCUT_GROUPS } from "./nav";
 
+/** A heading as an id fragment: lowercase, words joined by hyphens. */
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
 /** `?`: every shortcut the shell knows, as a right-hand sheet. Groups come from nav.ts so views can add theirs. */
 export function ShortcutsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
@@ -16,9 +21,9 @@ export function ShortcutsSheet({ open, onOpenChange }: { open: boolean; onOpenCh
         </SheetHeader>
         <div className="flex flex-col gap-6 overflow-y-auto p-4">
           {SHORTCUT_GROUPS.map((group) => (
-            <section key={group.heading} aria-labelledby={`fd-shortcuts-${group.heading}`}>
+            <section key={group.heading} aria-labelledby={`fd-shortcuts-${slug(group.heading)}`}>
               <h3
-                id={`fd-shortcuts-${group.heading}`}
+                id={`fd-shortcuts-${slug(group.heading)}`}
                 className="mb-2 text-[12px] font-medium tracking-wide text-ink-3 uppercase"
               >
                 {group.heading}

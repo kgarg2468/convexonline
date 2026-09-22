@@ -17,7 +17,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { NAV } from "./nav";
-import { useDemoPolicy } from "./useDemoPolicy";
+import type { DemoPolicy } from "./useDemoPolicy";
 
 /** Threads listed at most, recent or found. */
 const THREAD_LIMIT = 8;
@@ -35,6 +35,8 @@ function matches(label: string, query: string): boolean {
 type PaletteProps = {
   innId: Id<"inns">;
   isDemo: boolean;
+  /** The workspace's demo-edit instance; its busy and error state outlive this palette. */
+  demo: DemoPolicy;
   onGo: (view: WorkspaceView) => void;
   onOpenThread: (threadId: Id<"threads">) => void;
   onDemoResult: (result: RecordVersionResult) => void;
@@ -45,9 +47,11 @@ type PaletteProps = {
 /**
  * ⌘K. Three groups: views (with their `g …` keycaps), threads (the most
  * recent until two characters are typed, then the server's full-text search),
- * and, in the demo, the scripted policy-page edit. Picking anything closes
- * the palette first, then acts; the palette opens instantly and only fades
- * out, because it is keyboard furniture used all day.
+ * and, in the demo, the scripted policy-page edit. Picking a view or thread
+ * closes the palette first, then acts; the demo edit runs first and closes
+ * only once it has succeeded, so a failure is shown here. The palette (and
+ * its scrim, see app.css) opens instantly and only fades out, because it is
+ * keyboard furniture used all day.
  */
 export function CommandPalette({
   open,
@@ -60,7 +64,7 @@ export function CommandPalette({
       onOpenChange={onOpenChange}
       title="Search and commands"
       description="Go to a view, open a thread or run an action"
-      className="shadow-pop data-open:animate-none data-closed:duration-(--dur-micro) sm:max-w-lg"
+      className="fd-palette shadow-pop data-open:animate-none data-closed:duration-(--dur-micro) sm:max-w-lg"
     >
       {/* Mounted only while open: the query and its subscriptions start fresh each time. */}
       <PaletteBody {...body} onClose={() => onOpenChange(false)} />
@@ -68,7 +72,7 @@ export function CommandPalette({
   );
 }
 
-function PaletteBody({ innId, isDemo, onGo, onOpenThread, onDemoResult, onClose }: PaletteProps) {
+function PaletteBody({ innId, isDemo, demo, onGo, onOpenThread, onDemoResult, onClose }: PaletteProps) {
   const [query, setQuery] = useState("");
   const trimmed = query.trim();
   const searching = trimmed.length >= 2;
@@ -79,7 +83,14 @@ function PaletteBody({ innId, isDemo, onGo, onOpenThread, onDemoResult, onClose 
     | ThreadSummary[]
     | undefined;
   const threads = (searching ? found : recent)?.slice(0, THREAD_LIMIT) ?? [];
-  const demo = useDemoPolicy(innId, isDemo);
+
+  /** The demo edit: close on success and hand the result on; on failure stay open and show why. */
+  async function runDemo() {
+    const result = await demo.run();
+    if (!result) return;
+    onClose();
+    onDemoResult(result);
+  }
 
   function pick(action: () => void) {
     onClose();
@@ -130,23 +141,18 @@ function PaletteBody({ innId, isDemo, onGo, onOpenThread, onDemoResult, onClose 
         ) : null}
         {showDemoAction ? (
           <CommandGroup heading="Actions">
-            <CommandItem
-              value="action:policy-page"
-              disabled={!demo.ready || demo.busy}
-              onSelect={() =>
-                pick(() => {
-                  void demo.run().then((result) => {
-                    if (result) onDemoResult(result);
-                  });
-                })
-              }
-            >
+            <CommandItem value="action:policy-page" disabled={!demo.ready || demo.busy} onSelect={() => void runDemo()}>
               {demo.changed ? <RotateCcw className="text-ink-3" /> : <FilePen className="text-ink-3" />}
               <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                <span>{demo.label}</span>
+                <span>{demo.busy ? "Updating page…" : demo.label}</span>
                 <span className="truncate text-[12px] text-ink-2">{demo.description}</span>
               </span>
             </CommandItem>
+            {demo.error ? (
+              <p role="alert" className="px-2 pt-1 pb-1.5 text-[12px] leading-4 text-danger-10">
+                {demo.error}
+              </p>
+            ) : null}
           </CommandGroup>
         ) : null}
       </CommandList>

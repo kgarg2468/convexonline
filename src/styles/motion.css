@@ -1,8 +1,9 @@
 /* Front Desk — view-level motion (research-motion §2.2, §4).
    React 19.3 <ViewTransition> tags the routed view with the classes below by
    transition type (lib/hooks.ts useRoute → addTransitionType):
-     nav-forward / nav-back   view swap: cross-fade, old out faster than new in
-     nav-mobile-detail        list → detail slide on narrow screens
+     nav-forward / nav-back   view swap (enter/exit): cross-fade, old out faster than new in
+     nav-mobile-detail        inbox list → detail (an update inside the one inbox view):
+                              slide on narrow screens; nav-back slides back out
    Everything else the shell animates is CSS on Radix data-state (tw-animate)
    or a Motion layoutId (rail active bar). */
 
@@ -111,6 +112,35 @@
     ::view-transition-new(.vt-back-in) {
       animation: vt-slide-from-under 200ms var(--ease-out) both;
     }
+  }
+}
+
+/* Inbox list ↔ detail. The routed view is keyed by view, so this is an update
+   of one boundary: old and new share an image pair, hence the blend reset and
+   the explicit stacking. Nothing animates outside narrow screens. */
+::view-transition-group(.vt-detail-in),
+::view-transition-group(.vt-detail-out),
+::view-transition-old(.vt-detail-in),
+::view-transition-new(.vt-detail-in),
+::view-transition-old(.vt-detail-out),
+::view-transition-new(.vt-detail-out) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+@media (prefers-reduced-motion: no-preference) and (max-width: 900px) {
+  ::view-transition-old(.vt-detail-in) {
+    animation: vt-slide-under var(--dur-medium) var(--ease-drawer) both;
+  }
+  ::view-transition-new(.vt-detail-in) {
+    animation: vt-slide-in-right var(--dur-medium) var(--ease-drawer) both;
+  }
+  /* Back: the leaving detail slides out over the list returning from under it. */
+  ::view-transition-old(.vt-detail-out) {
+    z-index: 1;
+    animation: vt-slide-out-right 200ms var(--ease-out) both;
+  }
+  ::view-transition-new(.vt-detail-out) {
+    animation: vt-slide-from-under 200ms var(--ease-out) both;
   }
 }
 
