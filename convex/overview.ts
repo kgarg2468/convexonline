@@ -36,6 +36,7 @@ const MONTH_MS = 30 * DAY_MS;
 const THREAD_SCAN = 200;
 const REPLY_SCAN = 200;
 const CORRECTION_SCAN = 200;
+const CORRECTION_STATUSES = ["needs_review", "approved", "sent", "dismissed", "superseded"] as const satisfies readonly Doc<"corrections">["status"][];
 const CLAIM_SCAN = 200;
 const FACT_SCAN = 200;
 const PAGE_SCAN = 60;
@@ -101,8 +102,30 @@ async function hasDueReminder(ctx: QueryCtx, threadId: Id<"threads">) {
   const rows = await ctx.db
     .query("followUps")
     .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+    // Cancelled reminders are kept, not deleted, so read newest first: a
+    // freshly due reminder must not fall outside the cap behind old rows.
+    .order("desc")
     .take(FOLLOW_UPS_PER_THREAD);
   return rows.some((r) => r.kind !== "email" && r.status === "due");
+}
+
+/**
+ * Corrections for the latest page change are the newest rows the inn has, but
+ * `by_inn_status` groups by status first, so one descending walk would read
+ * whichever status sorts last. Walk each status newest-first instead; the cap
+ * is per status, so a single busy group can never push another out.
+ */
+async function correctionsNewestPerStatus(ctx: QueryCtx, innId: Id<"inns">) {
+  const perStatus = await Promise.all(
+    CORRECTION_STATUSES.map((status) =>
+      ctx.db
+        .query("corrections")
+        .withIndex("by_inn_status", (q) => q.eq("innId", innId).eq("status", status))
+        .order("desc")
+        .take(CORRECTION_SCAN),
+    ),
+  );
+  return perStatus.flat();
 }
 
 /** The most recent "changed" page version across the inn's pages, with its page. */
@@ -302,11 +325,7 @@ export async function overviewSummary(ctx: QueryCtx, inn: Doc<"inns">, now: numb
         .query("claims")
         .withIndex("by_page", (q) => q.eq("pageId", changed.page._id))
         .take(CLAIM_SCAN),
-      ctx.db
-        .query("corrections")
-        .withIndex("by_inn_status", (q) => q.eq("innId", innId))
-        .order("desc")
-        .take(CORRECTION_SCAN),
+      correctionsNewestPerStatus(ctx, innId),
     ]);
     // Every sent claim citing the page is re-checked against the new version
     // and stamped with it; unsent and stripped claims are never stamped.
