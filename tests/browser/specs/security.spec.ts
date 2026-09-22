@@ -57,7 +57,7 @@ test.describe("XSS through the real write paths", () => {
     const heading = page.getByRole("heading", { level: 2, name: SUBJECT_PAYLOAD });
     await expect(heading).toBeVisible();
     await expect(heading).toHaveText(SUBJECT_PAYLOAD);
-    await expect(page.locator(".fd-msg__text").first()).toHaveText(MESSAGE_PAYLOAD);
+    await expect(page.getByText(MESSAGE_PAYLOAD, { exact: true }).first()).toBeVisible();
     await expect(page.getByText(EMAIL_PAYLOAD).first()).toBeVisible();
     // And in the queue row beside it.
     await expect(queue(page).getByRole("button", { name: SUBJECT_PAYLOAD })).toBeVisible();
@@ -165,11 +165,13 @@ test.describe("hostile ids in the address bar", () => {
       await enterDemo(page);
       for (const id of ["k".repeat(32), foreignThreadId]) {
         await page.goto(`/inbox/${id}`);
-        await page.waitForTimeout(2_000);
-        // Nothing of the other inn (or of any thread) is rendered.
-        const text = await page.locator("body").innerText();
-        expect(text, "no foreign thread subject").not.toContain(THREADS.ready);
-        expect(text, "no foreign guest message").not.toContain("Harbor View");
+        // The refusal is said in the thread pane; the queue (this visitor's
+        // own inn, seeded with the same demo threads) stays up beside it.
+        await expect(page.getByRole("region", { name: "This thread could not be opened." })).toBeVisible();
+        // Nothing of the other inn's thread is rendered: no thread heading, no message.
+        await expect(page.getByRole("heading", { level: 2, name: THREADS.ready })).toHaveCount(0);
+        await expect(page.getByRole("article")).toHaveCount(0);
+        await expect(page.getByText("Harbor View Rooms")).toHaveCount(0);
         await expectNoInjectedMarkup(page, `/inbox/${id.slice(0, 8)}…`);
 
         // The app is usable again straight away.
@@ -187,35 +189,22 @@ test.describe("hostile ids in the address bar", () => {
     }
   });
 
-  /**
-   * Known defect (reported, fix is outside this branch's allowlist): a refused
-   * `/inbox/<id>` blanks the whole app — `#root` is left empty instead of
-   * showing the WorkspaceAccessBoundary notice
-   * (src/workspace/lib/WorkspaceAccessBoundary.tsx, mounted at
-   * src/workspace/FrontDeskWorkspace.tsx:288). It happens on a cold load and on
-   * a client-side navigation alike, both for an id `router.ts`'s THREAD_ID
-   * shape accepts but Convex's `v.id` rejects (an ArgumentValidationError, which
-   * is not a ConvexError and so is not an "access error") and for another inn's
-   * real thread id (a ConvexError `forbidden`, which the boundary is written to
-   * catch). The error reaches `pageerror`, so the boundary is never entered at
-   * all. No data leaks — the surrounding test proves nothing of the other inn is
-   * shown and that /inbox recovers — but the state is a blank page.
-   *
-   * `test.fail` keeps this red-when-fixed rather than silently forgotten: the
-   * suite stays green today and this test starts failing the moment the app
-   * renders anything at all here.
-   */
-  test.fail(
-    "a refused thread deep link should render something, not an empty document root",
-    async ({ page }) => {
-      test.setTimeout(120_000);
-      await enterDemo(page);
-      await page.goto(`/inbox/${"k".repeat(32)}`);
-      // Give the refusal, the error boundary and any retry all the time they need.
-      await page.waitForTimeout(5_000);
-      expect(await page.locator("#root").innerHTML(), "the app root is not left empty").not.toBe("");
-    },
-  );
+  test("a refused thread deep link renders the inbox with an honest thread pane, not a blank document", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const guards = guardPage(page);
+    await enterDemo(page);
+    // Passes router.ts's shape check, fails Convex's v.id("threads"): the server refuses it.
+    await page.goto(`/inbox/${"k".repeat(32)}`);
+    await expect(page.getByRole("heading", { name: "This thread could not be opened." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back to inbox" })).toBeVisible();
+    await expect(page.locator("#fd-queue-filter")).toBeVisible();
+    await page.getByRole("button", { name: "Back to inbox" }).click();
+    await expect(page).toHaveURL(/\/inbox$/);
+    await expect(page.getByRole("heading", { name: "This thread could not be opened." })).toHaveCount(0);
+    expectClean(guards, "refused thread deep link");
+  });
 
   test("a hostile invitation fragment is reported as not valid and is never reflected", async ({ page }) => {
     test.setTimeout(120_000);
