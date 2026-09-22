@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { ChevronDown } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { PageSummary, RecordVersionResult } from "../types";
 import { VersionPane } from "../knowledge/VersionPane";
 import { useIsNarrow } from "../lib/hooks";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { demoChangeNotice, type DemoPolicy } from "./useDemoPolicy";
 
 /**
@@ -54,16 +56,21 @@ export function DemoActions({
     </span>
   ) : null;
 
+  // The edit is the primary action; the restore is an outline button. In the
+  // header it matches the small buttons beside it; on the review page's hero
+  // it is the page's one call to action and takes the default size.
   const button = (
-    <button
+    <Button
       type="button"
-      className={`fd-btn shrink-0${demo.changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
+      variant={demo.changed ? "outline" : "default"}
+      size={variant === "hero" ? "default" : "sm"}
+      className={cn("shrink-0", variant === "hero" ? "text-[14px]" : "text-[13px]", demo.changed && "bg-white text-ink-1")}
       disabled={demo.busy || !demo.ready}
       onClick={() => void run()}
       title={demo.description}
     >
       {demo.busy ? "Updating page…" : demo.label}
-    </button>
+    </Button>
   );
 
   if (variant === "compact") {
@@ -100,7 +107,7 @@ export function DemoActions({
         untouched passages are listed as re-checked and still true. Nothing is edited until you press the button.
       </p>
       <PolicyPreview innId={innId} />
-      <div className="fd-btn-row" style={{ marginTop: 18 }}>
+      <div className="fd-hero__actions">
         {button}
         {feedback}
       </div>
@@ -116,14 +123,21 @@ function PolicyPreview({ innId }: { innId: Id<"inns"> }) {
   if (!policies?.lastVersion) return null;
   return (
     <div className="fd-version-toggle">
-      <button
+      <Button
         type="button"
-        className="fd-btn fd-btn--quiet fd-btn--small"
+        variant="ghost"
+        size="sm"
+        className="-ml-2 text-[13px] text-ink-2"
         aria-expanded={open}
         onClick={() => setOpen((s) => !s)}
       >
         {open ? "Hide the policies page as it is now" : "Read the policies page as it is now"}
-      </button>
+        <ChevronDown
+          data-icon="inline-end"
+          aria-hidden="true"
+          className={cn("text-ink-3 transition-transform duration-small ease-out", open && "rotate-180")}
+        />
+      </Button>
       {open ? (
         <div className="fd-diff">
           <VersionPane versionId={policies.lastVersion._id} label="Policies page now" highlight="$25 per night pet fee" />
