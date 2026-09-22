@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { QueueList, type QueueFilter, type QueueKeyHandler, type QueueRestore } from "./QueueList";
 import type { SelectSource } from "./QueueRow";
 import { ThreadSkeleton } from "./QueueSkeleton";
+import { threadMainClass } from "./styles";
 import { ThreadDetail } from "./ThreadDetail";
 import { DemoInbound } from "../shell/DemoInbound";
 
@@ -29,8 +30,8 @@ function SourcesPlaceholder() {
  * scrolling on its own under the sticky header. 900–1199px: queue + thread,
  * the sources pane opens as a sheet from the header (SourcesSheet). Under
  * 900px the list and the thread are separate screens that scroll with the
- * page. The thread's own two-column markup is untouched: its main and side
- * panes join this grid through `display: contents` on `.fd-thread`.
+ * page. ThreadDetail renders its main column and the sources pane as two
+ * direct children of this grid.
  */
 export function InboxView({
   innId,
@@ -181,7 +182,7 @@ export function InboxView({
                 {showThreadSkeleton ? (
                   <ThreadSkeleton onBack={back} />
                 ) : (
-                  <div className="fd-thread__main" />
+                  <div className={threadMainClass} />
                 )}
                 <SourcesPlaceholder />
               </>

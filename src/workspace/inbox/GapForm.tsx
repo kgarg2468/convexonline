@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "convex/react";
+import { ChevronDown } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Field, Notice } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Hint, InlineNotice } from "./primitives";
+import { chipSelectClass } from "./styles";
 
 /**
  * The knowledge-gap question. Answering stores a staff fact on this thread
@@ -31,59 +35,68 @@ export function GapForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const id = await action.run(() =>
-      addFact({ innId, threadId, question, answer, scope }),
-    );
+    const id = await action.run(() => addFact({ innId, threadId, question, answer, scope }));
     if (id !== undefined) {
       setDone(true);
       setAnswer("");
     }
   }
 
+  const disabled = !canAnswer || action.busy;
+
   return (
-    <section className="fd-gap" aria-labelledby="fd-gap-title">
-      <h3 id="fd-gap-title" className="fd-small" style={{ fontWeight: 600 }}>
+    <section aria-labelledby="fd-gap-title" className="rounded-[10px] border border-warning-10/20 bg-warning-3 p-4">
+      <h3 id="fd-gap-title" className="text-[14px] leading-5 font-semibold text-ink-1">
         The website does not answer this
       </h3>
-      <p className="fd-gap__q">{question}</p>
+      <p className="mt-1 font-serif text-[15px] leading-[1.55] text-ink-1 italic">{question}</p>
       {done ? (
-        <Notice tone="success">
+        <InlineNotice tone="success" className="mt-3 bg-white">
           {isDemo
             ? "Saved. The demo builds a new draft that cites your answer."
             : "Saved. The thread is back in drafting; a new reply will use your answer once the drafter runs."}
-        </Notice>
+        </InlineNotice>
       ) : (
-        <form onSubmit={submit}>
-          <Field label="Your answer" htmlFor="fd-gap-answer">
-            <textarea
+        <form onSubmit={submit} className="mt-3 flex flex-col gap-3">
+          <div>
+            <label className="text-[13px] leading-5 font-medium text-ink-1" htmlFor="fd-gap-answer">
+              Your answer
+            </label>
+            <Textarea
               id="fd-gap-answer"
-              className="fd-textarea"
-              style={{ minHeight: 80 }}
               required
+              rows={3}
               maxLength={5000}
               value={answer}
-              disabled={!canAnswer || action.busy}
+              disabled={disabled}
               onChange={(e) => setAnswer(e.target.value)}
+              className="mt-1 min-h-20 resize-y bg-white px-3 py-2 text-[14px] leading-[1.55] text-ink-1 disabled:bg-white/60 md:text-[14px]"
             />
-          </Field>
-          <Field label="Remember this for" htmlFor="fd-gap-scope">
-            <select
-              id="fd-gap-scope"
-              className="fd-select"
-              value={scope}
-              disabled={!canAnswer || action.busy}
-              onChange={(e) => setScope(e.target.value as "thread" | "general")}
-            >
-              <option value="general">Every future guest</option>
-              <option value="thread">This guest only</option>
-            </select>
-          </Field>
-          {action.error ? <Notice tone="error">{action.error}</Notice> : null}
-          <div className="fd-btn-row" style={{ marginTop: 8 }}>
-            <button type="submit" className="fd-btn fd-btn--primary" disabled={!canAnswer || action.busy || !answer.trim()}>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <label className="text-[13px] leading-5 font-medium text-ink-1" htmlFor="fd-gap-scope">
+              Remember this for
+            </label>
+            <span className="relative inline-flex">
+              <select
+                id="fd-gap-scope"
+                value={scope}
+                disabled={disabled}
+                onChange={(e) => setScope(e.target.value as "thread" | "general")}
+                className={chipSelectClass}
+              >
+                <option value="general">Every future guest</option>
+                <option value="thread">This guest only</option>
+              </select>
+              <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-ink-3" />
+            </span>
+          </div>
+          {action.error ? <InlineNotice tone="error">{action.error}</InlineNotice> : null}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" size="sm" className="text-[13px]" disabled={disabled || !answer.trim()}>
               {action.busy ? "Saving…" : "Save answer"}
-            </button>
-            {!canAnswer ? <span className="fd-muted fd-small">Take the thread to answer.</span> : null}
+            </Button>
+            {!canAnswer ? <Hint>Take the thread to answer.</Hint> : <Hint>Saved as a staff fact; the reply is redrafted to cite it.</Hint>}
           </div>
         </form>
       )}

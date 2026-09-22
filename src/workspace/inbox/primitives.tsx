@@ -1,0 +1,93 @@
+import type { ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+/**
+ * Colour rules for every chip in the thread pane (design-spec §0, §1): text
+ * first, tinted background, semantic colours only for status. `accent` is the
+ * one solid chip (ready to send); `secondary` is reserved for the
+ * staff-written marker; everything else is a quiet outline.
+ */
+export type ChipTone = "neutral" | "muted" | "accent" | "accentOutline" | "success" | "warning" | "danger" | "secondary";
+
+const CHIP_TONE: Record<ChipTone, string> = {
+  neutral: "border-border-1 bg-transparent text-ink-1",
+  muted: "border-border-1 bg-transparent text-ink-2",
+  accent: "border-transparent bg-accent-9 text-white",
+  accentOutline: "border-accent-9/40 bg-transparent text-accent-10",
+  success: "border-transparent bg-success-3 text-success-10",
+  warning: "border-transparent bg-warning-3 text-warning-10",
+  danger: "border-transparent bg-danger-3 text-danger-10",
+  secondary: "border-transparent bg-secondary-3 text-secondary-10",
+};
+
+export function Chip({ tone = "neutral", className, children }: { tone?: ChipTone; className?: string; children: ReactNode }) {
+  return (
+    <Badge variant="outline" className={cn(CHIP_TONE[tone], className)}>
+      {children}
+    </Badge>
+  );
+}
+
+const NOTICE_TONE = {
+  info: "border-border-1 bg-bg-2 text-ink-1",
+  caution: "border-warning-10/20 bg-warning-3 text-warning-10",
+  error: "border-danger-10/20 bg-danger-3 text-danger-10",
+  success: "border-success-10/20 bg-success-3 text-success-10",
+} as const;
+
+/**
+ * A one-paragraph tinted message: status by default, `role="alert"` for
+ * errors so screen readers announce them. Text only inside, so specs that
+ * read an alert's exact text keep working.
+ */
+export function InlineNotice({
+  tone = "info",
+  role,
+  className,
+  children,
+}: {
+  tone?: keyof typeof NOTICE_TONE;
+  role?: "alert" | "status";
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role={role ?? (tone === "error" ? "alert" : "status")}
+      className={cn("rounded-md border px-3 py-2 text-[13px] leading-5", NOTICE_TONE[tone], className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** 12/600 uppercase section label (sources pane, delivery lists, history). */
+export function SectionLabel({ id, as: Tag = "p", className, children }: { id?: string; as?: "p" | "h3" | "h4"; className?: string; children: ReactNode }) {
+  return (
+    <Tag id={id} className={cn("text-[12px] leading-4 font-semibold tracking-[0.06em] text-ink-2 uppercase", className)}>
+      {children}
+    </Tag>
+  );
+}
+
+/** 13px hint line under a control or a button row. */
+export function Hint({ id, className, children }: { id?: string; className?: string; children: ReactNode }) {
+  return (
+    <p id={id} className={cn("text-[13px] leading-5 text-ink-2", className)}>
+      {children}
+    </p>
+  );
+}
+
+/** Phone layout only: back to the queue. The accessible name stays "All threads" (mobile spec). */
+export function BackButton({ onBack }: { onBack: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-2 text-[13px] text-ink-2" onClick={onBack}>
+      <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+      All threads
+    </Button>
+  );
+}

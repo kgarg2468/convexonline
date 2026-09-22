@@ -602,64 +602,20 @@ body {
 
 /* ---------- inbox: frame and queue rebuilt in inbox/InboxView.tsx, QueueList.tsx, QueueRow.tsx ---------- */
 
-/* The thread's two panes. Beside the queue (inbox/InboxView.tsx grid) the
-   wrapper dissolves so main and side take the grid's own columns and each
-   scrolls on its own; under 900px it is a plain single-column stack. */
-.fd-thread {
-  display: grid;
-  grid-template-columns: 1fr;
-  min-width: 0;
-}
+/* Thread pane: rebuilt with Tailwind in inbox/ThreadDetail.tsx and friends.
+   `.fd-thread__main` stays only for shell/DemoInbound.tsx, which still pads
+   itself with it; `.fd-thread__head` in the JSX is a bare test hook. */
 .fd-thread__main {
   padding: 18px 22px 40px;
   min-width: 0;
 }
-.fd-thread__side {
-  border-left: 1px solid var(--fd-line);
-  padding: 18px 16px 40px;
-  background: var(--fd-white);
-  min-width: 0;
-}
 @media (width > 900px) {
-  .fd-thread {
-    display: contents;
-  }
-  .fd-thread__main,
-  .fd-thread__side {
+  .fd-thread__main {
     min-height: 0;
     overflow-y: auto;
   }
 }
-/* Two-pane width: the sources pane is the header's sheet instead (inbox/SourcesSheet.tsx). */
-@media (width > 900px) and (width < 1200px) {
-  .fd-thread > .fd-thread__side {
-    display: none;
-  }
-}
-.fd-thread__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.fd-thread__subject {
-  font-size: 18px;
-  font-weight: 600;
-}
-.fd-thread__guest {
-  font-size: 14px;
-  color: var(--fd-muted);
-}
-.fd-thread__stay {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  font-size: 13.5px;
-  color: var(--fd-muted);
-  margin-bottom: 14px;
-}
+/* Claim bar: still used by corrections/CorrectionCard.tsx (compact variant below); the thread pane has its own. */
 .fd-claimbar {
   display: flex;
   justify-content: space-between;
@@ -681,110 +637,7 @@ body {
   border-color: #ecd6b4;
   background: var(--fd-caution-bg);
 }
-.fd-messages {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-.fd-msg {
-  max-width: 72ch;
-  padding: 10px 14px;
-  border-radius: var(--fd-radius);
-  border: 1px solid var(--fd-line);
-  background: var(--fd-white);
-}
-.fd-msg--out {
-  margin-left: auto;
-  background: var(--fd-sea);
-}
-.fd-msg__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12.5px;
-  color: var(--fd-muted);
-  margin-bottom: 4px;
-}
-.fd-msg__text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: 14.5px;
-}
-.fd-draft {
-  background: var(--fd-white);
-  border: 1px solid var(--fd-line);
-  border-radius: var(--fd-radius);
-  padding: 14px 16px;
-}
-.fd-draft__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.fd-draft__badges {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.fd-draft .fd-textarea {
-  min-height: 150px;
-}
-.fd-draft__read {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: 14.5px;
-  padding: 8px 0;
-}
-.fd-draft__foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-.fd-cite {
-  display: grid;
-  gap: 8px;
-}
-.fd-cite__item {
-  padding: 10px 12px;
-  border: 1px solid var(--fd-line);
-  border-radius: var(--fd-radius);
-  background: var(--fd-paper);
-  font-size: 13.5px;
-  display: grid;
-  gap: 5px;
-}
-.fd-cite__item--bad {
-  border-color: #ecd6b4;
-}
-.fd-cite__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
-.fd-cite__quote {
-  font-family: var(--fd-serif);
-  font-size: 14px;
-  color: var(--fd-ink);
-}
-.fd-gap {
-  border: 1px solid #ecd6b4;
-  background: var(--fd-caution-bg);
-  border-radius: var(--fd-radius);
-  padding: 14px 16px;
-  margin-bottom: 14px;
-}
-.fd-gap__q {
-  font-family: var(--fd-serif);
-  font-size: 16px;
-  margin: 6px 0 10px;
-}
+/* Staff fact rows: knowledge/FactsSection.tsx; the sources pane renders its own. */
 .fd-facts {
   display: grid;
   gap: 8px;
@@ -805,18 +658,10 @@ body {
   font-size: 12.5px;
   color: var(--fd-muted);
 }
-.fd-back {
-  margin-bottom: 10px;
-}
 
 @media (max-width: 900px) {
   .fd-thread__main {
     padding: 14px 14px 20px;
-  }
-  .fd-thread__side {
-    border-left: none;
-    border-top: 1px solid var(--fd-line);
-    padding: 14px;
   }
 }
 
@@ -977,30 +822,10 @@ body {
 
 /* ---------- live wiring: send confirmation, delivery, crawl runs ---------- */
 
-.fd-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid #ecd6b4;
-  border-radius: var(--fd-radius);
-  background: var(--fd-caution-bg);
-  font-size: 14px;
-  cursor: pointer;
-}
-.fd-check input {
-  margin: 3px 0 0;
-  flex: none;
-  accent-color: var(--fd-pine);
-}
-
-.fd-outbox__list,
 .fd-runs {
   display: grid;
   gap: 6px;
 }
-.fd-outbox__row,
 .fd-runs__row {
   display: flex;
   flex-wrap: wrap;
@@ -1079,90 +904,6 @@ body {
 .fd-invite__lead {
   font-size: 16px;
   margin-bottom: 8px;
-}
-
-/* ---------- thread presence (who has the thread open) ---------- */
-
-.fd-presence {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: -8px 0 14px;
-  font-size: 13px;
-  color: var(--fd-muted);
-}
-.fd-presence strong {
-  font-weight: 600;
-  color: var(--fd-ink);
-}
-.fd-presence__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--fd-pine);
-  flex: none;
-}
-.fd-presence--off {
-  font-style: italic;
-}
-
-/* ---------- approved follow-up email ---------- */
-
-.fd-followup {
-  background: var(--fd-white);
-  border: 1px solid var(--fd-line);
-  border-radius: var(--fd-radius);
-  padding: 14px 16px;
-}
-.fd-followup__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-.fd-followup__text {
-  margin: 10px 0;
-  padding: 10px 12px;
-  border-left: 3px solid var(--fd-pine);
-  background: var(--fd-paper);
-  border-radius: 0 var(--fd-radius) var(--fd-radius) 0;
-  font-family: var(--fd-serif);
-  font-size: 15px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.fd-followup__meta {
-  display: grid;
-  gap: 4px 14px;
-  grid-template-columns: max-content 1fr;
-  margin: 0 0 8px;
-  font-size: 13.5px;
-}
-.fd-followup__meta > div {
-  display: contents;
-}
-.fd-followup__meta dt {
-  font-weight: 600;
-  color: var(--fd-ink);
-}
-.fd-followup__meta dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.fd-followup__form {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--fd-line);
-}
-.fd-followup__when {
-  width: auto;
-  max-width: 100%;
-}
-.fd-followup__history {
-  margin-top: 12px;
 }
 
 /* ---------- onboarding: kind of property ---------- */
