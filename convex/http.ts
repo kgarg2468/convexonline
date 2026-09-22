@@ -14,7 +14,10 @@ import { readSignatureHeaders, verifyWebhookSignature } from "./lib/webhookSigna
 // routes stay at the root so OIDC discovery works.
 const http = httpRouter();
 
-const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+// `nosniff` on every hand-written response: a JSON body that happens to contain
+// attacker-supplied text must never be re-interpreted as HTML by a browser that
+// guesses the type (see tests/security.test.ts).
+const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 

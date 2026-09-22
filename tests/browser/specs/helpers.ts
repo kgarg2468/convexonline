@@ -98,3 +98,75 @@ export async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow.scroll, "page must not scroll sideways").toBeLessThanOrEqual(overflow.inner);
   expect(overflow.bodyMargin, "body margin reset").toBe("0px");
 }
+
+// ---- Security helpers (security.spec.ts) -----------------------------------
+
+/**
+ * The payloads §6 of the design spec names, plus two that attack attribute and
+ * element boundaries. Every one of them is typed into a real field through the
+ * real UI; nothing is injected into the page from the test.
+ */
+export const XSS_PAYLOADS = [
+  `<img src=x onerror=alert(1)>`,
+  `<script>alert(1)</script>`,
+  `javascript:alert(1)`,
+  `"><svg/onload=alert(1)>`,
+  `' onmouseover='alert(1)`,
+  `</textarea><img src=x onerror=alert(1)>`,
+] as const;
+
+/** One string carrying every payload, for fields that take a single value. */
+export const XSS_BLOB = XSS_PAYLOADS.join(" ");
+
+export type PageGuards = {
+  /** Uncaught page errors (React error boundaries do not report here). */
+  errors: string[];
+  /** Any alert/confirm/prompt the page tried to open. */
+  dialogs: string[];
+};
+
+/**
+ * Watches a page for the two things a successful injection produces: a dialog
+ * and an uncaught error. Dialogs are dismissed so a failing test still ends.
+ */
+export function guardPage(page: Page): PageGuards {
+  const guards: PageGuards = { errors: [], dialogs: [] };
+  page.on("pageerror", (e) => guards.errors.push(e.message));
+  page.on("dialog", (dialog) => {
+    guards.dialogs.push(`${dialog.type()}: ${dialog.message()}`);
+    void dialog.dismiss();
+  });
+  return guards;
+}
+
+export function expectClean(guards: PageGuards, where: string) {
+  expect(guards.dialogs, `${where}: no payload may open a dialog`).toEqual([]);
+  expect(guards.errors, `${where}: no uncaught page error`).toEqual([]);
+}
+
+/**
+ * Proves the payloads are inert *as rendered*: nothing they describe exists as
+ * markup. Counts elements rather than searching the HTML source, so escaped
+ * text (which is the correct outcome) never trips it.
+ */
+export async function expectNoInjectedMarkup(page: Page, where: string) {
+  const found = await page.evaluate(() => {
+    const scripts = [...document.querySelectorAll("script")].filter((s) => (s.textContent ?? "").includes("alert(1)"));
+    const handlers = [...document.querySelectorAll("*")].filter((el) =>
+      ["onerror", "onload", "onmouseover", "onclick", "onfocus"].some((a) => el.hasAttribute(a)),
+    );
+    return {
+      injectedScripts: scripts.length,
+      payloadImages: document.querySelectorAll('img[src="x"]').length,
+      payloadSvgs: document.querySelectorAll("svg[onload]").length,
+      inlineHandlers: handlers.map((el) => el.tagName.toLowerCase()),
+      javascriptHrefs: document.querySelectorAll('a[href^="javascript:"], a[href^="JavaScript:"]').length,
+      textareaCount: document.querySelectorAll("textarea").length,
+    };
+  });
+  expect(found.injectedScripts, `${where}: no script element carries the payload`).toBe(0);
+  expect(found.payloadImages, `${where}: no <img src=x> from the payload`).toBe(0);
+  expect(found.payloadSvgs, `${where}: no <svg onload> from the payload`).toBe(0);
+  expect(found.inlineHandlers, `${where}: no inline event handler attribute`).toEqual([]);
+  expect(found.javascriptHrefs, `${where}: no javascript: link`).toBe(0);
+}
