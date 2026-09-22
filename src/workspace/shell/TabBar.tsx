@@ -34,7 +34,8 @@ export function TabBar({
             aria-label={item.view === "corrections" ? `${item.label}, ${reviewCountLabel(correctionsCount)}` : undefined}
             onClick={() => onNavigate(item.view)}
             className={cn(
-              "relative flex h-(--tabbar-h) min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] leading-none outline-hidden transition-colors duration-micro",
+              // Five labels share a phone's width ("Policy changes" in a 78px column at 390px): 10px, tight tracking, 2px gutters.
+              "relative flex h-(--tabbar-h) min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] leading-none tracking-[-0.01em] outline-hidden transition-colors duration-micro",
               active ? "font-medium text-accent-9" : "text-ink-2 hover:text-ink-1",
               "focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-inset",
             )}

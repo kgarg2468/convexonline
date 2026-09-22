@@ -3,7 +3,17 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { Correction, InnDetail, InnSummary, RecordVersionResult, ThreadStats, Viewer, WorkspaceView } from "./types";
+import type {
+  Correction,
+  InnDetail,
+  InnSummary,
+  OverviewSummary,
+  RecordVersionResult,
+  ThreadStats,
+  ThreadStatus,
+  Viewer,
+  WorkspaceView,
+} from "./types";
 import { AuthView } from "./auth/AuthView";
 import { InnPicker } from "./onboarding/InnPicker";
 import { InvitationGate } from "./onboarding/InvitationGate";
@@ -20,10 +30,14 @@ import type { QueueKeyHandler } from "./inbox/QueueList";
 import { SourcesSheet } from "./inbox/SourcesSheet";
 import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { KnowledgeStats } from "./knowledge/KnowledgeStats";
+import { OverviewView } from "./overview/OverviewView";
+import { OverviewStats } from "./overview/OverviewStats";
+import { overviewSubtitle } from "./overview/metrics";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
 import { forgetConsumedUrl, replaceUrl, useIsMid, useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
+import { inboxFilterSearch } from "./lib/router";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
@@ -327,9 +341,11 @@ function Workspace({
   const openCorrections = useQuery(api.corrections.list, { innId, status: "needs_review" }) as
     | Correction[]
     | undefined;
-  // The minute nonce re-subscribes the stats query as the inn's local day
-  // rolls over (no row changes then); the server decides the actual cutoff.
-  const statsMinute = Math.floor(useNow(15_000) / 60_000);
+  // The minute nonce re-subscribes the stats and overview queries as the
+  // inn's local day (or a 7-day window) rolls over with no row changing; the
+  // server decides the actual cutoff.
+  const now = useNow(15_000);
+  const statsMinute = Math.floor(now / 60_000);
   const stats = useQuery(api.threads.stats, { innId, clock: statsMinute }) as ThreadStats | undefined;
   const narrow = useIsNarrow();
   // Two-pane inbox: the sources pane is a sheet opened from the header.
@@ -337,6 +353,10 @@ function Workspace({
   // The URL is the source of truth for the view and the open thread (lib/router.ts).
   const { route, navigate } = useRoute(current.isDemo);
   const view = route.view;
+  // One subscription for the dashboard and its header line, only while it is the view.
+  const overview = useQuery(api.overview.summary, view === "overview" ? { innId, clock: statsMinute } : "skip") as
+    | OverviewSummary
+    | undefined;
   const selectedThread = route.view === "inbox" ? (route.threadId as Id<"threads"> | null) : null;
   // The thread that was open last, so "Inbox" from another view returns to it on wide screens.
   const lastThread = useRef<Id<"threads"> | null>(null);
@@ -372,6 +392,20 @@ function Workspace({
 
   function openThread(threadId: Id<"threads">) {
     navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-forward", fromList);
+  }
+
+  /**
+   * A needs-action tile: the inbox, nothing selected, on one status. `navigate`
+   * writes only the pathname, so the filter is added to the entry it has just
+   * pushed; InboxView reads `?filter=` once when it mounts (lib/router.ts).
+   */
+  function openInboxFiltered(filter: ThreadStatus) {
+    navigate({ view: "inbox", threadId: null });
+    try {
+      window.history.replaceState(window.history.state, "", `/inbox${inboxFilterSearch(filter)}${window.location.hash}`);
+    } catch {
+      /* history unavailable; the inbox still opens, unfiltered */
+    }
   }
 
   /** Selection inside the inbox: a slide on narrow screens, a plain URL change beside an open queue. */
@@ -417,6 +451,12 @@ function Workspace({
 
   const header = ((): ShellHeader => {
     switch (view) {
+      case "overview":
+        return {
+          title: "Overview",
+          sub: overviewSubtitle(detail?.inn.timezone),
+          meta: overview ? <OverviewStats summary={overview} timezone={detail?.inn.timezone} now={now} /> : undefined,
+        };
       case "corrections":
         return {
           title: "Policy changes",
@@ -472,7 +512,16 @@ function Workspace({
             commits until it settles. */}
         <ViewTransition key={view} default="none" enter={VIEW_ENTER} exit={VIEW_EXIT} update={narrow ? VIEW_UPDATE : "none"}>
           <div className={cn("min-w-0 flex-1", flush && "flex min-h-0")}>
-            {view === "corrections" ? (
+            {view === "overview" ? (
+              <OverviewView
+                summary={overview}
+                timezone={detail?.inn.timezone}
+                now={now}
+                onOpenThread={openThread}
+                onOpenInbox={openInboxFiltered}
+                onOpenCorrections={() => goTo("corrections")}
+              />
+            ) : view === "corrections" ? (
               <CorrectionsView
                 innId={innId}
                 viewerId={viewer._id}

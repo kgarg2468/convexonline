@@ -39,7 +39,7 @@ async function createProperty(page: Page, name: string) {
   await page.getByLabel("Property name").fill(name);
   await page.getByLabel("Website").fill("https://example.com/");
   await page.getByRole("button", { name: "Create property" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 }
 
 async function openSettings(page: Page) {
@@ -103,9 +103,9 @@ test.describe("staff invitations", () => {
       await expect(b.page.getByRole("region", { name: "Staff invitation" })).toBeVisible();
       await expect(b.page.getByText(`You are invited to join ${property} as staff.`)).toBeVisible();
       // Explicit join only: no property was opened by merely arriving.
-      await expect(b.page.getByRole("heading", { level: 1, name: "Inbox" })).toHaveCount(0);
+      await expect(b.page.getByRole("heading", { level: 1, name: "Overview" })).toHaveCount(0);
       await b.page.getByRole("button", { name: `Join ${property}` }).click();
-      await expect(b.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+      await expect(b.page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
       await expect(b.page.getByRole("navigation", { name: "Workspace" })).toContainText(property);
       await expect(b.page.getByRole("navigation", { name: "Workspace" })).toContainText("staff");
 

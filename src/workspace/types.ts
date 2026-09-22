@@ -351,4 +351,7 @@ export type CrawlRun = {
 
 export type CrawlResult = { runId: Id<"crawlRuns">; pagesStored: number; pagesSkipped: number; affectedClaims: number };
 
-export type WorkspaceView = "corrections" | "inbox" | "knowledge" | "settings";
+export type WorkspaceView = "overview" | "corrections" | "inbox" | "knowledge" | "settings";
+
+/** The Overview dashboard payload, exactly as `overview.summary` returns it (type-only import; nothing of the module ships). */
+export type { OverviewSummary } from "../../convex/overview";

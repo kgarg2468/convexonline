@@ -3,6 +3,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { LiveMailDecision } from "../types";
 import { useDelayedFlag, useIsNarrow, useQueryResult } from "../lib/hooks";
+import { parseInboxFilter } from "../lib/router";
 import { cn } from "@/lib/utils";
 import { QueueList, type QueueFilter, type QueueKeyHandler, type QueueRestore } from "./QueueList";
 import type { SelectSource } from "./QueueRow";
@@ -51,8 +52,24 @@ export function InboxView({
 
   // The queue's filter and search live here, not in QueueList: a phone
   // unmounts the list to show a thread and must find it as it was on the way back.
-  const [filter, setFilter] = useState<QueueFilter>("all");
+  // A deep link (`/inbox?filter=needs_staff`, from the Overview's needs-action
+  // tiles or a bookmark) sets the filter once, when the inbox mounts. The
+  // query is then dropped from the entry: `navigate` carries the search string
+  // to every later URL, and the filter is this view's state from here on, so
+  // it must not follow the visitor to another view and re-apply on the way back.
+  const [filter, setFilter] = useState<QueueFilter>(() => parseInboxFilter(window.location.search) ?? "all");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    if (parseInboxFilter(window.location.search) === null) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("filter");
+    const rest = params.toString();
+    try {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+    } catch {
+      /* history unavailable; the filter is applied regardless */
+    }
+  }, []);
 
   // Same subscription the thread pane opens (the client shares it), read here
   // only to know when the selected thread has arrived, or was refused: a stale
