@@ -16,11 +16,13 @@ import { useShortcuts } from "./shell/useShortcuts";
 import { CorrectionsView } from "./corrections/CorrectionsView";
 import { InboxView } from "./inbox/InboxView";
 import { InboxStats } from "./inbox/InboxStats";
+import type { QueueKeyHandler } from "./inbox/QueueList";
+import { SourcesSheet } from "./inbox/SourcesSheet";
 import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
-import { forgetConsumedUrl, replaceUrl, useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
+import { forgetConsumedUrl, replaceUrl, useIsMid, useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
 import { cn } from "@/lib/utils";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
@@ -320,6 +322,8 @@ function Workspace({
   const statsMinute = Math.floor(useNow(15_000) / 60_000);
   const stats = useQuery(api.threads.stats, { innId, clock: statsMinute }) as ThreadStats | undefined;
   const narrow = useIsNarrow();
+  // Two-pane inbox: the sources pane is a sheet opened from the header.
+  const mid = useIsMid();
   // The URL is the source of truth for the view and the open thread (lib/router.ts).
   const { route, navigate } = useRoute(current.isDemo);
   const view = route.view;
@@ -337,6 +341,11 @@ function Workspace({
   // One instance of the demo's scripted edit, so the header control, the review
   // hero and the palette share its busy and error state.
   const demo = useDemoPolicy(innId, current.isDemo);
+  // View-level keys (`j` / `k` in the queue) register here; the one listener in useShortcuts serves them.
+  const inboxKeys = useRef<QueueKeyHandler | null>(null);
+  const registerInboxKeys = useCallback((handler: QueueKeyHandler | null) => {
+    inboxKeys.current = handler;
+  }, []);
 
   const goTo = useCallback(
     (next: WorkspaceView) => {
@@ -393,6 +402,7 @@ function Workspace({
     onEscape: () => {
       if (narrow && selectedThread) selectThread(null);
     },
+    onKey: (event) => inboxKeys.current?.(event) ?? false,
   });
 
   const header = ((): ShellHeader => {
@@ -412,9 +422,15 @@ function Workspace({
           title: "Inbox",
           sub: detail?.inn.inboxAddress ?? (current.isDemo ? "Seeded guest threads" : "No inbox set up yet"),
           meta: stats ? <InboxStats stats={stats} timezone={detail?.inn.timezone} /> : undefined,
-          actions: current.isDemo ? (
-            <DemoActions innId={innId} demo={demo} last={lastDemoChange} onResult={demoChanged} />
-          ) : undefined,
+          actions:
+            (mid && selectedThread) || current.isDemo ? (
+              <>
+                {mid && selectedThread ? <SourcesSheet key={selectedThread} threadId={selectedThread} /> : null}
+                {current.isDemo ? (
+                  <DemoActions innId={innId} demo={demo} last={lastDemoChange} onResult={demoChanged} />
+                ) : null}
+              </>
+            ) : undefined,
         };
       case "knowledge":
         return { title: "Knowledge", sub: current.siteUrl };
@@ -467,6 +483,7 @@ function Workspace({
                 onSelect={selectThread}
                 onOpenCorrections={() => goTo("corrections")}
                 onForeignThread={onForeignThread}
+                registerKeys={registerInboxKeys}
               />
             ) : view === "knowledge" ? (
               <KnowledgeView innId={innId} siteUrl={current.siteUrl} isDemo={current.isDemo} />

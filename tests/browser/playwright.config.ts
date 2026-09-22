@@ -50,8 +50,14 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testIgnore: /mobile\.spec\.ts/,
+      testIgnore: /(mobile|inbox-mid)\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
+    {
+      // Two-pane inbox (900–1199px): the sources pane is the header's sheet.
+      name: "mid",
+      testMatch: /inbox-mid\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1000, height: 800 } },
     },
     {
       name: "mobile",

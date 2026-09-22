@@ -128,12 +128,12 @@ export function Shell(props: ShellProps) {
             </>
           ) : (
             <>
-              {/* Sized by its content so the stats stay on one line; the actions take what is left and truncate. */}
-              <div className="min-w-0 shrink">
+              {/* The actions keep their own width; the title box takes what is left and truncates or wraps. */}
+              <div className="min-w-0 flex-1">
                 <HeaderTitle title={header.title} sub={header.meta ? undefined : header.sub} />
                 {header.meta}
               </div>
-              {header.actions ? <HeaderActions className="flex-1">{header.actions}</HeaderActions> : null}
+              {header.actions ? <HeaderActions className="flex-none">{header.actions}</HeaderActions> : null}
             </>
           )}
         </header>
