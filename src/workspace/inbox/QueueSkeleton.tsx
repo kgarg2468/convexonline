@@ -47,7 +47,7 @@ export function ThreadSkeleton({ onBack }: { onBack: (() => void) | null }) {
       <div aria-hidden="true" className={cn(threadPadClass, "flex flex-col gap-4 pt-4")}>
         <Skeleton className="h-3.5 w-40" />
         <Skeleton className="h-24 w-full max-w-[68ch]" />
-        <Skeleton className="h-56 w-full rounded-[10px]" />
+        <Skeleton className="h-56 w-full rounded-lg" />
       </div>
     </div>
   );

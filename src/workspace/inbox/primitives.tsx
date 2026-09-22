@@ -162,7 +162,7 @@ export function ThreadUnavailable({
 /** Phone layout only: back to the queue. The accessible name stays "All threads" (mobile spec). */
 export function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-1 text-[13px] text-ink-2" onClick={onBack}>
+    <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-1 text-[13px] text-ink-2 max-[900px]:h-11" onClick={onBack}>
       <ArrowLeft data-icon="inline-start" aria-hidden="true" />
       All threads
     </Button>

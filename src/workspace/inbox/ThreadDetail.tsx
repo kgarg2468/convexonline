@@ -19,7 +19,7 @@ import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
 import { ThreadPresence } from "./ThreadPresence";
 import { BackButton, InlineNotice, SourcesPlaceholder } from "./primitives";
-import { threadMainClass, threadPadClass } from "./styles";
+import { threadMainClass, threadPadClass, touchControlClass } from "./styles";
 
 /** The send FLIP: 260ms ease-out on a click, instant after ⌘⏎ (research-motion §3: keyboard never animates). */
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -144,17 +144,20 @@ export function ThreadDetail({
 
   const main = (
     <div className={threadMainClass}>
-      {/* One compact sticky head: subject + status + claim actions, the guest and stay meta, the claim and presence line. */}
+      {/* One compact head: subject + status + claim actions, the guest and stay meta, the claim and presence line.
+          It sticks beside the queue, where the column scrolls on its own; on phones the page scrolls and it scrolls with it.
+          It is also the container the head row queries so the actions can wrap under the subject in a narrow pane. */}
       <div
         className={cn(
-          "fd-thread__head sticky top-0 z-10 border-b border-border-1 bg-bg-1 py-2 max-[900px]:top-(--header-h)",
+          "fd-thread__head @container z-10 border-b border-border-1 bg-bg-1 py-2 min-[901px]:sticky min-[901px]:top-0",
           threadPadClass,
         )}
       >
         {onBack ? <BackButton onBack={onBack} /> : null}
-        {/* The actions wrap under the subject only when it would be left less than ~12rem (phones). */}
+        {/* Under ~700px of pane the subject keeps the whole first line and the actions wrap beneath it, so it never truncates
+            just because the claim actions grew. Wider than that, both share the line. */}
         <div className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <h2 title={thread.subject} className="min-w-0 flex-1 basis-48 truncate text-[18px] leading-6 font-semibold text-ink-1">
+          <h2 title={thread.subject} className="min-w-0 flex-1 basis-full truncate text-[18px] leading-6 font-semibold text-ink-1 @min-[660px]:basis-0">
             {thread.subject}
           </h2>
           <div className="flex shrink-0 items-center gap-2">
@@ -165,7 +168,7 @@ export function ThreadDetail({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="text-[13px] text-ink-2"
+                  className={cn("text-[13px] text-ink-2", touchControlClass)}
                   disabled={lock.busy}
                   onClick={() => void lock.run(() => claim({ threadId }))}
                 >
@@ -175,7 +178,7 @@ export function ThreadDetail({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="bg-white text-[13px]"
+                  className={cn("bg-white text-[13px]", touchControlClass)}
                   disabled={lock.busy}
                   onClick={() => void lock.run(() => release({ threadId }))}
                 >
@@ -187,7 +190,7 @@ export function ThreadDetail({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="bg-white text-[13px] text-ink-1"
+                className={cn("bg-white text-[13px] text-ink-1", touchControlClass)}
                 disabled={lock.busy || heldByOther}
                 onClick={() => void lock.run(() => claim({ threadId }))}
               >
@@ -229,7 +232,8 @@ export function ThreadDetail({
         </p>
       </div>
 
-      <div className={cn(threadPadClass, "flex flex-col gap-4 pt-4 pb-10")}>
+      {/* One measure for the whole stack (68ch of content, padding outside it) so every section shares a right edge. */}
+      <div className={cn(threadPadClass, "box-content flex max-w-[68ch] flex-col gap-4 pt-4 pb-10")}>
         {lock.error ? <InlineNotice tone="error">{lock.error}</InlineNotice> : null}
         {openCorrections > 0 ? (
           <InlineNotice tone="caution" className="flex flex-wrap items-center justify-between gap-2">
@@ -250,7 +254,7 @@ export function ThreadDetail({
           <p className="text-[13px] leading-5 text-ink-2">No messages stored for this thread.</p>
         ) : (
           // The conversation: flat messages separated by hairlines (Gmail/Front), never bordered cards.
-          <ol className="max-w-[68ch] divide-y divide-border-1 [&>li:first-child>article]:pt-0">
+          <ol className="divide-y divide-border-1 [&>li:first-child>article]:pt-0">
             {messages.map((msg) => {
               const out = msg.direction === "out";
               const meta = (
@@ -331,44 +335,47 @@ export function ThreadDetail({
         {earlierReplyOutbox.length > 0 ? <OutboxList rows={earlierReplyOutbox} title="Earlier reply delivery" /> : null}
         {correctionOutbox.length > 0 ? <OutboxList rows={correctionOutbox} title="Correction delivery" /> : null}
 
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 border-t border-border-1 pt-3">
-          {thread.status !== "closed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="-ml-2.5 text-[13px] text-ink-2"
-              disabled={!mine || statusAction.busy}
-              onClick={() => void statusAction.run(() => setStatus({ threadId, status: "closed" }))}
-            >
-              Close thread
-            </Button>
-          ) : null}
-          {thread.status !== "waiting_guest" && thread.status !== "closed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[13px] text-ink-2"
-              disabled={!mine || statusAction.busy}
-              onClick={() => void statusAction.run(() => setStatus({ threadId, status: "waiting_guest" }))}
-            >
-              Mark waiting on guest
-            </Button>
-          ) : null}
-          {canRegenerate ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-[13px] text-ink-2"
-              disabled={regenAction.busy}
-              onClick={() => void regenAction.run(() => regenerate({ threadId }))}
-            >
-              {regenAction.busy ? "Requesting…" : "Redraft from the latest message"}
-            </Button>
-          ) : null}
-          {!mine ? <span className="ml-1 text-[12px] leading-4 text-ink-3">Take the thread to change its status.</span> : null}
+        <div className="border-t border-border-1 pt-3">
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+            {thread.status !== "closed" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("-ml-2.5 text-[13px] text-ink-2", touchControlClass)}
+                disabled={!mine || statusAction.busy}
+                onClick={() => void statusAction.run(() => setStatus({ threadId, status: "closed" }))}
+              >
+                Close thread
+              </Button>
+            ) : null}
+            {thread.status !== "waiting_guest" && thread.status !== "closed" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("text-[13px] text-ink-2", touchControlClass)}
+                disabled={!mine || statusAction.busy}
+                onClick={() => void statusAction.run(() => setStatus({ threadId, status: "waiting_guest" }))}
+              >
+                Mark waiting on guest
+              </Button>
+            ) : null}
+            {canRegenerate ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("text-[13px] text-ink-2", touchControlClass)}
+                disabled={regenAction.busy}
+                onClick={() => void regenAction.run(() => regenerate({ threadId }))}
+              >
+                {regenAction.busy ? "Requesting…" : "Redraft from the latest message"}
+              </Button>
+            ) : null}
+          </div>
+          {/* The hint sits on its own line under the buttons, never on their baseline where it reads as a third button. */}
+          {!mine ? <p className="mt-1 text-[12px] leading-4 text-ink-3">Take the thread to change its status.</p> : null}
         </div>
         {regenAction.error ? <InlineNotice tone="error">{regenAction.error}</InlineNotice> : null}
         {statusAction.error ? <InlineNotice tone="error">{statusAction.error}</InlineNotice> : null}

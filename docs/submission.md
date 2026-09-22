@@ -13,6 +13,11 @@ model verify the answer. Missing information goes to staff. Claim locks, live
 presence and invitations support a shared desk. Staff control sends and separately
 approve scheduled follow-ups, which are cancelled when a guest writes back.
 
+The workspace opens on an Overview of what needs action, seven-day key figures
+and before-and-after comparisons, beside an inbox modelled on Front and Gmail:
+a dense two-line queue, the thread with its sources, and policy changes,
+knowledge and settings behind a rail that becomes a tab bar on phones.
+
 Convex hosts both frontend and backend, including authentication, source versions,
 realtime state, send reservations and scheduled work. Its static hosting,
 presence, rate-limiter and aggregate components support the workspace. The

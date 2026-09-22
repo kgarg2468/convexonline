@@ -31,16 +31,17 @@ export function StatusChip({ status, className }: { status: ThreadStatus; classN
 function RowStatus({ status }: { status: ThreadStatus }) {
   const label = STATUS_LABEL[status] ?? status;
   if (status === "needs_staff" || status === "ready") {
-    return <StatusChip status={status} className="h-[18px] px-1.5 text-[11px] leading-4" />;
+    return <StatusChip status={status} className="h-[18px] shrink-0 px-1.5 text-[11px] leading-4" />;
   }
   return <span className="sr-only">{label}</span>;
 }
 
 /**
  * One queue row (design-spec §4.2), two lines like Front's: guest name with
- * the claim holder and time at the right, then "subject — snippet" on one
- * truncating line with the status marker at its right. The button's accessible name is its text, so the subject stays
- * a substring of it (the specs open threads by subject).
+ * the claim holder, status marker and time at the right, then "subject —
+ * snippet" on one truncating line that runs the full row width (the pill never
+ * takes width from the subject). The button's accessible name is its text, so
+ * the subject stays a substring of it (the specs open threads by subject).
  *
  * The row is the only element `j`/`k` focus (`data-queue-row`, found again by
  * `data-thread-id` when a phone comes back from the thread); the selected row
@@ -91,20 +92,18 @@ export function QueueRow({
             ) : null}
             {guestName(thread.guestEmail)}
           </span>
-          {/* The claim label may hold any staff name, so it truncates at a cap; the time never shrinks. */}
+          {/* The claim label may hold any staff name, so it truncates at a cap; the pill and the time never shrink. */}
           <span className="flex min-w-0 shrink items-baseline gap-2 text-[12px] leading-4 text-ink-3">
             {thread.claim ? (
-              <span className="min-w-0 max-w-24 truncate text-[11px]">{thread.claim.userId === viewerId ? "You have it" : `${thread.claim.name ?? "Someone"} has it`}</span>
+              <span className="min-w-0 max-w-16 truncate text-[11px]">{thread.claim.userId === viewerId ? "You have it" : `${thread.claim.name ?? "Someone"} has it`}</span>
             ) : null}
+            <RowStatus status={thread.status} />
             <span className="shrink-0 tabular-nums">{formatWhen(thread.lastInboundAt, now)}</span>
           </span>
         </span>
-        <span className="flex w-full items-center justify-between gap-3">
-          <span className="min-w-0 truncate text-[13px] leading-5">
-            <span className="font-medium text-ink-1">{thread.subject}</span>
-            {thread.snippet ? <span className="text-ink-3"> — {thread.snippet}</span> : null}
-          </span>
-          <RowStatus status={thread.status} />
+        <span className="w-full truncate text-[13px] leading-5">
+          <span className="font-medium text-ink-1">{thread.subject}</span>
+          {thread.snippet ? <span className="text-ink-2"> — {thread.snippet}</span> : null}
         </span>
       </button>
     </li>

@@ -4,10 +4,13 @@ import { ChevronDown } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAsyncAction } from "../lib/hooks";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Hint, InlineNotice } from "./primitives";
-import { chipSelectClass, inboxHintClass } from "./styles";
+import { chipSelectClass, touchControlClass } from "./styles";
+
+const panelHintClass = "text-[12px] leading-4 text-ink-2";
 
 /**
  * The knowledge-gap question. Answering stores a staff fact on this thread
@@ -88,12 +91,13 @@ export function GapForm({
               </select>
               <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-ink-3" />
             </span>
-            <Button type="submit" size="sm" className="ml-auto text-[13px]" disabled={disabled || !answer.trim()}>
+            <Button type="submit" size="sm" className={cn("ml-auto text-[13px]", touchControlClass)} disabled={disabled || !answer.trim()}>
               {action.busy ? "Saving…" : "Save answer"}
             </Button>
           </div>
           {action.error ? <InlineNotice tone="error">{action.error}</InlineNotice> : null}
-          {!canAnswer ? <Hint className={inboxHintClass}>Take the thread to answer.</Hint> : <Hint className={inboxHintClass}>Saved as a staff fact; the reply is redrafted to cite it.</Hint>}
+          {/* ink-2 rather than the usual ink-3 helper: on the warm panel ink-3 falls under AA. */}
+          {!canAnswer ? <Hint className={panelHintClass}>Take the thread to answer.</Hint> : <Hint className={panelHintClass}>Saved as a staff fact; the reply is redrafted to cite it.</Hint>}
         </form>
       )}
     </section>

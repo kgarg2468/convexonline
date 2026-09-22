@@ -14,7 +14,7 @@ import { CitedText } from "./CitedText";
 import { OutboxList } from "./OutboxList";
 import { isInFlight, latestOutbox, outboxForDraft } from "../lib/outbox";
 import { Chip, DisclosureButton, Hint, InlineNotice, type ChipTone } from "./primitives";
-import { inboxHintClass } from "./styles";
+import { inboxHintClass, touchControlClass } from "./styles";
 
 type Draft = NonNullable<ThreadDetail["draft"]>;
 
@@ -168,7 +168,7 @@ export function DraftPanel({
   const folded = sent && unfoldedId !== draft._id;
 
   return (
-    <section aria-labelledby="fd-draft-title" className="rounded-[10px] border border-border-1 bg-white p-4">
+    <section aria-labelledby="fd-draft-title" className="rounded-lg border border-border-1 bg-white p-4">
       <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h3 id="fd-draft-title" className="text-[14px] leading-5 font-semibold text-ink-1">
           {sent ? (
@@ -253,7 +253,8 @@ export function DraftPanel({
                   activeClaimId={activeClaimId}
                   onActiveClaim={onActiveClaim}
                   describeCards={describeSources}
-                  className="text-[14px] leading-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1"
+                  // Same border and padding as the editor, so claiming the thread never shifts the text.
+                  className="rounded-lg border border-transparent px-3 py-2.5 text-[14px] leading-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1"
                 />
               ) : (
                 <div className="text-[14px] leading-6 text-ink-3">No answer text.</div>
@@ -298,7 +299,7 @@ export function DraftPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-[13px]"
+                  className={cn("text-[13px]", touchControlClass)}
                   disabled={!dirty || action.busy || sendAction.busy || text.trim().length === 0}
                   onClick={() => void save()}
                 >
@@ -309,7 +310,7 @@ export function DraftPanel({
                 <Button
                   type="button"
                   size="sm"
-                  className="text-[13px]"
+                  className={cn("text-[13px]", touchControlClass)}
                   disabled={!canSend}
                   aria-describedby="fd-send-why"
                   onClick={(event) => void send(event.detail === 0 ? "keyboard" : "pointer")}

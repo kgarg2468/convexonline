@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OutboxList } from "./OutboxList";
 import { Chip, DisclosureButton, Hint, InlineNotice, SectionLabel } from "./primitives";
-import { LEGACY_TONE, inboxHintClass, inboxLabelClass } from "./styles";
+import { LEGACY_TONE, inboxHintClass, inboxLabelClass, touchControlClass } from "./styles";
 
 type Tone = "neutral" | "pine" | "caution" | "error" | "muted";
 
@@ -179,7 +179,7 @@ export function FollowUpPanel({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="text-[13px]"
+                    className={cn("text-[13px]", touchControlClass)}
                     disabled={busy || claimHint}
                     onClick={() => void withdraw(current._id)}
                   >
@@ -225,7 +225,7 @@ export function FollowUpPanel({
                   type="button"
                   variant={scheduled ? "outline" : "default"}
                   size="sm"
-                  className="text-[13px]"
+                  className={cn("text-[13px]", touchControlClass)}
                   disabled={busy || claimHint}
                   aria-describedby="fd-followup-why"
                   onClick={() => void submit()}

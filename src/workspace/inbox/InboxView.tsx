@@ -229,7 +229,7 @@ export function InboxView({
           ) : (
             <>
               <div className="flex min-h-0 min-w-0 items-center justify-center overflow-y-auto p-6">
-                <div className="max-w-sm rounded-[10px] border border-dashed border-border-2 px-6 py-8 text-center">
+                <div className="max-w-sm px-6 text-center">
                   <p className="text-[14px] leading-5 font-semibold text-ink-1">
                     Pick a thread
                   </p>
