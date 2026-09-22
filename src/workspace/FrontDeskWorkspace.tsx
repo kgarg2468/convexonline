@@ -24,6 +24,7 @@ import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
 import { forgetConsumedUrl, replaceUrl, useIsMid, useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
 
@@ -416,9 +417,9 @@ function Workspace({
           title: "Policy changes",
           sub: "See which replies need a second look",
           actions: (
-            <button type="button" className="fd-btn" onClick={() => goTo("inbox")}>
+            <Button type="button" variant="outline" size="sm" className="text-[13px]" onClick={() => goTo("inbox")}>
               Go to inbox
-            </button>
+            </Button>
           ),
         };
       case "inbox":

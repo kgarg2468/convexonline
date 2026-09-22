@@ -1,37 +1,23 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ChevronDown, Lock } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Correction, LiveMailDecision, ThreadDetail } from "../types";
-import { ExternalLink, Notice, Pill } from "../lib/ui";
-import { useAsyncAction, useNow } from "../lib/hooks";
+import { useAsyncAction, useIsNarrow, useNow } from "../lib/hooks";
 import { LIVE_MAIL_REASON, formatStamp, guestName, pathOf } from "../lib/format";
 import { VersionPane } from "../knowledge/VersionPane";
 import { OutboxList } from "../inbox/OutboxList";
+import { Chip, Hint, InlineNotice, SectionLabel } from "../inbox/primitives";
 import { isInFlight, latestOutbox, outboxForCorrection } from "../lib/outbox";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { PassageDiff } from "./PassageDiff";
+import { SOURCE_CHIP, STATUS_CHIP, outlineButtonClass, passageClass, pathLinkClass, textBoxClass } from "./styles";
 
 /** How long a requested proposal counts as pending before the button is offered again. */
 const REGEN_WAIT_MS = 90_000;
-
-const STATUS_TONE: Record<Correction["status"], "caution" | "pine" | "muted" | "neutral"> = {
-  needs_review: "caution",
-  approved: "pine",
-  sent: "pine",
-  dismissed: "muted",
-  superseded: "muted",
-};
-const STATUS_LABEL: Record<Correction["status"], string> = {
-  needs_review: "Needs review",
-  approved: "Approved, not sent",
-  sent: "Correction sent",
-  dismissed: "Dismissed",
-  superseded: "Superseded",
-};
-const SOURCE_LABEL: Record<NonNullable<Correction["textSource"]>, string> = {
-  generated: "Drafter proposal",
-  staff: "Staff-written",
-  fixture: "Demo fixture proposal",
-};
 
 /**
  * A proposal counts as supported when its text rests on evidence in the
@@ -48,6 +34,33 @@ function proposalSupported(c: Correction): boolean {
     return c.judgeVerdict !== null && c.judgeVerdict.entailed && !c.judgeVerdict.promisedOutsideQuotes;
   }
   return c.textSource === "fixture";
+}
+
+/** A quiet disclosure button; the chevron is decorative so the accessible name stays the label. */
+function Disclosure({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <Button type="button" variant="ghost" size="sm" className="-ml-2 text-[13px] text-ink-2" aria-expanded={open} onClick={onToggle}>
+      {children}
+      <ChevronDown
+        data-icon="inline-end"
+        aria-hidden="true"
+        className={cn("text-ink-3 transition-transform duration-small ease-out", open && "rotate-180")}
+      />
+    </Button>
+  );
+}
+
+/** One step of the provenance trail: an 8px dot on the gutter line, a 12px label, then the content. */
+function Step({ label, chips, children }: { label: ReactNode; chips?: ReactNode; children: ReactNode }) {
+  return (
+    <li className="relative before:absolute before:top-1 before:-left-5 before:size-2 before:rounded-full before:bg-accent-9 before:ring-2 before:ring-white before:content-['']">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <SectionLabel as="p">{label}</SectionLabel>
+        {chips}
+      </div>
+      <div className="mt-1.5 flex flex-col gap-2">{children}</div>
+    </li>
+  );
 }
 
 /**
@@ -80,6 +93,8 @@ export function CorrectionCard({
   const sendAction = useAsyncAction();
   const lock = useAsyncAction();
   const now = useNow(15_000);
+  // Under 900px the two diff columns become one unified stream.
+  const narrow = useIsNarrow();
 
   const serverText = correction.proposedText ?? "";
   const [base, setBase] = useState(serverText);
@@ -107,6 +122,8 @@ export function CorrectionCard({
   const inFlight = isInFlight(latestOutbox(outboxRows));
   const liveBlocked = !isDemo && liveMail !== undefined && !liveMail.allowed;
   const textId = `fd-corr-text-${correction._id}`;
+  const titleId = `fd-corr-title-${correction._id}`;
+  const sendWhyId = `fd-corr-send-why-${correction._id}`;
 
   // Regenerating a proposal is explicit and bounded: one request per click,
   // "pending" until the server's proposal fields change, and after
@@ -160,307 +177,302 @@ export function CorrectionCard({
     );
   }
 
+  const status = STATUS_CHIP[correction.status];
+  const judgeOk = correction.judgeVerdict ? correction.judgeVerdict.entailed && !correction.judgeVerdict.promisedOutsideQuotes : null;
+  const editing = (open || (approved && editingApproved)) && !stale;
+
   const claimBar =
     (open || approved) && !stale ? (
-      <div className={`fd-claimbar fd-claimbar--compact${mine ? " fd-claimbar--mine" : heldByOther ? " fd-claimbar--other" : ""}`}>
-        <span className="fd-small">
-          {thread === undefined
-            ? "Checking the thread…"
-            : mine
-              ? `You hold this thread until ${formatStamp(holder!.expiresAt)}.`
-              : heldByOther
-                ? `${holder!.name ?? "Another staff member"} holds this thread until ${formatStamp(holder!.expiresAt)}.`
-                : "Nobody holds this thread. Approving or sending needs it."}
-        </span>
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border-1 bg-bg-2 py-1.5 pr-1.5 pl-3">
+        <p className="flex min-w-0 items-center gap-2 text-[13px] leading-5 text-ink-1">
+          {heldByOther ? <Lock aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" /> : null}
+          <span>
+            {thread === undefined
+              ? "Checking the thread…"
+              : mine
+                ? `You hold this thread until ${formatStamp(holder!.expiresAt)}.`
+                : heldByOther
+                  ? `${holder!.name ?? "Another staff member"} holds this thread until ${formatStamp(holder!.expiresAt)}.`
+                  : "Nobody holds this thread. Approving or sending needs it."}
+          </span>
+        </p>
         {!mine ? (
-          <button
+          <Button
             type="button"
-            className="fd-btn fd-btn--small"
+            variant="outline"
+            size="sm"
+            className={cn("shrink-0", outlineButtonClass)}
             disabled={lock.busy || heldByOther || thread === undefined}
             onClick={() => void lock.run(() => claimThread({ threadId: correction.threadId }))}
           >
             {lock.busy ? "Taking…" : "Take this thread"}
-          </button>
+          </Button>
         ) : null}
       </div>
     ) : null;
 
   return (
     <article
-      className={`fd-corr-card${terminal ? " fd-corr-card--done" : ""}`}
-      aria-labelledby={`fd-corr-title-${correction._id}`}
+      aria-labelledby={titleId}
+      className={cn(
+        "rounded-[10px] border border-border-1 bg-white p-4 transition-[opacity,translate] duration-small ease-out starting:-translate-y-1.5 starting:opacity-0 motion-reduce:starting:translate-y-0",
+        terminal && "opacity-80",
+      )}
     >
-      <div className="fd-gutter" aria-hidden="true" />
-      <div className="fd-corr-body">
-        <div className="fd-corr-head">
-          <div>
-            <div className="fd-corr-head__who" id={`fd-corr-title-${correction._id}`}>
-              {guestName(correction.guestEmail)}{" "}
-              <span className="fd-muted fd-small">{correction.guestEmail}</span>
-            </div>
-            <div className="fd-corr-head__subject">{correction.subject}</div>
-          </div>
-          <div className="fd-btn-row">
-            <Pill tone={STATUS_TONE[correction.status]}>{STATUS_LABEL[correction.status]}</Pill>
-            {stale && !terminal ? <Pill tone="caution">Page changed again</Pill> : null}
-            <button type="button" className="fd-btn fd-btn--small" onClick={() => onOpenThread(correction.threadId)}>
-              Open thread
-            </button>
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <p id={titleId} className="text-[14px] leading-5 font-semibold text-ink-1">
+            {guestName(correction.guestEmail)} <span className="font-normal text-ink-2">{correction.guestEmail}</span>
+          </p>
+          <p className="text-[14px] leading-5 text-ink-1">{correction.subject}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Chip tone={status.tone}>{status.label}</Chip>
+          {stale && !terminal ? <Chip tone="warning">Page changed again</Chip> : null}
+          <Button type="button" variant="outline" size="sm" className={outlineButtonClass} onClick={() => onOpenThread(correction.threadId)}>
+            Open thread
+          </Button>
+        </div>
+      </div>
 
-        {correction.statusReason ? <p className="fd-field__hint">{correction.statusReason}</p> : null}
-        {correction.status === "superseded" ? (
-          <Notice tone="info">
-            {correction.supersededById
-              ? "The page changed again; a newer proposal replaces this one."
-              : "The quoted passage is back on the page; no correction is needed."}
-          </Notice>
-        ) : null}
+      {correction.statusReason ? <Hint className="mt-1.5">{correction.statusReason}</Hint> : null}
+      {correction.status === "superseded" ? (
+        <InlineNotice tone="info" className="mt-3">
+          {correction.supersededById
+            ? "The page changed again; a newer proposal replaces this one."
+            : "The quoted passage is back on the page; no correction is needed."}
+        </InlineNotice>
+      ) : null}
 
-        <div className="fd-trail">
-          <div className="fd-trail__step">
-            <div className="fd-trail__label">Sent reply told the guest</div>
-            <div className="fd-trail__text">{correction.statement || "(statement not recorded)"}</div>
-            {correction.sentText ? (
-              <div className="fd-version-toggle">
-                <button
-                  type="button"
-                  className="fd-btn fd-btn--quiet fd-btn--small"
-                  aria-expanded={showSent}
-                  onClick={() => setShowSent((s) => !s)}
-                >
-                  {showSent ? "Hide the message as sent" : "Show the message as sent"}
-                </button>
-                {showSent ? <blockquote className="fd-quote">{correction.sentText}</blockquote> : null}
-              </div>
-            ) : null}
-          </div>
-          <div className="fd-trail__step">
-            <div className="fd-trail__label">
-              Quoted from <ExternalLink href={correction.pageUrl}>{pathOf(correction.pageUrl)}</ExternalLink>
+      <ol className="relative mt-4 flex flex-col gap-5 pl-5 before:absolute before:top-2 before:bottom-2 before:left-[3.5px] before:w-px before:bg-border-2 before:content-['']">
+        <Step label="Sent reply told the guest">
+          <p className="text-[14px] leading-5 text-ink-1">{correction.statement || "(statement not recorded)"}</p>
+          {correction.sentText ? (
+            <div>
+              <Disclosure open={showSent} onToggle={() => setShowSent((s) => !s)}>
+                {showSent ? "Hide the message as sent" : "Show the message as sent"}
+              </Disclosure>
+              {showSent ? <blockquote className={cn(passageClass, "mt-1")}>{correction.sentText}</blockquote> : null}
             </div>
-            <div className="fd-diff">
-              <div className="fd-diff__col">
-                <div className="fd-diff__label">
-                  <span>When the reply was sent</span>
-                </div>
-                <blockquote className="fd-quote fd-quote--old">{correction.oldQuote}</blockquote>
-              </div>
-              <div className="fd-diff__col">
-                <div className="fd-diff__label">
-                  <span>{stale ? "Page at review time (since changed)" : "Page now"}</span>
-                </div>
-                {correction.newPassage ? (
-                  <blockquote className="fd-quote fd-quote--new">{correction.newPassage}</blockquote>
-                ) : (
-                  <div className="fd-quote fd-quote--missing">
-                    The quoted passage is gone and no replacement was found on the page.
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="fd-version-toggle">
-              <button
-                type="button"
-                className="fd-btn fd-btn--quiet fd-btn--small"
-                aria-expanded={showVersions}
-                onClick={() => setShowVersions((s) => !s)}
-              >
-                {showVersions ? "Hide stored page versions" : "Show stored page versions"}
-              </button>
-              {showVersions ? (
-                <div className="fd-diff">
-                  <VersionPane versionId={correction.oldVersionId} label="Cited version" highlight={correction.oldQuote} />
-                  <VersionPane
-                    versionId={correction.newVersionId}
-                    label={stale ? "Reviewed version" : "Current version"}
-                    highlight={correction.evidenceQuote ?? correction.newPassage ?? undefined}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="fd-trail__step">
-            <div className="fd-trail__label">
-              Correction to the guest
-              {correction.textSource ? (
-                <>
-                  {" "}
-                  <Pill tone={correction.textSource === "staff" ? "caution" : "muted"}>{SOURCE_LABEL[correction.textSource]}</Pill>
-                </>
-              ) : null}
-              {correction.judgeVerdict ? (
-                <>
-                  {" "}
-                  <Pill tone={correction.judgeVerdict.entailed && !correction.judgeVerdict.promisedOutsideQuotes ? "pine" : "caution"}>
-                    {correction.judgeVerdict.entailed && !correction.judgeVerdict.promisedOutsideQuotes
-                      ? "Judge: stays within the page"
-                      : "Judge: not accepted"}
-                  </Pill>
-                </>
-              ) : null}
-            </div>
-            {correction.judgeVerdict?.notes ? <p className="fd-field__hint">{correction.judgeVerdict.notes}</p> : null}
-            {correction.evidenceQuote ? (
-              <p className="fd-small fd-muted" style={{ marginBottom: 6 }}>
-                Rests on: “{correction.evidenceQuote}”
-              </p>
-            ) : null}
-            {(open || (approved && editingApproved)) && !stale ? (
-              <>
-                <label className="fd-sr-only" htmlFor={textId}>
-                  Correction text
-                </label>
-                <textarea
-                  id={textId}
-                  className="fd-textarea"
-                  value={text}
-                  disabled={action.busy || !mine}
-                  onChange={(e) => setText_(e.target.value)}
-                  placeholder="What should the guest be told now?"
+          ) : null}
+        </Step>
+
+        <Step
+          label={
+            <span>
+              Quoted from{" "}
+              <a href={correction.pageUrl} target="_blank" rel="noreferrer noopener" className={cn(pathLinkClass, "normal-case tracking-normal")}>
+                {pathOf(correction.pageUrl)}
+              </a>
+            </span>
+          }
+        >
+          <PassageDiff
+            oldText={correction.oldQuote}
+            newText={correction.newPassage}
+            oldLabel="When the reply was sent"
+            newLabel={stale ? "Page at review time (since changed)" : "Page now"}
+            unified={narrow}
+          />
+          <div>
+            <Disclosure open={showVersions} onToggle={() => setShowVersions((s) => !s)}>
+              {showVersions ? "Hide stored page versions" : "Show stored page versions"}
+            </Disclosure>
+            {showVersions ? (
+              <div className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
+                <VersionPane versionId={correction.oldVersionId} label="Cited version" highlight={correction.oldQuote} />
+                <VersionPane
+                  versionId={correction.newVersionId}
+                  label={stale ? "Reviewed version" : "Current version"}
+                  highlight={correction.evidenceQuote ?? correction.newPassage ?? undefined}
                 />
-                {!correction.proposedText ? (
-                  <p className="fd-field__hint">No proposal was produced. Write the correction from the passage above.</p>
-                ) : !supported ? (
-                  <p className="fd-field__hint">
-                    This proposal is not supported by verified page text. Edit it before approving; your edit is sent as
-                    staff-written.
-                  </p>
-                ) : null}
-                {!mine && thread !== undefined ? <p className="fd-field__hint">Take the thread to edit the text.</p> : null}
-                {proposalFailed ? (
-                  <div className="fd-btn-row" style={{ marginTop: 8 }}>
-                    <button
-                      type="button"
-                      className="fd-btn fd-btn--small"
-                      disabled={!canRegenerate || regen.busy || regenPending}
-                      onClick={() => void requestProposal()}
-                    >
-                      {regen.busy ? "Requesting…" : regenPending ? "Regenerating…" : "Regenerate proposal"}
-                    </button>
-                    <span className="fd-muted fd-small" role="status">
-                      {regen.busy
-                        ? "Asking the server for a new proposal."
-                        : regenPending
-                          ? "The drafter is running on the server. The proposal updates here when it finishes."
-                          : regenTimedOut
-                            ? "No new proposal arrived yet. You can ask again or write the correction yourself."
-                            : heldByOther
-                              ? "Another staff member holds this thread."
-                              : "Asks the drafter again, grounded only in the current page. Each request costs one model call."}
-                    </span>
-                  </div>
-                ) : null}
-                {regen.error ? (
-                  <div style={{ marginTop: 8 }}>
-                    <Notice tone="error">{regen.error}</Notice>
-                  </div>
-                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </Step>
+
+        <Step
+          label="Correction to the guest"
+          chips={
+            <>
+              {correction.textSource ? <Chip tone={SOURCE_CHIP[correction.textSource].tone}>{SOURCE_CHIP[correction.textSource].label}</Chip> : null}
+              {correction.judgeVerdict ? (
+                <Chip tone={judgeOk ? "success" : "warning"}>{judgeOk ? "Judge: stays within the page" : "Judge: not accepted"}</Chip>
+              ) : null}
+            </>
+          }
+        >
+          {correction.judgeVerdict?.notes ? <Hint>{correction.judgeVerdict.notes}</Hint> : null}
+          {correction.evidenceQuote ? <Hint className="[overflow-wrap:anywhere]">Rests on: “{correction.evidenceQuote}”</Hint> : null}
+          {editing ? (
+            <div>
+              <label className="sr-only" htmlFor={textId}>
+                Correction text
+              </label>
+              <Textarea
+                id={textId}
+                rows={4}
+                value={text}
+                disabled={action.busy || !mine}
+                onChange={(e) => setText_(e.target.value)}
+                placeholder="What should the guest be told now?"
+                className="min-h-24 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+              />
+              {!correction.proposedText ? (
+                <Hint className="mt-1.5">No proposal was produced. Write the correction from the passage above.</Hint>
+              ) : !supported ? (
+                <Hint className="mt-1.5">
+                  This proposal is not supported by verified page text. Edit it before approving; your edit is sent as staff-written.
+                </Hint>
+              ) : null}
+              {!mine && thread !== undefined ? <Hint className="mt-1.5">Take the thread to edit the text.</Hint> : null}
+              {proposalFailed ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={outlineButtonClass}
+                    disabled={!canRegenerate || regen.busy || regenPending}
+                    onClick={() => void requestProposal()}
+                  >
+                    {regen.busy ? "Requesting…" : regenPending ? "Regenerating…" : "Regenerate proposal"}
+                  </Button>
+                  <span className="text-[13px] leading-5 text-ink-2" role="status">
+                    {regen.busy
+                      ? "Asking the server for a new proposal."
+                      : regenPending
+                        ? "The drafter is running on the server. The proposal updates here when it finishes."
+                        : regenTimedOut
+                          ? "No new proposal arrived yet. You can ask again or write the correction yourself."
+                          : heldByOther
+                            ? "Another staff member holds this thread."
+                            : "Asks the drafter again, grounded only in the current page. Each request costs one model call."}
+                  </span>
+                </div>
+              ) : null}
+              {regen.error ? (
+                <InlineNotice tone="error" className="mt-2">
+                  {regen.error}
+                </InlineNotice>
+              ) : null}
+            </div>
+          ) : (
+            <div className={textBoxClass}>{correction.proposedText ?? "(no text recorded)"}</div>
+          )}
+        </Step>
+      </ol>
+
+      {claimBar ? <div className="mt-4">{claimBar}</div> : null}
+      {lock.error ? (
+        <InlineNotice tone="error" className="mt-3">
+          {lock.error}
+        </InlineNotice>
+      ) : null}
+
+      {open ? (
+        <div className="mt-4 border-t border-border-1 pt-3">
+          {action.error ? (
+            <InlineNotice tone="error" className="mb-3">
+              {action.error}
+            </InlineNotice>
+          ) : null}
+          {stale ? (
+            <InlineNotice tone="caution">The page changed again. This proposal cannot be approved; a newer one replaces it.</InlineNotice>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="text-[13px]"
+                disabled={action.busy || !mine || text.trim().length === 0 || (!supported && !dirty)}
+                onClick={() => void approve()}
+              >
+                {action.busy ? "Saving…" : "Approve correction"}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className={outlineButtonClass} disabled={action.busy || !mine || !dirty} onClick={() => void saveText()}>
+                Save text
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={outlineButtonClass}
+                disabled={action.busy}
+                onClick={() => void action.run(() => review({ correctionId: correction._id, decision: "dismiss" }))}
+              >
+                Dismiss
+              </Button>
+              <span className="text-[13px] leading-5 text-ink-2">
+                Approving records the text; it is only sent when you press {isDemo ? "Send correction (simulated)" : "Send correction"}.
+              </span>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {approved ? (
+        <div className="mt-4 border-t border-border-1 pt-3">
+          {sendAction.error || action.error ? (
+            <InlineNotice tone="error" className="mb-3">
+              {sendAction.error ?? action.error}
+            </InlineNotice>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {editingApproved ? (
+              <>
+                <Button type="button" size="sm" className="text-[13px]" disabled={action.busy || !dirty || text.trim().length === 0} onClick={() => void saveText()}>
+                  {action.busy ? "Saving…" : "Save text (withdraws approval)"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={outlineButtonClass}
+                  disabled={action.busy}
+                  onClick={() => {
+                    setEditingApproved(false);
+                    setText_(base);
+                  }}
+                >
+                  Cancel
+                </Button>
               </>
             ) : (
-              <div className="fd-quote">{correction.proposedText ?? "(no text recorded)"}</div>
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="text-[13px]"
+                  disabled={sendBlocked !== null || sendAction.busy}
+                  aria-describedby={sendWhyId}
+                  onClick={() => void send()}
+                >
+                  {sendAction.busy ? "Sending…" : isDemo ? "Send correction (simulated)" : "Send correction"}
+                </Button>
+                {!stale && !inFlight ? (
+                  <Button type="button" variant="outline" size="sm" className={outlineButtonClass} disabled={!mine} onClick={() => setEditingApproved(true)}>
+                    Edit text
+                  </Button>
+                ) : null}
+              </>
             )}
           </div>
+          <Hint id={sendWhyId} className="mt-2">
+            {sendBlocked ??
+              (isDemo
+                ? "Simulated send into the guest's thread; recorded in this demo only. No real email is sent."
+                : "Sends the approved text into the guest's thread.")}
+          </Hint>
+          {correction.reviewedAt ? (
+            <p className="mt-2 font-mono text-[12px] leading-4 text-ink-3 tabular-nums">approved {formatStamp(correction.reviewedAt)}</p>
+          ) : null}
         </div>
+      ) : null}
 
-        {claimBar}
-        {lock.error ? (
-          <div style={{ marginBottom: 10 }}>
-            <Notice tone="error">{lock.error}</Notice>
-          </div>
-        ) : null}
-
-        {open ? (
-          <div className="fd-corr-actions">
-            {action.error ? (
-              <div style={{ marginBottom: 10 }}>
-                <Notice tone="error">{action.error}</Notice>
-              </div>
-            ) : null}
-            {stale ? (
-              <Notice tone="caution">The page changed again. This proposal cannot be approved; a newer one replaces it.</Notice>
-            ) : (
-              <div className="fd-btn-row">
-                <button
-                  type="button"
-                  className="fd-btn fd-btn--primary"
-                  disabled={action.busy || !mine || text.trim().length === 0 || (!supported && !dirty)}
-                  onClick={() => void approve()}
-                >
-                  {action.busy ? "Saving…" : "Approve correction"}
-                </button>
-                <button type="button" className="fd-btn" disabled={action.busy || !mine || !dirty} onClick={() => void saveText()}>
-                  Save text
-                </button>
-                <button
-                  type="button"
-                  className="fd-btn"
-                  disabled={action.busy}
-                  onClick={() => void action.run(() => review({ correctionId: correction._id, decision: "dismiss" }))}
-                >
-                  Dismiss
-                </button>
-                <span className="fd-muted fd-small">
-                  Approving records the text; it is only sent when you press {isDemo ? "Send correction (simulated)" : "Send correction"}.
-                </span>
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {approved ? (
-          <div className="fd-corr-actions">
-            {sendAction.error || action.error ? (
-              <div style={{ marginBottom: 10 }}>
-                <Notice tone="error">{sendAction.error ?? action.error}</Notice>
-              </div>
-            ) : null}
-            <div className="fd-btn-row">
-              {editingApproved ? (
-                <>
-                  <button type="button" className="fd-btn fd-btn--primary" disabled={action.busy || !dirty || text.trim().length === 0} onClick={() => void saveText()}>
-                    {action.busy ? "Saving…" : "Save text (withdraws approval)"}
-                  </button>
-                  <button type="button" className="fd-btn" disabled={action.busy} onClick={() => { setEditingApproved(false); setText_(base); }}>
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="fd-btn fd-btn--primary"
-                    disabled={sendBlocked !== null || sendAction.busy}
-                    aria-describedby={`fd-corr-send-why-${correction._id}`}
-                    onClick={() => void send()}
-                  >
-                    {sendAction.busy ? "Sending…" : isDemo ? "Send correction (simulated)" : "Send correction"}
-                  </button>
-                  {!stale && !inFlight ? (
-                    <button type="button" className="fd-btn" disabled={!mine} onClick={() => setEditingApproved(true)}>
-                      Edit text
-                    </button>
-                  ) : null}
-                </>
-              )}
-            </div>
-            <p id={`fd-corr-send-why-${correction._id}`} className="fd-field__hint" style={{ marginTop: 8 }}>
-              {sendBlocked ??
-                (isDemo
-                  ? "Simulated send into the guest's thread; recorded in this demo only. No real email is sent."
-                  : "Sends the approved text into the guest's thread.")}
-            </p>
-            {correction.reviewedAt ? <p className="fd-mono">approved {formatStamp(correction.reviewedAt)}</p> : null}
-          </div>
-        ) : null}
-
-        {outboxRows.length > 0 && (approved || correction.status === "sent") ? (
-          <div style={{ marginTop: 10 }}>
-            <OutboxList rows={outboxRows} title="Correction delivery" />
-          </div>
-        ) : null}
-      </div>
+      {outboxRows.length > 0 && (approved || correction.status === "sent") ? (
+        <OutboxList rows={outboxRows} title="Correction delivery" className="mt-3 border-t border-border-1 pt-3" />
+      ) : null}
     </article>
   );
 }

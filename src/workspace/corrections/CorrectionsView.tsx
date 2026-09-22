@@ -1,15 +1,43 @@
+import type { ReactNode } from "react";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Correction, LiveMailDecision, RecordVersionResult, UnaffectedControl, UnaffectedControlRow } from "../types";
-import { Empty, Spinner } from "../lib/ui";
+import { Spinner } from "../lib/ui";
+import { SectionLabel } from "../inbox/primitives";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { CorrectionCard } from "./CorrectionCard";
+import { ChangesStats } from "./ChangesStats";
 import { UnaffectedControls } from "./UnaffectedControls";
+import { outlineButtonClass, sectionHeadingClass } from "./styles";
 import { DemoActions } from "../shell/DemoActions";
 import type { DemoPolicy } from "../shell/useDemoPolicy";
 
 /** Sent replies asked for per page; the server caps the walk at the same size. */
 const CONTROLS_PAGE_SIZE = 25;
+
+/** A titled block of the review page; the header carries the h1, so these are h2. */
+function Section({ id, title, className, children }: { id: string; title: string; className?: string; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className={cn("mt-6", className)}>
+      <h2 id={id} className={cn(sectionHeadingClass, "mb-2")}>
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/** Empty state: status, then what it means. Never apologises. */
+function EmptyState({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-[10px] border border-dashed border-border-2 px-5 py-8 text-center">
+      <p className="text-[14px] leading-5 font-semibold text-ink-1">{title}</p>
+      <p className="mt-1 text-[13px] leading-5 text-ink-2">{children}</p>
+    </div>
+  );
+}
 
 export function CorrectionsView({
   innId,
@@ -54,7 +82,7 @@ export function CorrectionsView({
   const reviewed = corrections.filter((c) => c.status === "sent" || c.status === "dismissed" || c.status === "superseded");
   const pagesTouched = new Set(open.map((c) => c.pageUrl)).size;
   // Cards are listed per claim (one sent reply with several changed passages
-  // yields several cards), but the strip counts sent replies: distinct
+  // yields several cards), but the tiles count sent replies: distinct
   // `sentReplyId` on every side, so affected, approved and control numbers
   // are comparable. The passage count is shown only when it differs.
   const openReplies = new Set(open.map((c) => c.sentReplyId)).size;
@@ -67,83 +95,66 @@ export function CorrectionsView({
   const cardProps = { viewerId, isDemo, liveMail, onOpenThread };
 
   return (
-    <div>
-      <h2 className="fd-h2">Replies to review</h2>
-      <p className="fd-lede">
-        When a page on the inn's website changes, every reply that quoted it is checked again. Replies whose
-        quoted passage no longer holds are listed here with what the page says now.
-      </p>
+    <div className="max-w-[1040px]">
+      <ChangesStats
+        stats={{
+          open: open.length,
+          openReplies,
+          approved: approved.length,
+          approvedReplies,
+          controls: controls.length,
+          controlReplies,
+          unchecked: unchecked.length,
+          allLoaded,
+          allChecked,
+          pagesTouched,
+        }}
+      />
 
       {isDemo && !untouched ? (
-        <div className="fd-demo-bar">
-          <span className="fd-small fd-muted">Demo controls</span>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[10px] border border-border-1 bg-white py-2 pr-2 pl-4">
+          <SectionLabel as="p">Demo controls</SectionLabel>
           <DemoActions innId={innId} demo={demo} last={lastDemoChange} onResult={onDemoChange} />
         </div>
       ) : null}
 
-      <div className="fd-strip" role="status">
-        <span>
-          <strong>{openReplies}</strong> {openReplies === 1 ? "reply needs" : "replies need"} review
-          {open.length > openReplies ? ` (${open.length} passages)` : null}
-        </span>
-        {approved.length > 0 ? (
-          <span>
-            <strong>{approvedReplies}</strong>{" "}
-            {approvedReplies === 1
-              ? "reply has an approved correction"
-              : "replies have approved corrections"}
-            , not sent
-            {approved.length > approvedReplies ? ` (${approved.length} passages)` : null}
-          </span>
-        ) : null}
-        <span>
-          <strong>{controlReplies}</strong> {controlReplies === 1 ? "reply" : "replies"} re-checked{allChecked ? "" : " so far"} and still true
-          {controls.length > controlReplies ? ` (${controls.length} passages)` : null}
-          {allLoaded ? null : ", older replies not loaded yet"}
-          {allLoaded && !allChecked ? `, ${unchecked.length} not verified` : null}
-        </span>
-        {open.length > 0 ? (
-          <span>
-            <strong>{pagesTouched}</strong> {pagesTouched === 1 ? "page" : "pages"} changed
-          </span>
-        ) : null}
-      </div>
-
-      {open.length === 0 ? (
-        <div className="fd-section">
-          {isDemo && untouched ? (
+      <Section id="fd-changes-open" title="Replies to review">
+        <p className="mb-3 max-w-[64ch] text-[13px] leading-5 text-ink-2">
+          When a page on the inn's website changes, every reply that quoted it is checked again. Replies whose quoted
+          passage no longer holds are listed here with what the page says now.
+        </p>
+        {open.length === 0 ? (
+          isDemo && untouched ? (
             <DemoActions innId={innId} demo={demo} variant="hero" last={lastDemoChange} onResult={onDemoChange} />
           ) : (
-            <Empty title="Nothing to review">
+            <EmptyState title="Nothing to review">
               {untouched
                 ? "No sent reply cites a page that has changed since it was sent."
                 : "Every sent reply that cites a changed page has been reviewed."}
-            </Empty>
-          )}
-        </div>
-      ) : (
-        <div className="fd-section fd-corr">
-          {open.map((c) => (
-            <CorrectionCard key={c._id} correction={c} {...cardProps} />
-          ))}
-        </div>
-      )}
+            </EmptyState>
+          )
+        ) : (
+          <div className="flex flex-col gap-4">
+            {open.map((c) => (
+              <CorrectionCard key={c._id} correction={c} {...cardProps} />
+            ))}
+          </div>
+        )}
+      </Section>
 
       {approved.length > 0 ? (
-        <div className="fd-section">
-          <p className="fd-section__title">Approved, waiting to be sent</p>
-          <div className="fd-corr">
+        <Section id="fd-changes-approved" title="Approved, waiting to be sent">
+          <div className="flex flex-col gap-4">
             {approved.map((c) => (
               <CorrectionCard key={c._id} correction={c} {...cardProps} />
             ))}
           </div>
-        </div>
+        </Section>
       ) : null}
 
-      <div className="fd-section">
-        <p className="fd-section__title">Re-checked and unaffected</p>
+      <Section id="fd-changes-controls" title="Re-checked and unaffected">
         {controls.length === 0 ? (
-          <p className="fd-muted fd-small">
+          <p className="text-[13px] leading-5 text-ink-2">
             {!allLoaded
               ? "None of the sent replies loaded so far has been re-checked against a newer page version."
               : unchecked.length > 0
@@ -156,34 +167,35 @@ export function CorrectionsView({
           <UnaffectedControls controls={controls} onOpenThread={onOpenThread} />
         )}
         {unchecked.length > 0 ? (
-          <p className="fd-muted fd-small">
+          <p className="mt-2 text-[13px] leading-5 text-ink-2">
             {unchecked.length === 1 ? "1 sent reply cites" : `${unchecked.length} sent replies cite`} more passages or past corrections than
             this view re-checks and {unchecked.length === 1 ? "is" : "are"} not counted as still true.
           </p>
         ) : null}
         {allLoaded ? null : (
-          <p className="fd-small">
-            <button
+          <div className="mt-3">
+            <Button
               type="button"
-              className="fd-btn fd-btn--quiet fd-btn--small"
+              variant="outline"
+              size="sm"
+              className={outlineButtonClass}
               disabled={controlPages.status === "LoadingMore"}
               onClick={() => controlPages.loadMore(CONTROLS_PAGE_SIZE)}
             >
               {controlPages.status === "LoadingMore" ? "Loading older sent replies…" : "Load more sent replies"}
-            </button>
-          </p>
+            </Button>
+          </div>
         )}
-      </div>
+      </Section>
 
       {reviewed.length > 0 ? (
-        <div className="fd-section">
-          <p className="fd-section__title">Already reviewed</p>
-          <div className="fd-corr">
+        <Section id="fd-changes-reviewed" title="Already reviewed">
+          <div className="flex flex-col gap-4">
             {reviewed.map((c) => (
               <CorrectionCard key={c._id} correction={c} {...cardProps} />
             ))}
           </div>
-        </div>
+        </Section>
       ) : null}
     </div>
   );
