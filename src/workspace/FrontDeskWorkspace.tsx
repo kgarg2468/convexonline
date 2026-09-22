@@ -19,6 +19,7 @@ import { InboxStats } from "./inbox/InboxStats";
 import type { QueueKeyHandler } from "./inbox/QueueList";
 import { SourcesSheet } from "./inbox/SourcesSheet";
 import { KnowledgeView } from "./knowledge/KnowledgeView";
+import { KnowledgeStats } from "./knowledge/KnowledgeStats";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
@@ -442,7 +443,7 @@ function Workspace({
             ) : undefined,
         };
       case "knowledge":
-        return { title: "Knowledge", sub: current.siteUrl };
+        return { title: "Knowledge", sub: current.siteUrl, meta: <KnowledgeStats innId={innId} siteUrl={current.siteUrl} /> };
       case "settings":
         return { title: "Settings", sub: "Property, guest inbox, providers and team" };
     }

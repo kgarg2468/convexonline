@@ -4,25 +4,30 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { PageVersion } from "../types";
 import { formatStamp, shortHash } from "../lib/format";
 import { Spinner } from "../lib/ui";
+import { cn } from "@/lib/utils";
 
 /**
  * Loads one stored page version and renders its markdown source verbatim,
- * highlighting `highlight` (a cited quote) when it still appears.
+ * highlighting `highlight` (a cited quote) when it still appears. The
+ * `fd-version-pane` class and the `mark` stay: the browser specs read them.
+ * `className` lets a host (the knowledge content sheet) drop the boxed look.
  */
 export function VersionPane({
   versionId,
   label,
   highlight,
+  className,
 }: {
   versionId: Id<"pageVersions">;
   label: string;
   highlight?: string;
+  className?: string;
 }) {
   const version = useQuery(api.pages.getVersion, { pageVersionId: versionId }) as PageVersion | undefined;
   if (version === undefined) return <Spinner label={`Loading ${label.toLowerCase()}`} />;
   const body = highlightPassage(version.markdown, highlight);
   return (
-    <div className="fd-version-pane">
+    <div className={cn("fd-version-pane", className)}>
       <div className="fd-version-pane__head">
         <strong className="fd-small">{label}</strong>
         <span className="fd-mono">
