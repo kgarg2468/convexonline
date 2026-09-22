@@ -18,6 +18,27 @@ export function useMediaQuery(query: string): boolean {
 
 export const useIsNarrow = () => useMediaQuery("(max-width: 900px)");
 
+/** Between the phone layout and the three-pane inbox: the sources pane becomes a sheet. */
+export const useIsMid = () => useMediaQuery("(width > 900px) and (width < 1200px)");
+
+/**
+ * True once `active` has been continuously true for `delayMs`, false the
+ * moment it drops. Gates skeletons so a load that finishes quickly never
+ * flashes one (research-motion §2.5: ~150ms).
+ */
+export function useDelayedFlag(active: boolean, delayMs = 150): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setTimeout(() => setOn(true), delayMs);
+    return () => {
+      window.clearTimeout(id);
+      setOn(false);
+    };
+  }, [active, delayMs]);
+  return on && active;
+}
+
 export type AsyncState = { busy: boolean; error: string | null };
 
 /**

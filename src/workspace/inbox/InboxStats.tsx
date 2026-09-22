@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import type { ThreadStats } from "../types";
 import { formatDuration } from "../lib/format";
+import { Separator } from "@/components/ui/separator";
 
 /**
  * Short zone label for "today" so staff know the count follows the inn's
@@ -20,6 +22,24 @@ function zoneLabel(timezone: string | undefined): string | null {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
+/** A value inside a stat sentence: ink-1, 600, tabular. */
+function Value({ children }: { children: ReactNode }) {
+  return <strong className="font-semibold text-ink-1">{children}</strong>;
+}
+
+/**
+ * One stat. The list item's text is the sentence the specs read, so the
+ * divider is a decorative separator inside the item and never a text node.
+ */
+function Stat({ first, children }: { first?: boolean; children: ReactNode }) {
+  return (
+    <li className="whitespace-nowrap">
+      {first ? null : <Separator orientation="vertical" className="mr-3 inline-block h-3 align-[-1px] bg-border-2" />}
+      {children}
+    </li>
+  );
+}
+
 /**
  * The inbox statistics strip: replies sent today (inn-local day, decided by
  * the server), median first-response time, and the open queue. Values come
@@ -29,29 +49,32 @@ export function InboxStats({ stats, timezone }: { stats: ThreadStats; timezone: 
   const zone = zoneLabel(timezone);
   const median = stats.medianFirstResponseMs;
   return (
-    <ul className="fd-stats" aria-label="Inbox statistics">
-      <li className="fd-stats__item">
-        <strong>{stats.sentToday}</strong> {plural(stats.sentToday, "reply", "replies")} today
-        {zone ? <span className="fd-stats__note"> (inn time, {zone})</span> : null}
-      </li>
-      <li className="fd-stats__item">
+    <ul
+      aria-label="Inbox statistics"
+      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] leading-4 text-ink-2 tabular-nums max-[900px]:text-[12px]"
+    >
+      <Stat first>
+        <Value>{stats.sentToday}</Value> {plural(stats.sentToday, "reply", "replies")} today
+        {zone ? <span> (inn time, {zone})</span> : null}
+      </Stat>
+      <Stat>
         {median === null ? (
           "No first responses yet"
         ) : (
           <>
-            Median first response <strong>{formatDuration(median)}</strong>
+            Median first response <Value>{formatDuration(median)}</Value>
           </>
         )}
-      </li>
-      <li className="fd-stats__item">
-        <strong>{stats.open}</strong> open
+      </Stat>
+      <Stat>
+        <Value>{stats.open}</Value> open
         {stats.open > 0 ? (
-          <span className="fd-stats__note">
+          <span>
             {" "}
             ({stats.needsStaff} need you, {stats.ready} ready)
           </span>
         ) : null}
-      </li>
+      </Stat>
     </ul>
   );
 }
