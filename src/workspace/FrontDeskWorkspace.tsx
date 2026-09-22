@@ -264,8 +264,12 @@ function SignedIn({
         </div>
       );
     }
+    // The demo inn is refused like any other when a subscription fails; a
+    // visitor gets the same honest screen, with the inbox as the way back.
     return (
-      <Workspace key={demoInn.innId} viewer={viewer} inns={inns} current={demoInn} onSwitchInn={setStoredInn} onSignOut={leave} />
+      <WorkspaceAccessBoundary key={demoInn.innId} onReturn={() => window.location.assign("/inbox")} returnLabel="Back to the inbox">
+        <Workspace key={demoInn.innId} viewer={viewer} inns={inns} current={demoInn} onSwitchInn={setStoredInn} onSignOut={leave} />
+      </WorkspaceAccessBoundary>
     );
   }
 

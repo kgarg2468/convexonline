@@ -1,29 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type {
-  LiveMailDecision,
-  ThreadDetail as ThreadDetailData,
-} from "../types";
-import { useDelayedFlag, useIsNarrow } from "../lib/hooks";
+import type { LiveMailDecision } from "../types";
+import { useDelayedFlag, useIsNarrow, useQueryResult } from "../lib/hooks";
 import { cn } from "@/lib/utils";
 import { QueueList, type QueueFilter, type QueueKeyHandler, type QueueRestore } from "./QueueList";
 import type { SelectSource } from "./QueueRow";
 import { ThreadSkeleton } from "./QueueSkeleton";
-import { threadMainClass } from "./styles";
+import { SourcesPlaceholder, ThreadUnavailable } from "./primitives";
+import { threadMainClass, threadPadClass } from "./styles";
 import { ThreadDetail } from "./ThreadDetail";
 import { DemoInbound } from "../shell/DemoInbound";
-
-/** The empty third column beside a pane that has no sources of its own (only on the three-pane layout). */
-function SourcesPlaceholder() {
-  return (
-    <div
-      aria-hidden="true"
-      className="hidden border-l border-border-1 bg-white min-[1200px]:block"
-    />
-  );
-}
 
 /**
  * The inbox frame. From 1200px: queue 340 | thread | sources 320, each pane
@@ -68,12 +55,11 @@ export function InboxView({
   const [search, setSearch] = useState("");
 
   // Same subscription the thread pane opens (the client shares it), read here
-  // only to know when the selected thread has arrived.
-  const detail = useQuery(
-    api.threads.get,
-    selected && !composing ? { threadId: selected } : "skip",
-  ) as ThreadDetailData | undefined;
-  const arrived = selected !== null && !composing && detail !== undefined;
+  // only to know when the selected thread has arrived, or was refused: a stale
+  // or hostile deep link gets a pane that says so, never a blank workspace.
+  const detail = useQueryResult(api.threads.get, selected && !composing ? { threadId: selected } : "skip");
+  const refused = selected !== null && !composing && detail.status === "error";
+  const arrived = selected !== null && !composing && detail.status === "ok";
 
   // The thread whose pane is on screen. While a newly selected thread is still
   // loading the previous thread stays up (its own subscription is still live),
@@ -81,8 +67,8 @@ export function InboxView({
   // there is nothing to keep (first open, or after the pane was empty).
   const [shownThread, setShownThread] = useState<Id<"threads"> | null>(null);
   if (arrived && shownThread !== selected) setShownThread(selected);
-  if ((selected === null || composing) && shownThread !== null) setShownThread(null);
-  const threadLoading = selected !== null && !composing && shownThread === null;
+  if ((selected === null || composing || refused) && shownThread !== null) setShownThread(null);
+  const threadLoading = selected !== null && !composing && !refused && shownThread === null;
   const showThreadSkeleton = useDelayedFlag(threadLoading);
 
   // Phone focus management. Opening a thread replaces the list, so focus
@@ -173,6 +159,15 @@ export function InboxView({
                   onSelect(threadId);
                 }}
                 onCancel={() => setComposing(false)}
+              />
+              <SourcesPlaceholder />
+            </>
+          ) : refused ? (
+            <>
+              <ThreadUnavailable
+                className={cn(threadMainClass, threadPadClass)}
+                onBack={back}
+                onBackToInbox={() => onSelect(null)}
               />
               <SourcesPlaceholder />
             </>

@@ -126,6 +126,39 @@ export function SourcesPlaceholder() {
   return <div aria-hidden="true" className="hidden border-l border-border-1 bg-white min-[1200px]:block" />;
 }
 
+/**
+ * The thread pane when the server refused the selected thread: a stale link,
+ * a malformed id, or a thread from a property the viewer cannot see. The
+ * queue and the rest of the workspace stay up around it.
+ */
+export function ThreadUnavailable({
+  className,
+  onBack,
+  onBackToInbox,
+}: {
+  className?: string;
+  onBack: (() => void) | null;
+  onBackToInbox: () => void;
+}) {
+  return (
+    <div className={cn(className, "py-4")} role="region" aria-labelledby="fd-thread-unavailable-title">
+      {onBack ? <BackButton onBack={onBack} /> : null}
+      <div className="mx-auto max-w-[440px] pt-12 text-center">
+        <h2 id="fd-thread-unavailable-title" className="text-[16px] leading-6 font-semibold text-ink-1">
+          This thread could not be opened.
+        </h2>
+        <p className="mt-1 text-[13px] leading-5 text-ink-2">
+          The link may be out of date, or the thread belongs to a property you do not have access to. Pick a
+          thread from the queue instead.
+        </p>
+        <Button type="button" variant="outline" size="sm" className="mt-4 bg-white text-[13px] text-ink-1" onClick={onBackToInbox}>
+          Back to inbox
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Phone layout only: back to the queue. The accessible name stays "All threads" (mobile spec). */
 export function BackButton({ onBack }: { onBack: () => void }) {
   return (

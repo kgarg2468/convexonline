@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
 import { PanelRight } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { ThreadDetail as ThreadDetailData } from "../types";
+import { useQueryResult } from "../lib/hooks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { SourcePanel } from "./SourcePanel";
@@ -16,7 +16,10 @@ import { SourcePanel } from "./SourcePanel";
  */
 export function SourcesSheet({ threadId }: { threadId: Id<"threads"> }) {
   const [open, setOpen] = useState(false);
-  const detail = useQuery(api.threads.get, { threadId }) as ThreadDetailData | undefined;
+  const result = useQueryResult(api.threads.get, { threadId });
+  // The thread pane explains a refused thread; a sources button for it would only mislead.
+  if (result.status === "error") return null;
+  const detail = result.data as ThreadDetailData | undefined;
   const count = detail?.claims.length;
   return (
     <Sheet open={open} onOpenChange={setOpen}>

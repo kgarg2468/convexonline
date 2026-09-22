@@ -1,4 +1,7 @@
 import { addTransitionType, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueries, type RequestForQueries } from "convex/react";
+import { convexToJson, type Value } from "convex/values";
+import { getFunctionName, type FunctionArgs, type FunctionReference, type FunctionReturnType } from "convex/server";
 import { errorMessage } from "./format";
 import { formatRoute, landingRoute, parsePath, sameRoute, type NavTransition, type Route } from "./router";
 
@@ -14,6 +17,42 @@ export function useMediaQuery(query: string): boolean {
     return () => list.removeEventListener("change", onChange);
   }, [query]);
   return matches;
+}
+
+export type QueryResult<T> =
+  | { status: "loading"; data?: undefined; error?: undefined }
+  | { status: "ok"; data: T; error?: undefined }
+  | { status: "error"; data?: undefined; error: Error };
+
+/**
+ * `useQuery` that reports a refused subscription instead of throwing it. A
+ * deep link can name a thread the server refuses (a malformed id, another
+ * inn's thread); the pane that asked for it should say so in place, not take
+ * the whole workspace down with it.
+ */
+export function useQueryResult<Q extends FunctionReference<"query">>(
+  query: Q,
+  args: FunctionArgs<Q> | "skip",
+): QueryResult<FunctionReturnType<Q>> {
+  const skip = args === "skip";
+  const argsKey = skip ? "" : JSON.stringify(convexToJson(args));
+  // `api.x.y` is a fresh proxy on every access, so the memo keys on the name.
+  const queryName = getFunctionName(query);
+  const queries = useMemo<RequestForQueries>(
+    () => {
+      const request: RequestForQueries = {};
+      if (!skip) request.query = { query, args: args as Record<string, Value> };
+      return request;
+    },
+    // Stringified args and the function name, as convex/react does, so equal
+    // requests never re-subscribe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryName, argsKey, skip],
+  );
+  const result = useQueries(queries)["query"] as FunctionReturnType<Q> | Error | undefined;
+  if (result instanceof Error) return { status: "error", error: result };
+  if (result === undefined) return { status: "loading" };
+  return { status: "ok", data: result };
 }
 
 export const useIsNarrow = () => useMediaQuery("(max-width: 900px)");
