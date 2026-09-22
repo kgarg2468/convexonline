@@ -9,6 +9,16 @@ test.describe("sign in and demo entry", () => {
     await expect(page.getByLabel("Email")).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
 
+    // Arrow keys select as they move (automatic activation): the focused tab is the selected one and its form is up.
+    await page.getByRole("tab", { name: "Sign in" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Create staff account" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Create staff account" })).toBeFocused();
+    await expect(page.getByLabel("Your name")).toBeVisible();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByRole("tab", { name: "Sign in" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByLabel("Your name")).toHaveCount(0);
+
     await page.getByRole("button", { name: "Open the demo workspace" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "Policy changes" })).toBeVisible();
@@ -65,6 +75,16 @@ test.describe("sign in and demo entry", () => {
     await enterDemo(page);
     await page.getByRole("navigation", { name: "Workspace" }).getByRole("button", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    // The website is its own section between the property and the inbox, for a demo inn too.
+    await expect(page.getByRole("heading", { level: 2 })).toHaveText([
+      "Property",
+      "Public website",
+      "Guest inbox",
+      "Sending email",
+      "Providers on this deployment",
+      "Team",
+    ]);
+    await expect(page.getByRole("region", { name: "Public website" }).getByRole("link", { name: "https://harborlight.example" })).toBeVisible();
     await expect(page.getByText("Providers on this deployment")).toBeVisible();
     await expect(page.getByText(/A configured key or secret is not proof that inbound mail is flowing/)).toBeVisible();
     // Booleans only: a configured/not-configured pill per provider, no inputs for keys.

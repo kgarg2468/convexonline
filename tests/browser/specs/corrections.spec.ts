@@ -17,6 +17,10 @@ test.describe("policy change review", () => {
     await enterDemo(page);
 
     await expect(reviewStrip(page)).toContainText("0 replies need review");
+    // All three tiles are there before anything changes, the pages-changed one at zero.
+    await expect(reviewStrip(page).locator(":scope > *")).toHaveCount(3);
+    await expect(reviewStrip(page)).toContainText("0 replies re-checked and still true");
+    await expect(reviewStrip(page)).toContainText("0 pages changed");
     await expect(page.getByText("Nothing is edited until you press the button.")).toBeVisible();
 
     await page.getByRole("button", { name: "Read the policies page as it is now" }).click();

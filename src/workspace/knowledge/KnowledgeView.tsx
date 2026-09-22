@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SectionLabel } from "../inbox/primitives";
 import { CrawlSection } from "./CrawlSection";
 import { FactsSection } from "./FactsSection";
+import { KnowledgeStats } from "./KnowledgeStats";
 import { PageRow } from "./PageRow";
 import { pageGridClass, panelClass } from "./styles";
 import { useMounted } from "./useMounted";
@@ -16,8 +17,8 @@ const COLUMNS = ["Page", "Path", "Watched", "Latest version"] as const;
 
 /**
  * The knowledge view (design-spec §4.4): what replies are drafted from. The
- * header carries the site URL and the counts (KnowledgeStats); the body is the
- * crawl row, the page table and the staff facts.
+ * shell header carries the site URL; the view leads with the counts
+ * (KnowledgeStats), then the crawl row, the page table and the staff facts.
  */
 export function KnowledgeView({ innId, siteUrl, isDemo }: { innId: Id<"inns">; siteUrl: string; isDemo: boolean }) {
   const pages = useQuery(api.pages.list, { innId }) as PageSummary[] | undefined;
@@ -30,6 +31,8 @@ export function KnowledgeView({ innId, siteUrl, isDemo }: { innId: Id<"inns">; s
 
   return (
     <div className="flex flex-col gap-6">
+      <KnowledgeStats pages={pages} facts={facts} />
+
       <div>
         <h2 className="text-[16px] leading-6 font-semibold text-balance text-ink-1">What replies are drafted from</h2>
         <p className="mt-0.5 max-w-[64ch] text-[13px] leading-5 text-ink-2">

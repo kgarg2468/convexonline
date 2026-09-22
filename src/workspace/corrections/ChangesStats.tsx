@@ -29,9 +29,10 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
  * line, then the rest of the sentence. On a phone it is one entry of a stat
  * line: the value in bold, then the sentence, wrapping as prose. Either way
  * the whitespace text node between the two keeps the element's text the
- * exact sentence the specs read ("3 replies need review").
+ * exact sentence the specs read ("3 replies need review"). Shared with the
+ * Knowledge strip so both views' KPIs are the same tile.
  */
-function Stat({ value, narrow, children }: { value: number; narrow: boolean; children: ReactNode }) {
+export function Stat({ value, narrow, children }: { value: number; narrow: boolean; children: ReactNode }) {
   if (narrow) {
     return (
       <span className="text-[13px] leading-5 text-ink-2">
@@ -49,9 +50,10 @@ function Stat({ value, narrow, children }: { value: number; narrow: boolean; chi
 
 /**
  * The review strip: replies that need review, replies re-checked and still
- * true, pages changed (and approved-not-sent when there are any). Beside the
- * queue it is a fixed three-column grid of KPI tiles, so a tile's width never
- * depends on how many tiles there are; under 901px it collapses into one stat
+ * true, pages changed (and approved-not-sent when there are any). The three
+ * are always there, "0 pages changed" included, so the strip reads the same
+ * before and after a page edit. Beside the queue it is a fixed three-column
+ * grid of KPI tiles, so a tile's width never depends on how many tiles there are; under 901px it collapses into one stat
  * line so the first card stays above the fold on a phone. The whole strip is
  * one `role="status"` so a screen reader hears the numbers change after a
  * page edit, and the specs read every sentence from it.
@@ -82,11 +84,9 @@ export function ChangesStats({ stats }: { stats: ChangesStatsData }) {
         {allLoaded ? null : ", older replies not loaded yet"}
         {allLoaded && !allChecked ? `, ${unchecked} not verified` : null}
       </Stat>
-      {open > 0 ? (
-        <Stat value={pagesTouched} narrow={narrow}>
-          {plural(pagesTouched, "page", "pages")} changed
-        </Stat>
-      ) : null}
+      <Stat value={pagesTouched} narrow={narrow}>
+        {plural(pagesTouched, "page", "pages")} changed
+      </Stat>
     </div>
   );
 }

@@ -3,12 +3,12 @@ import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { InnDetail, IntegrationStatus, Viewer } from "../types";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Notice } from "../lib/ui";
+import { Notice } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { LIVE_MAIL_REASON } from "../lib/format";
 import { Chip, Hint } from "../inbox/primitives";
 import { TeamSettings } from "./TeamSettings";
-import { InnWebsiteEditor } from "./InnWebsiteEditor";
+import { InnWebsiteEditor, PublicWebsiteSection } from "./InnWebsiteEditor";
 import { ActionRow, KeyValue, KeyValueList, Row, RowList, SettingsSection } from "./primitives";
 
 /** Real values only: what the server knows about this inn, its staff and its providers. */
@@ -53,9 +53,6 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
       >
         <KeyValueList>
           <KeyValue term="Name">{inn.name}</KeyValue>
-          <KeyValue term="Website">
-            <ExternalLink href={inn.siteUrl}>{inn.siteUrl}</ExternalLink>
-          </KeyValue>
           <KeyValue term="Time zone">{inn.timezone}</KeyValue>
           <KeyValue term="Guest address">
             {inn.inboxAddress ?? provisioned ?? (
@@ -74,12 +71,18 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
         </KeyValueList>
       </SettingsSection>
 
-      {/* Only inns with a hosted website document render anything here. The
-          owner-only query is requested solely for a real (non-anonymous) owner;
-          everyone else reads the member view. Demo inns never have a site. */}
-      {!inn.isDemo ? (
-        <InnWebsiteEditor key={inn._id} innId={inn._id} canEdit={role === "owner" && !viewer.isAnonymous} />
-      ) : null}
+      {/* Every inn has the section; only inns with a hosted website document
+          get the editor or the read-only view inside it. The owner-only query
+          is requested solely for a real (non-anonymous) owner; everyone else
+          reads the member view. Demo inns never have a hosted site. */}
+      {inn.isDemo ? (
+        <PublicWebsiteSection
+          siteUrl={inn.siteUrl}
+          description="The fictional website the demo inn's pages come from. It is not editable."
+        />
+      ) : (
+        <InnWebsiteEditor key={inn._id} innId={inn._id} siteUrl={inn.siteUrl} canEdit={role === "owner" && !viewer.isAnonymous} />
+      )}
 
       <SettingsSection id="fd-settings-inbox" title="Guest inbox">
         {inn.isDemo ? (
