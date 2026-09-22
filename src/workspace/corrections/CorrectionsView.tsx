@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -65,8 +65,18 @@ export function CorrectionsView({
   // "Exhausted" only the replies loaded so far have been re-checked, and the
   // copy says so rather than claiming the whole history was checked.
   const controlPages = usePaginatedQuery(api.corrections.unaffectedControls, { innId }, { initialNumItems: CONTROLS_PAGE_SIZE });
+  const loaded = corrections !== undefined && controlPages.status !== "LoadingFirstPage";
 
-  if (corrections === undefined || controlPages.status === "LoadingFirstPage") {
+  // Cards animate in only when they arrive after the page's first paint (a
+  // demo edit, an approval moving a card): once the first loaded render is
+  // committed the container is marked `data-settled`, and the card's enter
+  // transition is gated on it, so opening the page never slides the queue in.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (loaded) listRef.current?.setAttribute("data-settled", "");
+  }, [loaded]);
+
+  if (!loaded) {
     return <Spinner label="Checking sent replies against the latest page versions" />;
   }
 
@@ -95,7 +105,7 @@ export function CorrectionsView({
   const cardProps = { viewerId, isDemo, liveMail, onOpenThread };
 
   return (
-    <div className="max-w-[1040px]">
+    <div ref={listRef} className="max-w-[1040px]">
       <ChangesStats
         stats={{
           open: open.length,

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useIsNarrow } from "../lib/hooks";
 
 /** The numbers the review page derives from its two queries; the tiles render them without recomputing anything. */
 export type ChangesStatsData = {
@@ -24,13 +25,22 @@ export type ChangesStatsData = {
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
- * One KPI tile: the value on its own line, then the rest of the sentence. The
- * whitespace text node between them keeps the tile's text the exact sentence
- * the specs read ("3 replies need review"), so the divider is layout only.
+ * One statistic. Beside the queue it is a KPI tile: the value on its own
+ * line, then the rest of the sentence. On a phone it is one entry of a stat
+ * line: the value in bold, then the sentence, wrapping as prose. Either way
+ * the whitespace text node between the two keeps the element's text the
+ * exact sentence the specs read ("3 replies need review").
  */
-function Tile({ value, children }: { value: number; children: ReactNode }) {
+function Stat({ value, narrow, children }: { value: number; narrow: boolean; children: ReactNode }) {
+  if (narrow) {
+    return (
+      <span className="text-[13px] leading-5 text-ink-2">
+        <strong className="font-semibold text-ink-1 tabular-nums">{value}</strong> <span>{children}</span>
+      </span>
+    );
+  }
   return (
-    <div className="min-w-[200px] flex-1 rounded-[10px] border border-border-1 bg-white px-4 py-3">
+    <div className="min-w-0 rounded-[10px] border border-border-1 bg-white px-4 py-3">
       <span className="block text-[22px] leading-7 font-semibold tracking-[-0.01em] text-ink-1 tabular-nums">{value}</span>{" "}
       <span className="mt-0.5 block text-[13px] leading-5 text-balance text-ink-2">{children}</span>
     </div>
@@ -38,34 +48,44 @@ function Tile({ value, children }: { value: number; children: ReactNode }) {
 }
 
 /**
- * The review strip as KPI tiles: replies that need review, replies re-checked
- * and still true, pages changed (and approved-not-sent when there are any).
- * The whole strip is one `role="status"` so a screen reader hears the numbers
- * change after a page edit, and the specs read every sentence from it.
+ * The review strip: replies that need review, replies re-checked and still
+ * true, pages changed (and approved-not-sent when there are any). Beside the
+ * queue it is a fixed three-column grid of KPI tiles, so a tile's width never
+ * depends on how many tiles there are; under 901px it collapses into one stat
+ * line so the first card stays above the fold on a phone. The whole strip is
+ * one `role="status"` so a screen reader hears the numbers change after a
+ * page edit, and the specs read every sentence from it.
  */
 export function ChangesStats({ stats }: { stats: ChangesStatsData }) {
   const { open, openReplies, approved, approvedReplies, controls, controlReplies, unchecked, allLoaded, allChecked, pagesTouched } =
     stats;
+  const narrow = useIsNarrow();
   return (
-    <div role="status" aria-label="Review statistics" className="flex flex-wrap gap-3">
-      <Tile value={openReplies}>
+    <div
+      role="status"
+      aria-label="Review statistics"
+      className={narrow ? "flex flex-wrap gap-x-4 gap-y-0.5" : "grid gap-3 min-[901px]:grid-cols-3"}
+    >
+      <Stat value={openReplies} narrow={narrow}>
         {plural(openReplies, "reply needs", "replies need")} review
         {open > openReplies ? ` (${open} passages)` : null}
-      </Tile>
+      </Stat>
       {approved > 0 ? (
-        <Tile value={approvedReplies}>
+        <Stat value={approvedReplies} narrow={narrow}>
           {plural(approvedReplies, "reply has an approved correction", "replies have approved corrections")}, not sent
           {approved > approvedReplies ? ` (${approved} passages)` : null}
-        </Tile>
+        </Stat>
       ) : null}
-      <Tile value={controlReplies}>
+      <Stat value={controlReplies} narrow={narrow}>
         {plural(controlReplies, "reply", "replies")} re-checked{allChecked ? "" : " so far"} and still true
         {controls > controlReplies ? ` (${controls} passages)` : null}
         {allLoaded ? null : ", older replies not loaded yet"}
         {allLoaded && !allChecked ? `, ${unchecked} not verified` : null}
-      </Tile>
+      </Stat>
       {open > 0 ? (
-        <Tile value={pagesTouched}>{plural(pagesTouched, "page", "pages")} changed</Tile>
+        <Stat value={pagesTouched} narrow={narrow}>
+          {plural(pagesTouched, "page", "pages")} changed
+        </Stat>
       ) : null}
     </div>
   );

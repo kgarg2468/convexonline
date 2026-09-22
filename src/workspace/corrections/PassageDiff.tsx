@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { passageClass } from "./styles";
+import { plainText } from "./plainText";
 import { type DiffHunk, wordDiff } from "./wordDiff";
 
 const delClass = "rounded-[3px] bg-danger-3 px-0.5 text-danger-10 line-through decoration-danger-10/40 [box-decoration-break:clone]";
@@ -58,7 +59,8 @@ const MISSING = "The quoted passage is gone and no replacement was found on the 
  * The quoted passage then and now. Split into two columns beside the queue,
  * one unified stream under 900px (`unified`). The old and new containers keep
  * `fd-quote--old` / `fd-quote--new` for the specs; in the unified layout the
- * one container is both.
+ * one container is both. Both passages are diffed and shown as prose: the
+ * inline markdown emphasis of the page source is stripped first.
  */
 export function PassageDiff({
   oldText,
@@ -73,7 +75,8 @@ export function PassageDiff({
   newLabel: string;
   unified: boolean;
 }) {
-  const hunks = newText === null ? null : wordDiff(oldText, newText);
+  const oldPlain = plainText(oldText);
+  const hunks = newText === null ? null : wordDiff(oldPlain, plainText(newText));
 
   if (unified) {
     return (
@@ -86,7 +89,7 @@ export function PassageDiff({
           </span>
         </ColumnLabel>
         <blockquote className={cn(passageClass, "fd-quote fd-quote--old", hunks && "fd-quote--new")}>
-          {hunks ? <Unified hunks={hunks} /> : <del className={delClass}>{oldText}</del>}
+          {hunks ? <Unified hunks={hunks} /> : <del className={delClass}>{oldPlain}</del>}
         </blockquote>
         {hunks ? null : <p className="mt-1.5 text-[13px] leading-5 text-danger-10">{MISSING}</p>}
       </div>
@@ -98,7 +101,7 @@ export function PassageDiff({
       <div className="min-w-0">
         <ColumnLabel>{oldLabel}</ColumnLabel>
         <blockquote className={cn(passageClass, "fd-quote fd-quote--old border-danger-10/40")}>
-          {hunks ? <OldSide hunks={hunks} /> : <del className={delClass}>{oldText}</del>}
+          {hunks ? <OldSide hunks={hunks} /> : <del className={delClass}>{oldPlain}</del>}
         </blockquote>
       </div>
       <div className="min-w-0">

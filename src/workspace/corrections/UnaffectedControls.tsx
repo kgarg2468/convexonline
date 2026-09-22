@@ -3,12 +3,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { UnaffectedControl } from "../types";
 import { pathOf } from "../lib/format";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { pathLinkClass } from "./styles";
 
 /**
  * Sent claims re-checked against the latest page version and still true:
  * compact rows, one per claim. `.fd-controls` / `li.fd-control` are the
- * specs' locators; the subject button's accessible name is the subject.
+ * specs' locators; the subject button's accessible name is the subject and
+ * it wears the same link treatment as the page path so it reads as a way in.
  */
 export function UnaffectedControls({
   controls,
@@ -29,7 +31,7 @@ export function UnaffectedControls({
                 type="button"
                 variant="link"
                 size="sm"
-                className="h-5 px-0 text-[13px] font-normal text-ink-1 underline-offset-4"
+                className={cn(pathLinkClass, "h-5 px-0 text-[13px] font-normal")}
                 onClick={() => onOpenThread(c.threadId)}
               >
                 {c.subject}

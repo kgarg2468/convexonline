@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PassageDiff } from "./PassageDiff";
+import { plainText } from "./plainText";
 import { SOURCE_CHIP, STATUS_CHIP, outlineButtonClass, passageClass, pathLinkClass, textBoxClass } from "./styles";
 
 /** How long a requested proposal counts as pending before the button is offered again. */
@@ -36,10 +37,35 @@ function proposalSupported(c: Correction): boolean {
   return c.textSource === "fixture";
 }
 
-/** A quiet disclosure button; the chevron is decorative so the accessible name stays the label. */
-function Disclosure({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
+/** Server-written reasons open lowercase; staff read them as sentences. */
+const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * A quiet disclosure button; the chevron is decorative so the accessible name
+ * stays the label. `controls` is the id of the block it reveals, referenced
+ * only while that block is in the document.
+ */
+function Disclosure({
+  open,
+  controls,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  controls: string;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
   return (
-    <Button type="button" variant="ghost" size="sm" className="-ml-2 text-[13px] text-ink-2" aria-expanded={open} onClick={onToggle}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="-ml-2 text-[13px] text-ink-2"
+      aria-expanded={open}
+      aria-controls={open ? controls : undefined}
+      onClick={onToggle}
+    >
       {children}
       <ChevronDown
         data-icon="inline-end"
@@ -124,6 +150,8 @@ export function CorrectionCard({
   const textId = `fd-corr-text-${correction._id}`;
   const titleId = `fd-corr-title-${correction._id}`;
   const sendWhyId = `fd-corr-send-why-${correction._id}`;
+  const sentId = `fd-corr-sent-${correction._id}`;
+  const versionsId = `fd-corr-versions-${correction._id}`;
 
   // Regenerating a proposal is explicit and bounded: one request per click,
   // "pending" until the server's proposal fields change, and after
@@ -215,7 +243,8 @@ export function CorrectionCard({
     <article
       aria-labelledby={titleId}
       className={cn(
-        "rounded-[10px] border border-border-1 bg-white p-4 transition-[opacity,translate] duration-small ease-out starting:-translate-y-1.5 starting:opacity-0 motion-reduce:starting:translate-y-0",
+        // Enter transition only for cards that arrive after the list's first paint (the list sets data-settled).
+        "rounded-[10px] border border-border-1 bg-white p-4 transition-[opacity,translate] duration-small ease-out in-data-settled:starting:-translate-y-1.5 in-data-settled:starting:opacity-0 motion-reduce:starting:translate-y-0",
         terminal && "opacity-80",
       )}
     >
@@ -235,7 +264,7 @@ export function CorrectionCard({
         </div>
       </div>
 
-      {correction.statusReason ? <Hint className="mt-1.5">{correction.statusReason}</Hint> : null}
+      {correction.statusReason ? <Hint className="mt-1.5">{sentenceCase(correction.statusReason)}</Hint> : null}
       {correction.status === "superseded" ? (
         <InlineNotice tone="info" className="mt-3">
           {correction.supersededById
@@ -249,10 +278,14 @@ export function CorrectionCard({
           <p className="text-[14px] leading-5 text-ink-1">{correction.statement || "(statement not recorded)"}</p>
           {correction.sentText ? (
             <div>
-              <Disclosure open={showSent} onToggle={() => setShowSent((s) => !s)}>
+              <Disclosure open={showSent} controls={sentId} onToggle={() => setShowSent((s) => !s)}>
                 {showSent ? "Hide the message as sent" : "Show the message as sent"}
               </Disclosure>
-              {showSent ? <blockquote className={cn(passageClass, "mt-1")}>{correction.sentText}</blockquote> : null}
+              {showSent ? (
+                <blockquote id={sentId} className={cn(passageClass, "mt-1")}>
+                  {correction.sentText}
+                </blockquote>
+              ) : null}
             </div>
           ) : null}
         </Step>
@@ -275,11 +308,11 @@ export function CorrectionCard({
             unified={narrow}
           />
           <div>
-            <Disclosure open={showVersions} onToggle={() => setShowVersions((s) => !s)}>
+            <Disclosure open={showVersions} controls={versionsId} onToggle={() => setShowVersions((s) => !s)}>
               {showVersions ? "Hide stored page versions" : "Show stored page versions"}
             </Disclosure>
             {showVersions ? (
-              <div className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
+              <div id={versionsId} className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
                 <VersionPane versionId={correction.oldVersionId} label="Cited version" highlight={correction.oldQuote} />
                 <VersionPane
                   versionId={correction.newVersionId}
@@ -303,20 +336,29 @@ export function CorrectionCard({
           }
         >
           {correction.judgeVerdict?.notes ? <Hint>{correction.judgeVerdict.notes}</Hint> : null}
-          {correction.evidenceQuote ? <Hint className="[overflow-wrap:anywhere]">Rests on: “{correction.evidenceQuote}”</Hint> : null}
+          {correction.evidenceQuote ? <Hint className="[overflow-wrap:anywhere]">Rests on: “{plainText(correction.evidenceQuote)}”</Hint> : null}
           {editing ? (
             <div>
               <label className="sr-only" htmlFor={textId}>
                 Correction text
               </label>
+              {/* Until the viewer holds the thread the proposal is read-only text in
+                  a plain text box (ink-1, sized to its content); the editable
+                  textarea takes its place once the thread is theirs. */}
               <Textarea
                 id={textId}
-                rows={4}
+                rows={mine ? 4 : 2}
                 value={text}
-                disabled={action.busy || !mine}
+                readOnly={!mine}
+                aria-disabled={mine ? undefined : true}
+                disabled={action.busy}
                 onChange={(e) => setText_(e.target.value)}
                 placeholder="What should the guest be told now?"
-                className="min-h-24 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+                className={
+                  mine
+                    ? "min-h-24 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+                    : cn(textBoxClass, "min-h-0 resize-none rounded-md whitespace-pre-wrap md:text-[14px] focus-visible:ring-accent-9/50")
+                }
               />
               {!correction.proposedText ? (
                 <Hint className="mt-1.5">No proposal was produced. Write the correction from the passage above.</Hint>

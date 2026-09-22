@@ -601,8 +601,13 @@ body {
 .fd-hero__list strong {
   font-weight: 600;
 }
-.fd-hero .fd-btn-row {
+.fd-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   order: 5;
+  margin-top: 8px;
 }
 .fd-hero .fd-version-toggle {
   order: 6;
