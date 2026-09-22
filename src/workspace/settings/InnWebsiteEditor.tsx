@@ -106,21 +106,63 @@ function PageLinks({ pages }: { pages: string[] }) {
 }
 
 /**
- * The hosted fictional website of an inn, when it has one. Owners (real
- * accounts only) get the structured editor backed by the owner-only query;
- * every other member gets the read-only public view. Inns without a website
- * document (external properties) render nothing at all.
+ * The "Public website" section (design-spec §4.5) every inn has: the inn
+ * record's website address first, then whatever the inn's hosting allows
+ * (the editor, the read-only view, or nothing more for an external site).
+ */
+export function PublicWebsiteSection({
+  siteUrl,
+  description,
+  children,
+}: {
+  siteUrl: string;
+  description?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <SettingsSection id="fd-site-title" role="region" title="Public website" description={description}>
+      <KeyValueList>
+        <KeyValue term="Website">
+          <ExternalLink href={siteUrl}>{siteUrl}</ExternalLink>
+        </KeyValue>
+      </KeyValueList>
+      {children}
+    </SettingsSection>
+  );
+}
+
+/**
+ * The Public website section of a real inn. When Front Desk hosts the inn's
+ * fictional website, owners (real accounts only) get the structured editor
+ * backed by the owner-only query and every other member gets the read-only
+ * public view. An external property (no website document) keeps the section
+ * with the address alone; while the query is in flight the section shows the
+ * address and nothing else, so the heading never moves.
  *
  * Saving only rewrites the public site. Captured pages, claims and
  * corrections change through the ordinary crawl, never from here.
  */
-export function InnWebsiteEditor({ innId, canEdit }: { innId: Id<"inns">; canEdit: boolean }) {
-  return canEdit ? <OwnerEditor innId={innId} /> : <MemberView innId={innId} />;
+export function InnWebsiteEditor({ innId, siteUrl, canEdit }: { innId: Id<"inns">; siteUrl: string; canEdit: boolean }) {
+  return canEdit ? <OwnerEditor innId={innId} siteUrl={siteUrl} /> : <MemberView innId={innId} siteUrl={siteUrl} />;
 }
 
-function OwnerEditor({ innId }: { innId: Id<"inns"> }) {
+/** The section of an inn whose website Front Desk does not host, or whose website query has not answered yet. */
+function ExternalSite({ siteUrl, known }: { siteUrl: string; known: boolean }) {
+  return (
+    <PublicWebsiteSection
+      siteUrl={siteUrl}
+      description={
+        known
+          ? "Front Desk does not host this property's website. Replies are drafted from the pages captured from it in Knowledge."
+          : undefined
+      }
+    />
+  );
+}
+
+function OwnerEditor({ innId, siteUrl }: { innId: Id<"inns">; siteUrl: string }) {
   const data = useQuery(api.innWebsites.editor, { innId }) as EditorData | null | undefined;
-  if (data === undefined || data === null) return null;
+  if (data === undefined || data === null) return <ExternalSite siteUrl={siteUrl} known={data === null} />;
   return <OwnerForm innId={innId} data={data} />;
 }
 
@@ -192,10 +234,8 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
   );
 
   return (
-    <SettingsSection
-      id="fd-site-title"
-      role="region"
-      title="Public website"
+    <PublicWebsiteSection
+      siteUrl={data.siteUrl}
       description="Front Desk hosts this inn's website. It is public: anyone with the link can read it, and every page is labelled as a fictional inn. The values below are the whole site; nothing else about the inn is published."
     >
       <SiteLinks siteUrl={data.siteUrl} pages={data.pages}>
@@ -305,7 +345,7 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
           </span>
         </ActionRow>
       </form>
-    </SettingsSection>
+    </PublicWebsiteSection>
   );
 }
 
@@ -324,15 +364,13 @@ function SiteLinks({ siteUrl, pages, children }: { siteUrl: string; pages: strin
   );
 }
 
-function MemberView({ innId }: { innId: Id<"inns"> }) {
+function MemberView({ innId, siteUrl }: { innId: Id<"inns">; siteUrl: string }) {
   const data = useQuery(api.innWebsites.publicView, { innId }) as MemberData | null | undefined;
-  if (data === undefined || data === null) return null;
+  if (data === undefined || data === null) return <ExternalSite siteUrl={siteUrl} known={data === null} />;
   const c = data.content;
   return (
-    <SettingsSection
-      id="fd-site-title"
-      role="region"
-      title="Public website"
+    <PublicWebsiteSection
+      siteUrl={data.siteUrl}
       description="Front Desk hosts this inn's website. It is public and every page is labelled as a fictional inn. Only the inn owner can edit the website."
     >
       <SiteLinks siteUrl={data.siteUrl} pages={data.pages} />
@@ -345,6 +383,6 @@ function MemberView({ innId }: { innId: Id<"inns"> }) {
         </KeyValue>
         <KeyValue term="Breakfast">{c.breakfastHours}</KeyValue>
       </KeyValueList>
-    </SettingsSection>
+    </PublicWebsiteSection>
   );
 }

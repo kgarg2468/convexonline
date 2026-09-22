@@ -102,6 +102,12 @@ test.describe("XSS through the real write paths", () => {
     await enterDemo(page);
     await rail(page).getByRole("button", { name: "Knowledge" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Knowledge" })).toBeVisible();
+    // The view leads with the three-tile strip; the seed has three watched pages and one staff fact.
+    const strip = page.getByRole("group", { name: "Knowledge statistics" });
+    await expect(strip.locator(":scope > *")).toHaveCount(3);
+    await expect(strip).toContainText("3 pages captured");
+    await expect(strip).toContainText("3 watched for changes");
+    await expect(strip).toContainText("1 staff fact");
 
     const question = `${XSS_PAYLOADS[1]} Do you allow dogs?`;
     const answer = `${XSS_BLOB} — yes, in the Garden Rooms.`;
@@ -112,6 +118,7 @@ test.describe("XSS through the real write paths", () => {
 
     await expect(page.getByText(question, { exact: true })).toBeVisible();
     await expect(page.getByText(answer)).toBeVisible();
+    await expect(strip).toContainText("2 staff facts");
     await expectNoInjectedMarkup(page, "staff fact");
     expectClean(guards, "staff fact");
 

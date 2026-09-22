@@ -462,9 +462,11 @@ test.describe("hosted fictional inn website", () => {
     await expect(page.getByRole("heading", { level: 2, name: "Property" })).toBeVisible();
     await expect(page.getByRole("link", { name: "https://example.com/" })).toBeVisible();
     await expect(page.getByRole("definition").filter({ hasText: "America/New_York" })).toBeVisible();
-    // Give the reactive queries a moment to settle, then assert the section never appeared.
+    // Give the reactive queries a moment to settle, then assert the section holds the address and never grew an editor.
     await expect(page.getByRole("list", { name: "Team members" })).toContainText(owner.name);
-    await expect(page.getByRole("region", { name: "Public website" })).toHaveCount(0);
+    const site = page.getByRole("region", { name: "Public website" });
+    await expect(site.getByRole("link", { name: "https://example.com/" })).toBeVisible();
+    await expect(site).toContainText("Front Desk does not host this property's website.");
     await expect(page.getByRole("button", { name: "Save website" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Open the public website" })).toHaveCount(0);
     expect(errors).toEqual([]);
