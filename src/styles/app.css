@@ -1,0 +1,208 @@
+/* Front Desk — single CSS entry.
+   Layer order: theme < base < fd (legacy workspace.css) < components < utilities,
+   so Tailwind utilities and shadcn components can override the legacy .fd-* rules. */
+@layer theme, base, fd, components, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "../workspace/workspace.css" layer(fd);
+
+/* Never scan throwaway PoCs or private research for class names. */
+@source not "../../poc";
+@source not "../../.context";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Fonts and easings live in the theme so Preflight, utilities and legacy CSS
+   all read the same variables (static = always emitted on :root). */
+@theme static {
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-heading: var(--font-sans);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  /* Front Desk palette → utilities (text-ink-2, bg-bg-2, border-border-1, bg-accent-3 …) */
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-border-1: var(--border-1);
+  --color-border-2: var(--border-2);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
+  --color-accent-9: var(--accent-9);
+  --color-accent-10: var(--accent-10);
+  --color-secondary-3: var(--secondary-3);
+  --color-secondary-9: var(--secondary-9);
+  --color-secondary-10: var(--secondary-10);
+  --color-warning-3: var(--warning-3);
+  --color-warning-10: var(--warning-10);
+  --color-danger-3: var(--danger-3);
+  --color-danger-10: var(--danger-10);
+  --color-success-3: var(--success-3);
+  --color-success-10: var(--success-10);
+  --color-rail-bg: var(--rail-bg);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-muted: var(--rail-muted);
+  --color-rail-active: var(--rail-active);
+  --shadow-pop: var(--shadow-pop);
+
+  /* shadcn semantic tokens */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Tailwind has no --duration-* namespace; expose the motion durations as utilities. */
+@utility duration-micro {
+  transition-duration: var(--dur-micro);
+}
+@utility duration-small {
+  transition-duration: var(--dur-small);
+}
+@utility duration-medium {
+  transition-duration: var(--dur-medium);
+}
+@utility duration-large {
+  transition-duration: var(--dur-large);
+}
+
+:root {
+  /* ---- palette (design-spec §1; accent hue 168, secondary hue 305.5) ---- */
+  --bg-1: oklch(0.985 0.004 168);
+  --bg-2: oklch(0.965 0.007 168);
+  --bg-3: oklch(0.94 0.012 168);
+  --border-1: oklch(0.9 0.012 168);
+  --border-2: oklch(0.84 0.018 168);
+  --ink-1: oklch(0.22 0.02 168);
+  --ink-2: oklch(0.46 0.02 168);
+  --ink-3: oklch(0.55 0.018 168); /* 4.61:1 on bg-1 */
+  --accent-2: oklch(0.965 0.02 168);
+  --accent-3: oklch(0.94 0.03 168);
+  --accent-9: oklch(0.48 0.09 168);
+  --accent-10: oklch(0.38 0.08 168);
+  --secondary-3: oklch(0.94 0.035 305.5);
+  --secondary-9: oklch(0.5 0.12 305.5);
+  --secondary-10: oklch(0.42 0.11 305.5);
+  --warning-3: oklch(0.95 0.04 80);
+  --warning-10: oklch(0.45 0.1 70);
+  --danger-3: oklch(0.95 0.03 25);
+  --danger-10: oklch(0.45 0.15 25);
+  --success-3: oklch(0.95 0.04 150);
+  --success-10: oklch(0.42 0.1 150);
+  --rail-bg: oklch(0.3 0.045 168);
+  --rail-ink: oklch(0.92 0.02 168);
+  --rail-muted: oklch(0.75 0.03 168);
+  --rail-active: oklch(0.36 0.05 168);
+  --shadow-pop: 0 4px 16px -4px oklch(0.22 0.02 168 / 0.18), 0 1px 2px oklch(0.22 0.02 168 / 0.08);
+
+  /* ---- layout ---- */
+  --header-h: 56px;
+  --rail-w: 232px;
+
+  /* ---- motion (research-motion §1) ---- */
+  --dur-micro: 120ms;
+  --dur-small: 180ms;
+  --dur-medium: 260ms;
+  --dur-large: 400ms;
+
+  /* ---- shadcn semantic tokens mapped onto the palette ---- */
+  --radius: 6px;
+  --background: var(--bg-1);
+  --foreground: var(--ink-1);
+  --card: #ffffff;
+  --card-foreground: var(--ink-1);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink-1);
+  --primary: var(--accent-9);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-3);
+  --secondary-foreground: var(--ink-1);
+  --muted: var(--bg-2);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--accent-3);
+  --accent-foreground: var(--accent-10);
+  --destructive: var(--danger-10);
+  --border: var(--border-1);
+  --input: var(--border-1);
+  --ring: var(--accent-9);
+  --chart-1: var(--accent-9);
+  --chart-2: var(--secondary-9);
+  --chart-3: var(--ink-3);
+  --chart-4: var(--accent-10);
+  --chart-5: var(--border-2);
+  --sidebar: var(--rail-bg);
+  --sidebar-foreground: var(--rail-ink);
+  --sidebar-primary: var(--accent-9);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--rail-active);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: var(--rail-ink);
+}
+
+/* Reduced motion: collapse durations, keep opacity/colour changes (research-motion §4.3). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-micro: 0ms;
+    --dur-small: 120ms;
+    --dur-medium: 150ms;
+    --dur-large: 150ms;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
