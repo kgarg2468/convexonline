@@ -3,10 +3,11 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Viewer } from "../types";
+import { Button } from "@/components/ui/button";
 import { Notice, Spinner } from "../lib/ui";
-import { Mark } from "../lib/Mark";
 import { useAsyncAction } from "../lib/hooks";
 import { formatStamp } from "../lib/format";
+import { AuthCard, AuthScreen, CardText, OrDivider, Wordmark } from "../auth/AuthCard";
 
 type Preview =
   | { state: "invalid" }
@@ -42,70 +43,80 @@ export function InvitationGate({
   const joinable = preview !== undefined && preview.state !== "invalid" && (preview.state === "pending" || preview.acceptedByYou);
 
   return (
-    <div className="fd-center">
-      <div className="fd-center__panel" aria-labelledby="fd-invite-title" role="region">
-        <div className="fd-wordmark">
-          <Mark size={26} />
-          <span>Front Desk</span>
+    <AuthScreen>
+      <AuthCard aria-labelledby="fd-invite-title" role="region">
+        <Wordmark />
+        <div>
+          <h2 className="text-[18px] leading-6 font-semibold tracking-[-0.01em] text-balance text-ink-1" id="fd-invite-title">
+            Staff invitation
+          </h2>
+          <CardText className="mt-1">Signed in as {viewer.name ?? viewer.email ?? "staff"}.</CardText>
         </div>
-        <h2 className="fd-h2" id="fd-invite-title">
-          Staff invitation
-        </h2>
-        <p className="fd-lede">Signed in as {viewer.name ?? viewer.email ?? "staff"}.</p>
 
         {preview === undefined ? (
           <Spinner label="Checking the invitation" />
         ) : preview.state === "invalid" ? (
-          <Notice tone="error">This invitation link is not valid. Ask the property owner for a new one.</Notice>
+          <Notice tone="error" role="alert">
+            This invitation link is not valid. Ask the property owner for a new one.
+          </Notice>
         ) : preview.state === "expired" ? (
-          <Notice tone="error">
+          <Notice tone="error" role="alert">
             The invitation to {preview.innName} expired on {formatStamp(preview.expiresAt)}. Ask the owner for a new one.
           </Notice>
         ) : preview.state === "revoked" ? (
-          <Notice tone="error">The invitation to {preview.innName} was revoked by the owner.</Notice>
+          <Notice tone="error" role="alert">
+            The invitation to {preview.innName} was revoked by the owner.
+          </Notice>
         ) : preview.state === "used" && !preview.acceptedByYou ? (
-          <Notice tone="error">
+          <Notice tone="error" role="alert">
             This invitation to {preview.innName} has already been used. Each link admits one person; ask the owner for
             your own.
           </Notice>
         ) : (
-          <div className="fd-invite">
-            <p className="fd-invite__lead">
-              You are invited to join <strong>{preview.innName}</strong> as staff.
+          <div className="rounded-[10px] border border-accent-9/30 bg-accent-2 p-4">
+            <p className="text-[15px] leading-6 text-ink-1">
+              You are invited to join <strong className="font-semibold">{preview.innName}</strong> as staff.
             </p>
-            <p className="fd-muted fd-small">
+            <CardText className="mt-1">
               {preview.acceptedByYou
                 ? "You already accepted this invitation; joining again simply opens the property."
                 : `Nothing happens until you join. This link works once and expires ${formatStamp(preview.expiresAt)}.`}
-            </p>
+            </CardText>
           </div>
         )}
 
         {action.error ? (
-          <div style={{ marginTop: 10 }}>
-            <Notice tone="error">{action.error}</Notice>
-          </div>
+          <Notice tone="error" role="alert">
+            {action.error}
+          </Notice>
         ) : null}
 
-        <div className="fd-btn-row" style={{ marginTop: 16 }}>
+        <div className="flex flex-col gap-2">
           {joinable ? (
-            <button type="button" className="fd-btn fd-btn--primary" disabled={action.busy} onClick={() => void join()}>
+            <Button type="button" size="lg" className="w-full" disabled={action.busy} onClick={() => void join()}>
               {action.busy ? "Joining…" : `Join ${preview.innName}`}
-            </button>
+            </Button>
           ) : null}
-          <button type="button" className={joinable ? "fd-btn fd-btn--quiet" : "fd-btn"} disabled={action.busy} onClick={onDismiss}>
+          <Button
+            type="button"
+            variant={joinable ? "ghost" : "outline"}
+            size="lg"
+            className="w-full text-ink-1"
+            disabled={action.busy}
+            onClick={onDismiss}
+          >
             {joinable ? "Not now" : "Dismiss"}
-          </button>
+          </Button>
         </div>
 
-        <div className="fd-divider" />
-        <p className="fd-muted fd-small" style={{ marginBottom: 8 }}>
-          Meant for a different account? The invitation stays in this tab while you switch.
-        </p>
-        <button type="button" className="fd-btn fd-btn--quiet fd-btn--small" onClick={() => void signOut()}>
-          Sign out
-        </button>
-      </div>
-    </div>
+        <OrDivider />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardText className="min-w-0 flex-1">Meant for a different account? The invitation stays in this tab while you switch.</CardText>
+          <Button type="button" variant="ghost" size="sm" className="text-[13px] text-ink-2" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
+      </AuthCard>
+    </AuthScreen>
   );
 }

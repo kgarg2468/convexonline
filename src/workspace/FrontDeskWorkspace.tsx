@@ -100,7 +100,7 @@ export function FrontDeskWorkspace() {
           <Spinner label="Opening Front Desk" />
           {stalled ? (
             <div style={{ marginTop: 14 }}>
-              <Notice tone="caution">
+              <Notice tone="caution" role="status">
                 Still connecting after {STALL_AFTER_MS / 1000} seconds. The workspace could not confirm your session with the
                 server.{" "}
                 <button type="button" className="fd-btn fd-btn--small" onClick={() => window.location.reload()}>
@@ -154,7 +154,9 @@ function MalformedInvitation({ viewer, onDismiss }: { viewer: Viewer; onDismiss:
           Staff invitation
         </h2>
         <p className="fd-lede">Signed in as {viewer.name ?? viewer.email ?? "staff"}.</p>
-        <Notice tone="error">This invitation link is not valid. Ask the property owner for a new one.</Notice>
+        <Notice tone="error" role="alert">
+          This invitation link is not valid. Ask the property owner for a new one.
+        </Notice>
         <div className="fd-btn-row" style={{ marginTop: 16 }}>
           <button type="button" className="fd-btn" onClick={onDismiss}>
             Dismiss
@@ -252,7 +254,9 @@ function SignedIn({
       return (
         <div className="fd-center">
           <div className="fd-center__panel">
-            <Notice tone="error">Could not open the demo. {demoError}</Notice>
+            <Notice tone="error" role="alert">
+              Could not open the demo. {demoError}
+            </Notice>
           </div>
         </div>
       );
@@ -440,7 +444,7 @@ function Workspace({
       case "knowledge":
         return { title: "Knowledge", sub: current.siteUrl };
       case "settings":
-        return { title: "Settings" };
+        return { title: "Settings", sub: "Property, guest inbox, providers and team" };
     }
   })();
 

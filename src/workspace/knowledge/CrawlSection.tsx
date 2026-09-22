@@ -63,12 +63,14 @@ export function CrawlSection({ innId, siteUrl, isDemo, firecrawl }: { innId: Id<
       </p>
       {action.error ? (
         <div style={{ marginBottom: 8 }}>
-          <Notice tone="error">{action.error}</Notice>
+          <Notice tone="error" role="alert">
+            {action.error}
+          </Notice>
         </div>
       ) : null}
       {last ? (
         <div style={{ marginBottom: 8 }}>
-          <Notice tone={last.affectedClaims > 0 ? "caution" : "success"}>
+          <Notice tone={last.affectedClaims > 0 ? "caution" : "success"} role="status">
             Crawl finished: {last.pagesStored} {last.pagesStored === 1 ? "page" : "pages"} stored, {last.pagesSkipped} skipped
             {last.affectedClaims > 0 ? `, ${last.affectedClaims} sent ${last.affectedClaims === 1 ? "claim" : "claims"} now need review.` : "."}
           </Notice>

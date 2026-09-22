@@ -1,13 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 // Type only: the server module never reaches the browser bundle.
 import type { InnWebsiteContent } from "../../../convex/lib/innWebsiteHtml";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ExternalLink, Field, Notice } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { errorMessage, formatStamp } from "../lib/format";
+import { Hint } from "../inbox/primitives";
+import { ActionRow, KeyValue, KeyValueList, SettingsSection } from "./primitives";
 
 /** Mirror of `innWebsites.editor` (owner) and `innWebsites.publicView` (any member). */
 type EditorData = { siteUrl: string; pages: string[]; content: InnWebsiteContent; updatedAt: number };
@@ -70,6 +76,12 @@ function saveErrorMessage(error: unknown): string {
   return errorMessage(error);
 }
 
+/** Inputs sit on white inside the section; 14px like the rest of the page. */
+const inputClass = "bg-white text-[14px] text-ink-1 md:text-[14px]";
+const areaClass = "resize-y bg-white px-3 py-2 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]";
+/** Minimum heights for the `rows` the fields ask for (the textarea sizes to its content beyond that). */
+const AREA_HEIGHT: Record<number, string> = { 3: "min-h-20", 4: "min-h-24", 5: "min-h-28" };
+
 /** "Home", "Policies", … from a hosted page URL (`/inn/<id>/<segment>`). */
 function pageLabel(url: string): string {
   try {
@@ -83,7 +95,7 @@ function pageLabel(url: string): string {
 function PageLinks({ pages }: { pages: string[] }) {
   if (pages.length === 0) return null;
   return (
-    <ul className="fd-site__pages" aria-label="Public pages">
+    <ul className="flex flex-wrap gap-x-3 gap-y-1.5 text-[13px] leading-5" aria-label="Public pages">
       {pages.map((url) => (
         <li key={url}>
           <ExternalLink href={url}>{pageLabel(url)}</ExternalLink>
@@ -159,9 +171,9 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
   // Every field is locked while a save is in flight: the draft is cleared when
   // the save completes, so keystrokes typed meanwhile would be lost.
   const text = (field: ContentField, id: string, extra?: { placeholder?: string }) => (
-    <input
+    <Input
       id={id}
-      className="fd-input"
+      className={inputClass}
       value={values[field]}
       placeholder={extra?.placeholder}
       disabled={action.busy}
@@ -169,9 +181,9 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
     />
   );
   const area = (field: ContentField, id: string, rows: number) => (
-    <textarea
+    <Textarea
       id={id}
-      className="fd-textarea"
+      className={cn(areaClass, AREA_HEIGHT[rows])}
       rows={rows}
       value={values[field]}
       disabled={action.busy}
@@ -180,34 +192,26 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
   );
 
   return (
-    <div className="fd-section fd-site" role="region" aria-labelledby="fd-site-title">
-      <p className="fd-section__title" id="fd-site-title">
-        Public website
-      </p>
-      <div className="fd-card">
-        <p className="fd-site__lede">
-          Front Desk hosts this inn's website. It is public: anyone with the link can read it, and every page is
-          labelled as a fictional inn. The values below are the whole site; nothing else about the inn is published.
-        </p>
-        <div className="fd-site__links">
-          <ExternalLink href={data.siteUrl}>Open the public website</ExternalLink>
-          <PageLinks pages={data.pages} />
-        </div>
-        <p className="fd-muted fd-small">
-          Last saved {formatStamp(data.updatedAt)}. Replies are drafted from the pages the crawl captured, not from this
-          form: after saving, open Knowledge and run “Crawl the website” so the new text is captured and any sent
-          replies that quoted the old text are re-checked. Saving here never starts a crawl.
-        </p>
-      </div>
+    <SettingsSection
+      id="fd-site-title"
+      role="region"
+      title="Public website"
+      description="Front Desk hosts this inn's website. It is public: anyone with the link can read it, and every page is labelled as a fictional inn. The values below are the whole site; nothing else about the inn is published."
+    >
+      <SiteLinks siteUrl={data.siteUrl} pages={data.pages}>
+        Last saved {formatStamp(data.updatedAt)}. Replies are drafted from the pages the crawl captured, not from this
+        form: after saving, open Knowledge and run “Crawl the website” so the new text is captured and any sent
+        replies that quoted the old text are re-checked. Saving here never starts a crawl.
+      </SiteLinks>
 
-      <form className="fd-site__form" onSubmit={(e) => void save(e)}>
+      <form className="mt-1 flex flex-col gap-4" onSubmit={(e) => void save(e)}>
         <Field label="Public name" htmlFor="fd-site-name" hint="The name shown on every page. The inn record's own name is unchanged.">
           {text("publicName", "fd-site-name")}
         </Field>
         <Field label="Introduction" htmlFor="fd-site-intro" hint="Home page opening text. Blank lines separate paragraphs.">
           {area("intro", "fd-site-intro", 4)}
         </Field>
-        <div className="fd-site__grid">
+        <div className="grid gap-4 min-[600px]:grid-cols-2">
           <Field label="Check-in time" htmlFor="fd-site-checkin">
             {text("checkIn", "fd-site-checkin", { placeholder: "3:00 PM" })}
           </Field>
@@ -216,9 +220,9 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
           </Field>
           <Field label="Pet fee per dog per night (USD)" htmlFor="fd-site-petfee" hint="Whole dollars, 0 to 500.">
             {/* Bounds mirror the server's limits; the server is the one that decides. */}
-            <input
+            <Input
               id="fd-site-petfee"
-              className="fd-input"
+              className={inputClass}
               type="number"
               inputMode="numeric"
               min={0}
@@ -235,9 +239,9 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
             htmlFor="fd-site-maxdogs"
             hint="0 to 6. At 0 the site states that pets are not permitted; keep the pet policy and rooms text below consistent with that."
           >
-            <input
+            <Input
               id="fd-site-maxdogs"
-              className="fd-input"
+              className={inputClass}
               type="number"
               inputMode="numeric"
               min={0}
@@ -271,28 +275,26 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
         </Field>
 
         {changedElsewhere ? (
-          <div style={{ marginBottom: 8 }}>
-            <Notice tone="caution">
-              The website was saved from another session since you started editing. Saving overwrites it with the values
-              here; discard to load the latest.
-            </Notice>
-          </div>
+          <Notice tone="caution">
+            The website was saved from another session since you started editing. Saving overwrites it with the values
+            here; discard to load the latest.
+          </Notice>
         ) : null}
         {action.error ? (
-          <div style={{ marginBottom: 8 }}>
-            <Notice tone="error">{action.error}</Notice>
-          </div>
+          <Notice tone="error" role="alert">
+            {action.error}
+          </Notice>
         ) : null}
-        <div className="fd-btn-row fd-site__toolbar">
-          <button type="submit" className="fd-btn fd-btn--primary" disabled={!dirty || action.busy}>
+        <ActionRow className="border-t border-border-1 pt-4">
+          <Button type="submit" disabled={!dirty || action.busy}>
             {action.busy ? "Saving…" : "Save website"}
-          </button>
+          </Button>
           {dirty ? (
-            <button type="button" className="fd-btn fd-btn--quiet" disabled={action.busy} onClick={discard}>
+            <Button type="button" variant="ghost" className="text-ink-1" disabled={action.busy} onClick={discard}>
               Discard changes
-            </button>
+            </Button>
           ) : null}
-          <span className="fd-muted fd-small" role="status">
+          <span className="text-[13px] leading-5 text-ink-2" role="status">
             {action.busy
               ? "Saving to the public website…"
               : dirty
@@ -301,8 +303,23 @@ function OwnerForm({ innId, data }: { innId: Id<"inns">; data: EditorData }) {
                   ? `Website saved ${formatStamp(savedAt)}.`
                   : "No unsaved changes."}
           </span>
-        </div>
+        </ActionRow>
       </form>
+    </SettingsSection>
+  );
+}
+
+/** "Open the public website", the page links, and a hint under them. */
+function SiteLinks({ siteUrl, pages, children }: { siteUrl: string; pages: string[]; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] border border-border-1 bg-white px-3 py-2.5">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 text-[14px] leading-5">
+        <ExternalLink href={siteUrl} className="font-medium">
+          Open the public website
+        </ExternalLink>
+        <PageLinks pages={pages} />
+      </div>
+      {children ? <Hint className="max-w-[64ch]">{children}</Hint> : null}
     </div>
   );
 }
@@ -312,32 +329,22 @@ function MemberView({ innId }: { innId: Id<"inns"> }) {
   if (data === undefined || data === null) return null;
   const c = data.content;
   return (
-    <div className="fd-section fd-site" role="region" aria-labelledby="fd-site-title">
-      <p className="fd-section__title" id="fd-site-title">
-        Public website
-      </p>
-      <div className="fd-card">
-        <p className="fd-site__lede">
-          Front Desk hosts this inn's website. It is public and every page is labelled as a fictional inn. Only the inn
-          owner can edit the website.
-        </p>
-        <div className="fd-site__links">
-          <ExternalLink href={data.siteUrl}>Open the public website</ExternalLink>
-          <PageLinks pages={data.pages} />
-        </div>
-        <dl className="fd-kv">
-          <dt>Public name</dt>
-          <dd>{c.publicName}</dd>
-          <dt>Check-in</dt>
-          <dd>{c.checkIn}</dd>
-          <dt>Check-out</dt>
-          <dd>{c.checkOut}</dd>
-          <dt>Dogs</dt>
-          <dd>{c.maxDogs === 0 ? "Not permitted" : `$${c.petFeePerDogPerNight} per dog per night, up to ${c.maxDogs} per room`}</dd>
-          <dt>Breakfast</dt>
-          <dd>{c.breakfastHours}</dd>
-        </dl>
-      </div>
-    </div>
+    <SettingsSection
+      id="fd-site-title"
+      role="region"
+      title="Public website"
+      description="Front Desk hosts this inn's website. It is public and every page is labelled as a fictional inn. Only the inn owner can edit the website."
+    >
+      <SiteLinks siteUrl={data.siteUrl} pages={data.pages} />
+      <KeyValueList>
+        <KeyValue term="Public name">{c.publicName}</KeyValue>
+        <KeyValue term="Check-in">{c.checkIn}</KeyValue>
+        <KeyValue term="Check-out">{c.checkOut}</KeyValue>
+        <KeyValue term="Dogs">
+          {c.maxDogs === 0 ? "Not permitted" : `$${c.petFeePerDogPerNight} per dog per night, up to ${c.maxDogs} per room`}
+        </KeyValue>
+        <KeyValue term="Breakfast">{c.breakfastHours}</KeyValue>
+      </KeyValueList>
+    </SettingsSection>
   );
 }

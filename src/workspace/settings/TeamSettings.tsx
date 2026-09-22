@@ -1,12 +1,18 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { Check, Copy } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { InnDetail, Viewer } from "../types";
-import { Field, Notice, Pill } from "../lib/ui";
+import type { InnDetail, MembershipRole, Viewer } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Field, Notice } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { formatStamp } from "../lib/format";
 import { inviteLink } from "../lib/invitations";
+import { Chip, Hint, type ChipTone } from "../inbox/primitives";
+import { ActionRow, Row, RowList, SettingsSection, SubHeading } from "./primitives";
 
 type InviteState = "pending" | "used" | "revoked" | "expired";
 
@@ -24,11 +30,21 @@ type InviteRow = {
 /** The link the owner just minted. Held in component state only: the server never returns it again. */
 type FreshLink = { link: string; label: string | null; expiresAt: number };
 
-const STATE_LABEL: Record<InviteState, { label: string; tone: "pine" | "caution" | "error" | "muted" }> = {
-  pending: { label: "Open", tone: "pine" },
+/** One label per role, used by the member chip and the "Your role" hint alike (design-spec §5: sentence case). */
+const ROLE_LABEL: Record<MembershipRole, string> = {
+  owner: "Owner",
+  staff: "Staff",
+  demo: "Demo visitor",
+};
+
+/** True when a stored name already says it is you ("You (demo)"), so no " (you)" suffix is needed. */
+const saysYou = (name: string) => /\byou\b/i.test(name);
+
+const STATE_LABEL: Record<InviteState, { label: string; tone: ChipTone }> = {
+  pending: { label: "Open", tone: "success" },
   used: { label: "Used", tone: "muted" },
-  revoked: { label: "Revoked", tone: "error" },
-  expired: { label: "Expired", tone: "caution" },
+  revoked: { label: "Revoked", tone: "danger" },
+  expired: { label: "Expired", tone: "warning" },
 };
 
 /**
@@ -42,19 +58,18 @@ export function TeamSettings({ viewer, detail }: { viewer: Viewer; detail: InnDe
   const canManage = !inn.isDemo && role === "owner" && liveMail.allowed;
 
   return (
-    <div className="fd-section">
-      <p className="fd-section__title">Team</p>
+    <SettingsSection id="fd-settings-team" title="Team">
       <MemberList viewer={viewer} detail={detail} canManage={canManage} />
-      <p className="fd-muted fd-small" style={{ marginTop: 8 }}>
-        Your role: {role}.{" "}
+      <Hint>
+        Your role: {ROLE_LABEL[role]}.{" "}
         {inn.isDemo
           ? "Invitations are not available on the demo property; a real property lets its owner create one-use invitation links."
           : canManage
             ? "As the owner you can invite staff with a one-use link and remove staff members."
             : "Only the property owner can invite or remove staff."}
-      </p>
+      </Hint>
       {canManage ? <Invitations innId={inn._id} /> : null}
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -71,68 +86,63 @@ function MemberList({ viewer, detail, canManage }: { viewer: Viewer; detail: Inn
 
   return (
     <>
-      <ul className="fd-staff fd-team__members" aria-label="Team members">
+      <RowList aria-label="Team members">
         {staff.map((member) => {
           const isSelf = member.userId === viewer._id;
           const removable = canManage && member.role === "staff" && !isSelf;
-          const isConfirming = confirming === member.userId;
           return (
-            <li key={member.userId}>
-              <span>
+            <Row key={member.userId}>
+              <span className="min-w-0 break-words">
                 {member.name}
-                {isSelf ? <span className="fd-muted"> (you)</span> : null}
+                {isSelf && !saysYou(member.name) ? <span className="text-ink-2"> (you)</span> : null}
               </span>
-              <span className="fd-team__actions">
-                <span className="fd-muted">{member.role}</span>
-                {removable && !isConfirming ? (
-                  <button
-                    type="button"
-                    className="fd-btn fd-btn--small fd-btn--quiet fd-btn--danger"
-                    disabled={action.busy}
-                    onClick={() => {
-                      action.clear();
-                      setConfirming(member.userId);
+              <span className="inline-flex items-center gap-2">
+                <Chip tone={member.role === "owner" ? "accentOutline" : "muted"}>{ROLE_LABEL[member.role]}</Chip>
+                {removable ? (
+                  <Popover
+                    open={confirming === member.userId}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        action.clear();
+                        setConfirming(member.userId);
+                      } else if (!action.busy) {
+                        setConfirming(null);
+                      }
                     }}
                   >
-                    Remove
-                  </button>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="ghost" size="sm" className="text-[13px] text-danger-10 hover:text-danger-10" disabled={action.busy}>
+                        Remove
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80 rounded-[12px] p-4 shadow-pop ring-border-1">
+                      <div role="group" aria-label={`Remove ${member.name}`} className="flex flex-col gap-3">
+                        <p className="text-[13px] leading-5 text-ink-1">
+                          Remove {member.name} from {inn.name}? They lose access immediately and any threads they are
+                          working on are released.
+                        </p>
+                        {action.error ? (
+                          <Notice tone="error" role="alert">
+                            {action.error}
+                          </Notice>
+                        ) : null}
+                        <ActionRow className="gap-2">
+                          <Button type="button" variant="destructive" size="sm" disabled={action.busy} onClick={() => void remove(member.userId)}>
+                            {action.busy ? "Removing…" : "Yes, remove"}
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" className="text-ink-1" disabled={action.busy} onClick={() => setConfirming(null)}>
+                            Cancel
+                          </Button>
+                        </ActionRow>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 ) : null}
               </span>
-              {removable && isConfirming ? (
-                <div className="fd-team__confirm" role="group" aria-label={`Remove ${member.name}`}>
-                  <span>
-                    Remove {member.name} from {inn.name}? They lose access immediately and any threads they are
-                    working on are released.
-                  </span>
-                  <span className="fd-btn-row">
-                    <button
-                      type="button"
-                      className="fd-btn fd-btn--small fd-btn--danger"
-                      disabled={action.busy}
-                      onClick={() => void remove(member.userId)}
-                    >
-                      {action.busy ? "Removing…" : "Yes, remove"}
-                    </button>
-                    <button
-                      type="button"
-                      className="fd-btn fd-btn--small fd-btn--quiet"
-                      disabled={action.busy}
-                      onClick={() => setConfirming(null)}
-                    >
-                      Cancel
-                    </button>
-                  </span>
-                </div>
-              ) : null}
-            </li>
+            </Row>
           );
         })}
-      </ul>
-      {action.error ? (
-        <div style={{ marginTop: 8 }}>
-          <Notice tone="error">{action.error}</Notice>
-        </div>
-      ) : null}
+      </RowList>
     </>
   );
 }
@@ -179,56 +189,53 @@ function Invitations({ innId }: { innId: Id<"inns"> }) {
   }
 
   return (
-    <div className="fd-team__invites">
-      <p className="fd-section__title" style={{ marginTop: 20 }}>
-        Invitations
-      </p>
-      <form onSubmit={(e) => void submit(e)} className="fd-team__form">
+    <div className="mt-3 flex flex-col gap-3 border-t border-border-1 pt-5" aria-labelledby="fd-invites-title" role="group">
+      <SubHeading id="fd-invites-title">Invitations</SubHeading>
+      <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
         <Field
           label="Label (optional)"
           htmlFor="fd-invite-label"
           hint="A note for you, such as who the link is for. It is never shown to the recipient."
+          className="max-w-[480px]"
         >
-          <input
-            id="fd-invite-label"
-            className="fd-input"
-            maxLength={120}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
+          <Input id="fd-invite-label" maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} />
         </Field>
         {create.error ? (
-          <div style={{ marginBottom: 8 }}>
-            <Notice tone="error">{create.error}</Notice>
-          </div>
+          <Notice tone="error" role="alert">
+            {create.error}
+          </Notice>
         ) : null}
-        <div className="fd-btn-row">
-          <button type="submit" className="fd-btn fd-btn--primary" disabled={create.busy}>
+        <ActionRow>
+          <Button type="submit" disabled={create.busy}>
             {create.busy ? "Creating…" : "Create invitation link"}
-          </button>
-          <span className="fd-muted fd-small">One person can use each link, within seven days.</span>
-        </div>
+          </Button>
+          <Hint>One person can use each link, within seven days.</Hint>
+        </ActionRow>
       </form>
 
       {fresh ? (
-        <div className="fd-team__fresh" role="status">
-          <p className="fd-team__fresh-title">
+        <div
+          className="flex flex-col gap-2 rounded-[10px] border border-success-10/20 bg-success-3 p-4 text-success-10 animate-in fade-in-0 slide-in-from-top-1 duration-small ease-out"
+          role="status"
+        >
+          <p className="text-[14px] leading-5 font-semibold">
             New invitation link{fresh.label ? ` for ${fresh.label}` : ""}. Copy it now: it is shown only once.
           </p>
-          <div className="fd-team__link">
-            <input
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
               ref={linkInput}
-              className="fd-input fd-team__link-input"
+              className="min-w-0 flex-1 bg-white font-mono text-[13px] text-ink-1 md:text-[13px]"
               aria-label="Invitation link"
               readOnly
               value={fresh.link}
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button type="button" className="fd-btn" onClick={() => void copy()}>
+            <Button type="button" variant="outline" className="shrink-0 bg-white text-ink-1" onClick={() => void copy()}>
+              {copied === "done" ? <Check data-icon="inline-start" aria-hidden="true" /> : <Copy data-icon="inline-start" aria-hidden="true" />}
               {copied === "done" ? "Copied" : "Copy link"}
-            </button>
+            </Button>
           </div>
-          <p className="fd-muted fd-small">
+          <p className="text-[13px] leading-5">
             {copied === "failed"
               ? "The browser did not allow copying. The link is selected above; copy it by hand."
               : `Expires ${formatStamp(fresh.expiresAt)}. Send it to the person you are inviting; anyone who opens it and signs in can join.`}
@@ -237,27 +244,27 @@ function Invitations({ innId }: { innId: Id<"inns"> }) {
       ) : null}
 
       {revoke.error ? (
-        <div style={{ marginTop: 8 }}>
-          <Notice tone="error">{revoke.error}</Notice>
-        </div>
+        <Notice tone="error" role="alert">
+          {revoke.error}
+        </Notice>
       ) : null}
 
       {invites === undefined ? (
-        <p className="fd-muted fd-small">Loading invitations…</p>
+        <Hint>Loading invitations…</Hint>
       ) : invites.length === 0 ? (
-        <p className="fd-muted fd-small">No invitations yet.</p>
+        <Hint>No invitations yet.</Hint>
       ) : (
-        <ul className="fd-staff fd-team__list" aria-label="Invitations">
+        <RowList aria-label="Invitations">
           {invites.map((invite) => {
             const state = STATE_LABEL[invite.state];
             return (
-              <li key={invite._id}>
-                <span className="fd-team__invite">
-                  <span>
-                    {invite.label ?? <span className="fd-muted">No label</span>}{" "}
-                    <Pill tone={state.tone}>{state.label}</Pill>
+              <Row key={invite._id} className="flex-nowrap items-start">
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="break-words">{invite.label ?? <span className="text-ink-2">No label</span>}</span>
+                    <Chip tone={state.tone}>{state.label}</Chip>
                   </span>
-                  <span className="fd-muted fd-small">
+                  <span className="text-[12px] leading-4 text-ink-3 tabular-nums">
                     Created {formatStamp(invite.createdAt)}
                     {invite.state === "used"
                       ? ` · used${invite.usedByName ? ` by ${invite.usedByName}` : ""}${invite.usedAt ? ` ${formatStamp(invite.usedAt)}` : ""}`
@@ -269,24 +276,24 @@ function Invitations({ innId }: { innId: Id<"inns"> }) {
                   </span>
                 </span>
                 {invite.state === "pending" ? (
-                  <button
+                  <Button
                     type="button"
-                    className="fd-btn fd-btn--small fd-btn--quiet fd-btn--danger"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-[13px] text-danger-10 hover:text-danger-10"
                     disabled={revoke.busy}
                     aria-label={`Revoke invitation${invite.label ? ` ${invite.label}` : ""}`}
                     onClick={() => void revoke.run(() => revokeInvite({ inviteId: invite._id }))}
                   >
                     Revoke
-                  </button>
+                  </Button>
                 ) : null}
-              </li>
+              </Row>
             );
           })}
-        </ul>
+        </RowList>
       )}
-      <p className="fd-muted fd-small" style={{ marginTop: 8 }}>
-        Links are never stored or listed here. Front Desk does not send invitation email; share the link yourself.
-      </p>
+      <Hint>Links are never stored or listed here. Front Desk does not send invitation email; share the link yourself.</Hint>
     </div>
   );
 }

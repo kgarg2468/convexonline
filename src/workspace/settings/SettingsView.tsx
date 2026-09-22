@@ -2,11 +2,14 @@ import { useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { InnDetail, IntegrationStatus, Viewer } from "../types";
-import { ExternalLink, Notice, Pill } from "../lib/ui";
+import { Button } from "@/components/ui/button";
+import { ExternalLink, Notice } from "../lib/ui";
 import { useAsyncAction } from "../lib/hooks";
 import { LIVE_MAIL_REASON } from "../lib/format";
+import { Chip, Hint } from "../inbox/primitives";
 import { TeamSettings } from "./TeamSettings";
 import { InnWebsiteEditor } from "./InnWebsiteEditor";
+import { ActionRow, KeyValue, KeyValueList, Row, RowList, SettingsSection } from "./primitives";
 
 /** Real values only: what the server knows about this inn, its staff and its providers. */
 export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDetail }) {
@@ -42,23 +45,21 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h2 className="fd-h2">Property</h2>
-      <p className="fd-lede">These values come from the inn record. Editing them is not available yet.</p>
-      <div className="fd-card fd-section">
-        <dl className="fd-kv">
-          <dt>Name</dt>
-          <dd>{inn.name}</dd>
-          <dt>Website</dt>
-          <dd>
+    <div className="w-full max-w-[760px]">
+      <SettingsSection
+        id="fd-settings-property"
+        title="Property"
+        description="These values come from the inn record. Editing them is not available yet."
+      >
+        <KeyValueList>
+          <KeyValue term="Name">{inn.name}</KeyValue>
+          <KeyValue term="Website">
             <ExternalLink href={inn.siteUrl}>{inn.siteUrl}</ExternalLink>
-          </dd>
-          <dt>Time zone</dt>
-          <dd>{inn.timezone}</dd>
-          <dt>Guest address</dt>
-          <dd>
+          </KeyValue>
+          <KeyValue term="Time zone">{inn.timezone}</KeyValue>
+          <KeyValue term="Guest address">
             {inn.inboxAddress ?? provisioned ?? (
-              <span className="fd-muted">
+              <span className="text-ink-2">
                 {inn.isDemo
                   ? "None. Demo inns never receive or send real email."
                   : inboxConfigured
@@ -66,11 +67,12 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                     : "Not set up yet."}
               </span>
             )}
-          </dd>
-          <dt>Workspace</dt>
-          <dd>{inn.isDemo ? <Pill tone="caution">Demo</Pill> : <Pill tone="pine">Live property</Pill>}</dd>
-        </dl>
-      </div>
+          </KeyValue>
+          <KeyValue term="Workspace">
+            {inn.isDemo ? <Chip tone="warning">Demo</Chip> : <Chip tone="success">Live property</Chip>}
+          </KeyValue>
+        </KeyValueList>
+      </SettingsSection>
 
       {/* Only inns with a hosted website document render anything here. The
           owner-only query is requested solely for a real (non-anonymous) owner;
@@ -79,13 +81,12 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
         <InnWebsiteEditor key={inn._id} innId={inn._id} canEdit={role === "owner" && !viewer.isAnonymous} />
       ) : null}
 
-      <div className="fd-section">
-        <p className="fd-section__title">Guest inbox</p>
+      <SettingsSection id="fd-settings-inbox" title="Guest inbox">
         {inn.isDemo ? (
-          <p className="fd-muted fd-small">Demo inns have no inbox. Use “Simulate a guest inquiry” in the Inbox instead.</p>
+          <Hint>Demo inns have no inbox. Use “Simulate a guest inquiry” in the Inbox instead.</Hint>
         ) : inboxConfigured ? (
           integrations === undefined ? (
-            <p className="fd-muted fd-small">Checking whether the inbox is subscribed to this deployment…</p>
+            <Hint>Checking whether the inbox is subscribed to this deployment…</Hint>
           ) : inboxReady ? (
             <Notice tone="success">
               Inbound mail is connected: the guest inbox for {inn.name} is subscribed to this deployment's webhook, so
@@ -101,42 +102,34 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                   : "; this deployment has no registered webhook id, so deployment setup is needed before it can be repaired here."}
               </Notice>
               {action.error ? (
-                <div style={{ marginTop: 8 }}>
-                  <Notice tone="error">{action.error}</Notice>
-                </div>
+                <Notice tone="error" role="alert">
+                  {action.error}
+                </Notice>
               ) : null}
               {canRepair ? (
-                <div className="fd-btn-row" style={{ marginTop: 8 }}>
-                  <button
-                    type="button"
-                    className="fd-btn fd-btn--primary"
-                    disabled={action.busy}
-                    onClick={() => void runProvision()}
-                  >
+                <ActionRow>
+                  <Button type="button" disabled={action.busy} onClick={() => void runProvision()}>
                     {action.busy ? "Connecting…" : "Finish connecting inbox"}
-                  </button>
-                  <span className="fd-muted fd-small">
-                    Retries the subscription for the existing inbox; no new inbox is created.
-                  </span>
-                </div>
+                  </Button>
+                  <Hint>Retries the subscription for the existing inbox; no new inbox is created.</Hint>
+                </ActionRow>
               ) : null}
             </>
           )
         ) : (
           <>
-            <p className="fd-field__hint" style={{ marginBottom: 8 }}>
+            <Hint>
               Front Desk creates a dedicated mailbox at the mail provider and binds it to this property. The
               server chooses the address; nothing is typed here.
-            </p>
+            </Hint>
             {action.error ? (
-              <div style={{ marginBottom: 8 }}>
-                <Notice tone="error">{action.error}</Notice>
-              </div>
+              <Notice tone="error" role="alert">
+                {action.error}
+              </Notice>
             ) : null}
-            <div className="fd-btn-row">
-              <button
+            <ActionRow>
+              <Button
                 type="button"
-                className="fd-btn fd-btn--primary"
                 disabled={
                   !canProvision ||
                   action.busy ||
@@ -147,8 +140,8 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                 onClick={() => void runProvision()}
               >
                 {action.busy ? "Setting up…" : "Set up a guest inbox"}
-              </button>
-              <span className="fd-muted fd-small">
+              </Button>
+              <Hint>
                 {role !== "owner"
                   ? "Only the property owner can set up the inbox."
                   : integrations === undefined
@@ -160,14 +153,13 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
                         : !liveMail.allowed
                         ? LIVE_MAIL_REASON[liveMail.reason] ?? "Live mail is not available."
                         : ""}
-              </span>
-            </div>
+              </Hint>
+            </ActionRow>
           </>
         )}
-      </div>
+      </SettingsSection>
 
-      <div className="fd-section">
-        <p className="fd-section__title">Sending email</p>
+      <SettingsSection id="fd-settings-sending" title="Sending email">
         {liveMail.allowed ? (
           inboxConfigured ? (
             <Notice tone="success">This account may send real replies for {inn.name} from its guest inbox.</Notice>
@@ -177,36 +169,35 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
         ) : (
           <Notice tone="caution">{LIVE_MAIL_REASON[liveMail.reason] ?? "Live mail is not available."}</Notice>
         )}
-      </div>
+      </SettingsSection>
 
-      <div className="fd-section">
-        <p className="fd-section__title">Providers on this deployment</p>
+      <SettingsSection id="fd-settings-providers" title="Providers on this deployment">
         {integrations === undefined ? (
-          <p className="fd-muted fd-small">Checking…</p>
+          <Hint>Checking…</Hint>
         ) : (
-          <ul className="fd-staff">
+          <RowList>
             <ProviderRow name="Drafting and judging (OpenAI)" ok={integrations.openai} />
             <ProviderRow name="Website crawling (Firecrawl)" ok={integrations.firecrawl} />
             <ProviderRow name="Guest mail (AgentMail)" ok={integrations.agentmail} />
             <ProviderRow name="Inbound webhook secret" ok={integrations.webhookSecret} />
             <ProviderRow name="Inbound webhook registered" ok={integrations.webhookId} />
-            <li>
+            <Row>
               <span>This property's inbox subscribed</span>
               {inn.isDemo ? (
-                <Pill tone="muted">No live inbox (demo)</Pill>
+                <Chip tone="muted">No live inbox (demo)</Chip>
               ) : (
-                <Pill tone={inboxReady ? "pine" : "caution"}>{inboxReady ? "Ready" : "Not ready"}</Pill>
+                <Chip tone={inboxReady ? "success" : "warning"}>{inboxReady ? "Ready" : "Not ready"}</Chip>
               )}
-            </li>
-          </ul>
+            </Row>
+          </RowList>
         )}
-        <p className="fd-muted fd-small" style={{ marginTop: 8 }}>
+        <Hint className="max-w-[64ch]">
           Provider rows show whether each key is configured on the server; key values are never sent to the browser.
           A configured key or secret is not proof that inbound mail is flowing. The only readiness check is the last
           row: it is Ready when the server confirmed this property's inbox is subscribed to this deployment's webhook.
           {inn.isDemo ? " Demo inns have no live inbox, so nothing is subscribed." : ""}
-        </p>
-      </div>
+        </Hint>
+      </SettingsSection>
 
       <TeamSettings viewer={viewer} detail={detail} />
     </div>
@@ -215,9 +206,9 @@ export function SettingsView({ viewer, detail }: { viewer: Viewer; detail: InnDe
 
 function ProviderRow({ name, ok }: { name: string; ok: boolean }) {
   return (
-    <li>
+    <Row>
       <span>{name}</span>
-      <Pill tone={ok ? "pine" : "muted"}>{ok ? "Configured" : "Not configured"}</Pill>
-    </li>
+      <Chip tone={ok ? "success" : "muted"}>{ok ? "Configured" : "Not configured"}</Chip>
+    </Row>
   );
 }
