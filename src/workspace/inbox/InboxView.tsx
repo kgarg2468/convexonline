@@ -186,17 +186,26 @@ export function InboxView({
                 <SourcesPlaceholder />
               </>
             ) : (
-              <ThreadDetail
-                key={shownThread}
-                threadId={shownThread}
-                innId={innId}
-                viewerId={viewerId}
-                liveMail={liveMail}
-                onBack={back}
-                onOpenCorrections={onOpenCorrections}
-                onForeign={onForeignThread}
-                onBackToInbox={() => onSelect(null)}
-              />
+              // While the next thread loads the previous one stays on screen
+              // but inert: nothing in it can be claimed, sent or changed
+              // under the new row's highlight.
+              <div
+                className={cn("contents", shownThread !== selected && "[&>*]:opacity-60")}
+                inert={shownThread !== selected}
+                aria-busy={shownThread !== selected || undefined}
+              >
+                <ThreadDetail
+                  key={shownThread}
+                  threadId={shownThread}
+                  innId={innId}
+                  viewerId={viewerId}
+                  liveMail={liveMail}
+                  onBack={back}
+                  onOpenCorrections={onOpenCorrections}
+                  onForeign={onForeignThread}
+                  onBackToInbox={() => onSelect(null)}
+                />
+              </div>
             )
           ) : (
             <>

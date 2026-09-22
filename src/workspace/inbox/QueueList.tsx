@@ -117,8 +117,14 @@ export function QueueList({
       `[data-queue-row][data-thread-id="${restore.threadId}"]`,
     );
     if (narrow) window.scrollTo({ top: restore.scrollY });
-    row?.focus({ preventScroll: true });
-    row?.scrollIntoView({ block: "nearest" });
+    if (row) {
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "nearest" });
+    } else {
+      // The thread left the active filter while it was open: land on the
+      // filter control so the keyboard is still somewhere in the queue.
+      document.getElementById("fd-queue-filter")?.focus({ preventScroll: true });
+    }
     onRestored();
   }, [restore, loading, narrow, onRestored]);
   useEffect(() => {
