@@ -12,18 +12,40 @@ const KIND_LABEL: Record<OutboxRow["kind"], string> = {
   follow_up: "Follow-up",
 };
 
-/** Beyond this many rows the list folds behind a disclosure; it opens by itself while the newest row is unsettled. */
+/** Beyond this many rows the list folds behind a disclosure; it opens by itself whenever the newest row is unsettled. */
 const FOLD_AFTER = 2;
 
 /**
  * Delivery state straight from the outbox table. "Delivered" only appears once
  * the server commits the send; a reservation is shown as queued, never as sent.
- * `.fd-outbox[aria-label=title]` is the hook the specs read.
+ * `.fd-outbox[aria-label=title]` is the hook the specs read. `hideTitle` drops
+ * the visible label where the surrounding row already says what this is (a
+ * sent draft's summary); the `aria-label` keeps naming it.
  */
-export function OutboxList({ rows, title = "Delivery", className }: { rows: OutboxRow[]; title?: string; className?: string }) {
+export function OutboxList({
+  rows,
+  title = "Delivery",
+  className,
+  hideTitle = false,
+}: {
+  rows: OutboxRow[];
+  title?: string;
+  className?: string;
+  hideTitle?: boolean;
+}) {
   const sorted = [...rows].sort((a, b) => b.reservedAt - a.reservedAt);
   const foldable = sorted.length > FOLD_AFTER;
-  const [open, setOpen] = useState(() => sorted[0]?.status !== "sent");
+  const newest = sorted[0];
+  const unsettled = newest !== undefined && newest.status !== "sent";
+  // The disclosure follows the newest row as it changes (a row that turns
+  // failed or unknown later unfolds the list); a settled row never folds it.
+  const newestKey = newest ? `${newest._id}:${newest.status}` : "";
+  const [open, setOpen] = useState(unsettled);
+  const [seenKey, setSeenKey] = useState(newestKey);
+  if (seenKey !== newestKey) {
+    setSeenKey(newestKey);
+    if (unsettled) setOpen(true);
+  }
   const listId = useId();
   if (rows.length === 0) return null;
   const expanded = !foldable || open;
@@ -43,14 +65,14 @@ export function OutboxList({ rows, title = "Delivery", className }: { rows: Outb
           </SectionLabel>
           <ChevronDown
             aria-hidden="true"
-            className={cn("size-3.5 text-ink-3 transition-transform duration-small ease-out", expanded && "rotate-180")}
+            className={cn("size-3.5 text-ink-3 ease-out motion-safe:transition-transform motion-safe:duration-small", expanded && "rotate-180")}
           />
         </button>
-      ) : (
+      ) : hideTitle ? null : (
         <SectionLabel>{title}</SectionLabel>
       )}
       {expanded ? (
-        <ul id={listId} className="mt-1 divide-y divide-border-1">
+        <ul id={listId} className={cn("divide-y divide-border-1", !(hideTitle && !foldable) && "mt-1")}>
           {sorted.map((row) => (
             <li key={row._id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 text-[13px] leading-5 text-ink-2">
               <OutboxChip row={row} />

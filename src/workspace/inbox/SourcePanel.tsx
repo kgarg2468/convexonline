@@ -1,6 +1,7 @@
 import type { ThreadDetail } from "../types";
 import { CLAIM_STATUS_LABEL, pathOf } from "../lib/format";
 import { cn } from "@/lib/utils";
+import { claimCardId } from "./claimMatch";
 import { Chip, SectionLabel, type ChipTone } from "./primitives";
 
 /** Non-ok claim statuses: a stale quote is a caution, a stripped one an error, a corrected one history. */
@@ -19,15 +20,22 @@ const CLAIM_TONE: Record<string, ChipTone> = {
  * draft"`). Inside the header's sheet (`embedded`) it drops its own frame and
  * heading, which the sheet already provides, and takes a distinct `titleId`
  * so the two never share an id.
+ *
+ * `activeClaimId` is the claim whose sentence is hovered or focused in the
+ * draft: its card is highlighted, and hovering a card names it in return.
  */
 export function SourcePanel({
   detail,
   titleId = "fd-sources-title",
   embedded = false,
+  activeClaimId = null,
+  onActiveClaim,
 }: {
   detail: ThreadDetail;
   titleId?: string;
   embedded?: boolean;
+  activeClaimId?: string | null;
+  onActiveClaim?: (claimId: string | null) => void;
 }) {
   const { claims, facts } = detail;
   return (
@@ -55,7 +63,15 @@ export function SourcePanel({
             return (
               <li
                 key={c._id}
-                className={cn("rounded-[10px] border p-3", ok ? "border-border-1" : "border-warning-10/30")}
+                id={claimCardId(c._id)}
+                data-active={activeClaimId === c._id || undefined}
+                onMouseEnter={onActiveClaim ? () => onActiveClaim(c._id) : undefined}
+                onMouseLeave={onActiveClaim ? () => onActiveClaim(null) : undefined}
+                className={cn(
+                  "rounded-[10px] border p-3 motion-safe:transition-[background-color,box-shadow] motion-safe:duration-micro",
+                  ok ? "border-border-1" : "border-warning-10/30",
+                  "data-active:bg-accent-2 data-active:ring-2 data-active:ring-accent-9/40",
+                )}
               >
                 <p className="text-[14px] leading-5 text-ink-1">{c.statement}</p>
                 <p className="mt-1.5 font-serif text-[14px] leading-[1.5] text-ink-2 italic [overflow-wrap:anywhere]">“{c.quote}”</p>

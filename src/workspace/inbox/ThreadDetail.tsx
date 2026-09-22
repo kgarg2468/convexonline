@@ -18,13 +18,20 @@ import { GapForm } from "./GapForm";
 import { OutboxList } from "./OutboxList";
 import { SourcePanel } from "./SourcePanel";
 import { ThreadPresence } from "./ThreadPresence";
-import { BackButton, InlineNotice } from "./primitives";
+import { BackButton, InlineNotice, SourcesPlaceholder } from "./primitives";
 import { threadMainClass, threadPadClass } from "./styles";
 
 /** The send FLIP: 260ms ease-out on a click, instant after ⌘⏎ (research-motion §3: keyboard never animates). */
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const sendTransition = (source: SendSource) =>
   source === "keyboard" ? { duration: 0 } : { duration: 0.26, ease: EASE_OUT };
+
+const clockOnly = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
+/** A claim expiry as the bar shows it: the clock alone while it falls today, the dated stamp otherwise. */
+function formatExpiry(ms: number, now: number): string {
+  return new Date(ms).toDateString() === new Date(now).toDateString() ? clockOnly.format(ms) : formatStamp(ms);
+}
 
 /**
  * The thread pane: sticky head, claim bar, messages, gap form, the draft
@@ -72,23 +79,36 @@ export function ThreadDetail({
   const mid = useIsMid();
   // How the last send was triggered: the sent message's FLIP reads it.
   const [sendSource, setSendSource] = useState<SendSource>("pointer");
+  // The claim whose sentence (draft) or card (sources) is hovered or focused; each side highlights the other.
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
 
-  if (detail === undefined) return <ThreadSkeleton onBack={onBack} />;
+  // Both early returns keep the third grid column's ground, as InboxView does.
+  if (detail === undefined) {
+    return (
+      <>
+        <ThreadSkeleton onBack={onBack} />
+        <SourcesPlaceholder />
+      </>
+    );
+  }
 
   if (foreign) {
     return (
-      <div className={cn(threadMainClass, threadPadClass, "py-4")}>
-        {onBack ? <BackButton onBack={onBack} /> : null}
-        <div className="mx-auto max-w-[440px] pt-12 text-center">
-          <h2 className="text-[16px] leading-6 font-semibold text-ink-1">This thread belongs to another property.</h2>
-          <p className="mt-1 text-[13px] leading-5 text-ink-2">
-            The link you opened points at a thread in one of your other properties. Switch property to read it there.
-          </p>
-          <Button type="button" variant="outline" size="sm" className="mt-4 bg-white text-[13px] text-ink-1" onClick={onBackToInbox}>
-            Back to inbox
-          </Button>
+      <>
+        <div className={cn(threadMainClass, threadPadClass, "py-4")}>
+          {onBack ? <BackButton onBack={onBack} /> : null}
+          <div className="mx-auto max-w-[440px] pt-12 text-center">
+            <h2 className="text-[16px] leading-6 font-semibold text-ink-1">This thread belongs to another property.</h2>
+            <p className="mt-1 text-[13px] leading-5 text-ink-2">
+              The link you opened points at a thread in one of your other properties. Switch property to read it there.
+            </p>
+            <Button type="button" variant="outline" size="sm" className="mt-4 bg-white text-[13px] text-ink-1" onClick={onBackToInbox}>
+              Back to inbox
+            </Button>
+          </div>
         </div>
-      </div>
+        <SourcesPlaceholder />
+      </>
     );
   }
 
@@ -119,7 +139,7 @@ export function ThreadDetail({
     <div className={threadMainClass}>
       <div
         className={cn(
-          "fd-thread__head sticky top-0 z-10 border-b border-border-1 bg-bg-1/95 py-3 backdrop-blur-sm max-[900px]:top-(--header-h)",
+          "fd-thread__head sticky top-0 z-10 border-b border-border-1 bg-bg-1 py-3 max-[900px]:top-(--header-h)",
           threadPadClass,
         )}
       >
@@ -178,11 +198,11 @@ export function ThreadDetail({
           <div className="flex items-center justify-between gap-3 rounded-md border border-border-1 bg-bg-2 py-1.5 pr-1.5 pl-3">
             <p className="flex min-w-0 items-center gap-2 text-[13px] leading-5 text-ink-1">
               {heldByOther ? <Lock aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" /> : null}
-              <span>
+              <span title={holder ? formatStamp(holder.expiresAt) : undefined}>
                 {mine
-                  ? `You have this thread until ${formatStamp(holder!.expiresAt)}.`
+                  ? `You have this thread until ${formatExpiry(holder!.expiresAt, now)}.`
                   : heldByOther
-                    ? `${holder!.name ?? "Another staff member"} is working on this until ${formatStamp(holder!.expiresAt)}.`
+                    ? `${holder!.name ?? "Another staff member"} is working on this until ${formatExpiry(holder!.expiresAt, now)}.`
                     : "Nobody is working on this thread."}
               </span>
             </p>
@@ -282,7 +302,15 @@ export function ThreadDetail({
         ) : null}
 
         {draft && !draft.abstain ? (
-          <DraftPanel detail={detail} canEdit={mine} liveMail={liveMail} onSend={setSendSource} />
+          <DraftPanel
+            detail={detail}
+            canEdit={mine}
+            liveMail={liveMail}
+            onSend={setSendSource}
+            activeClaimId={activeClaimId}
+            onActiveClaim={setActiveClaimId}
+            describeSources={!mid}
+          />
         ) : draft ? (
           // An abstained draft with no gap question is a drafting failure
           // (no key, budget used up, provider error): show why, never a
@@ -355,14 +383,14 @@ export function ThreadDetail({
     return (
       <div className="min-w-0">
         {main}
-        <SourcePanel detail={detail} />
+        <SourcePanel detail={detail} activeClaimId={activeClaimId} onActiveClaim={setActiveClaimId} />
       </div>
     );
   }
   return (
     <>
       {main}
-      {mid ? null : <SourcePanel detail={detail} />}
+      {mid ? null : <SourcePanel detail={detail} activeClaimId={activeClaimId} onActiveClaim={setActiveClaimId} />}
     </>
   );
 }

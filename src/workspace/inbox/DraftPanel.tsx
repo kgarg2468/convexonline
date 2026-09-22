@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import { MOD_LABEL } from "../shell/nav";
+import { CitedText } from "./CitedText";
 import { OutboxList } from "./OutboxList";
 import { isInFlight, latestOutbox, outboxForDraft } from "../lib/outbox";
-import { Chip, Hint, InlineNotice, type ChipTone } from "./primitives";
+import { Chip, DisclosureButton, Hint, InlineNotice, type ChipTone } from "./primitives";
 
 type Draft = NonNullable<ThreadDetail["draft"]>;
 
@@ -42,19 +43,30 @@ const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
  * delivery (demo); the delivery state shown always comes from the outbox
  * query, never from the click itself. On send the body hands its box to the
  * new sent message through a shared `layoutId` (ThreadDetail renders the
- * other half); the body is not shown again once the draft is sent.
+ * other half); the body is not shown again once the draft is sent, and the
+ * panel folds to a summary row (status, citations, delivery) that opens on
+ * request. While read-only, sentences the claims rest on are marked and
+ * linked to their source cards through `activeClaimId`.
  */
 export function DraftPanel({
   detail,
   canEdit,
   liveMail,
   onSend,
+  activeClaimId = null,
+  onActiveClaim = () => {},
+  describeSources = true,
 }: {
   detail: ThreadDetail;
   canEdit: boolean;
   liveMail: LiveMailDecision | undefined;
   /** Called as a send starts, with how it was triggered. */
   onSend?: (source: SendSource) => void;
+  /** The claim whose sentence or source card is hovered or focused. */
+  activeClaimId?: string | null;
+  onActiveClaim?: (claimId: string | null) => void;
+  /** False while the source cards are not in the document (900–1199px, sheet closed). */
+  describeSources?: boolean;
 }) {
   const draft = detail.draft!;
   const isDemo = detail.inn.isDemo;
@@ -72,6 +84,8 @@ export function DraftPanel({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [staffAuthored, setStaffAuthored] = useState(false);
   const [handedOff, setHandedOff] = useState(false);
+  // A sent draft folds to its summary row; this remembers which draft was unfolded by hand.
+  const [unfoldedId, setUnfoldedId] = useState<string | null>(null);
   const dirty = text !== base.answer;
   const serverMoved = base.id !== draft._id || base.answer !== draft.answer;
   if (serverMoved && !dirty) {
@@ -150,161 +164,191 @@ export function DraftPanel({
 
   const sendLabel = isDemo ? "Send (simulated)" : "Send reply";
   const sending = sendAction.busy;
+  const folded = sent && unfoldedId !== draft._id;
 
   return (
     <section aria-labelledby="fd-draft-title" className="rounded-[10px] border border-border-1 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h3 id="fd-draft-title" className="text-[14px] leading-5 font-semibold text-ink-1">
-          Draft reply
+          {sent ? (
+            <DisclosureButton expanded={!folded} controls="fd-draft-body" onClick={() => setUnfoldedId(folded ? draft._id : null)}>
+              Draft reply
+            </DisclosureButton>
+          ) : (
+            "Draft reply"
+          )}
         </h3>
         <div className="flex flex-wrap gap-1.5">
           <Chip tone={status.tone}>{status.label}</Chip>
-          <Chip tone={source.tone}>{source.label}</Chip>
-          <Chip tone={verifiedCount > 0 ? "success" : "muted"}>
-            {verifiedCount} {verifiedCount === 1 ? "citation" : "citations"} verified
-          </Chip>
-          {flagged > 0 ? <Chip tone="warning">{flagged} flagged</Chip> : null}
-          {staleSource ? <Chip tone="warning">Source changed</Chip> : null}
-          {draft.judgeVerdict ? (
-            <Chip tone={judgeOk ? "success" : "warning"}>
-              {judgeOk ? "Stays within sources" : draft.judgeVerdict.entailed ? "Judge: promises beyond sources" : "Judge: not entailed"}
+          {folded ? (
+            <Chip tone={verifiedCount > 0 ? "success" : "muted"}>
+              {verifiedCount} {verifiedCount === 1 ? "citation" : "citations"}
             </Chip>
-          ) : draft.status === "ready" ? null : (
-            <Chip tone="muted">Not verified</Chip>
+          ) : (
+            <>
+              <Chip tone={source.tone}>{source.label}</Chip>
+              <Chip tone={verifiedCount > 0 ? "success" : "muted"}>
+                {verifiedCount} {verifiedCount === 1 ? "citation" : "citations"} verified
+              </Chip>
+              {flagged > 0 ? <Chip tone="warning">{flagged} flagged</Chip> : null}
+              {staleSource ? <Chip tone="warning">Source changed</Chip> : null}
+              {draft.judgeVerdict ? (
+                <Chip tone={judgeOk ? "success" : "warning"}>
+                  {judgeOk ? "Stays within sources" : draft.judgeVerdict.entailed ? "Judge: promises beyond sources" : "Judge: not entailed"}
+                </Chip>
+              ) : draft.status === "ready" ? null : (
+                <Chip tone="muted">Not verified</Chip>
+              )}
+            </>
           )}
         </div>
       </div>
-      {draft.statusReason ? <Hint className="mt-1.5">{draft.statusReason}</Hint> : null}
+      {folded ? (
+        // The summary keeps the delivery line: the one fact that must stay
+        // readable after a send, straight from the outbox row.
+        <OutboxList rows={draftOutbox} title="Reply delivery" hideTitle className="mt-1" />
+      ) : (
+        <div id="fd-draft-body">
+          {draft.statusReason ? <Hint className="mt-1.5">{draft.statusReason}</Hint> : null}
 
-      {serverMoved && dirty ? (
-        <InlineNotice tone="caution" className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <span>
-            {base.id !== draft._id ? "A new draft replaced this one on the server." : "This draft changed on the server."} Your unsaved
-            edits are kept.
-          </span>
-          <Button type="button" variant="outline" size="sm" className="bg-white text-[13px] text-ink-1" onClick={adoptServerText}>
-            Load the server text
-          </Button>
-        </InlineNotice>
-      ) : null}
+          {serverMoved && dirty ? (
+            <InlineNotice tone="caution" className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {base.id !== draft._id ? "A new draft replaced this one on the server." : "This draft changed on the server."} Your unsaved
+                edits are kept.
+              </span>
+              <Button type="button" variant="outline" size="sm" className="bg-white text-[13px] text-ink-1" onClick={adoptServerText}>
+                Load the server text
+              </Button>
+            </InlineNotice>
+          ) : null}
 
-      {sent ? null : (
-        <m.div
-          layoutId={`draft-${draft._id}`}
-          transition={{ duration: 0.26, ease: EASE_OUT }}
-          className={cn("mt-3 transition-opacity duration-micro", sending && "opacity-70")}
-          aria-busy={sending || undefined}
-        >
-          {editable ? (
-            <>
-              <label className="sr-only" htmlFor="fd-draft-text">
-                Draft reply text
-              </label>
-              <Textarea
-                id="fd-draft-text"
-                rows={6}
-                value={text}
-                disabled={action.busy || sendAction.busy}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={onEditorKey}
-                className="min-h-36 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+          {sent ? null : (
+            <m.div
+              layoutId={`draft-${draft._id}`}
+              transition={{ duration: 0.26, ease: EASE_OUT }}
+              className={cn("mt-3 transition-opacity duration-micro", sending && "opacity-70")}
+              aria-busy={sending || undefined}
+            >
+              {editable ? (
+                <>
+                  <label className="sr-only" htmlFor="fd-draft-text">
+                    Draft reply text
+                  </label>
+                  <Textarea
+                    id="fd-draft-text"
+                    rows={6}
+                    value={text}
+                    disabled={action.busy || sendAction.busy}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={onEditorKey}
+                    className="min-h-36 resize-y bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-1 md:text-[14px]"
+                  />
+                </>
+              ) : draft.answer ? (
+                <CitedText
+                  text={draft.answer}
+                  claims={detail.claims}
+                  activeClaimId={activeClaimId}
+                  onActiveClaim={onActiveClaim}
+                  describeCards={describeSources}
+                  className="rounded-md border border-border-1 bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1"
+                />
+              ) : (
+                <div className="rounded-md border border-border-1 bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] text-ink-3">No answer text.</div>
+              )}
+              {sending ? (
+                <p className="mt-1.5 text-[12px] leading-4 text-ink-3" aria-live="polite">
+                  Sending…
+                </p>
+              ) : null}
+            </m.div>
+          )}
+
+          {action.error ? (
+            <InlineNotice tone="error" className="mt-3">
+              {action.error}
+            </InlineNotice>
+          ) : null}
+
+          {editable && staffEdited && !dirty ? (
+            <label
+              htmlFor="fd-staff-authored"
+              className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-warning-10/20 bg-warning-3 px-3 py-2 text-[13px] leading-5 text-warning-10"
+            >
+              <input
+                id="fd-staff-authored"
+                type="checkbox"
+                checked={staffAuthored}
+                onChange={(e) => setStaffAuthored(e.target.checked)}
+                className="mt-[3px] size-3.5 shrink-0 cursor-pointer rounded-sm accent-accent-9 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2 focus-visible:ring-offset-warning-3"
               />
-            </>
-          ) : (
-            <div className="rounded-md border border-border-1 bg-bg-1 px-3 py-2.5 text-[14px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1">
-              {draft.answer || <span className="text-ink-3">No answer text.</span>}
+              <span>
+                Send this unverified, staff-written text as my own words. It was not checked against the website
+                {isDemo ? " (demo edits are never re-judged)" : ""}.
+              </span>
+            </label>
+          ) : null}
+
+          {done && !dirty ? null : (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {editable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-[13px]"
+                  disabled={!dirty || action.busy || sendAction.busy || text.trim().length === 0}
+                  onClick={() => void save()}
+                >
+                  {action.busy ? "Saving…" : "Save edits"}
+                </Button>
+              ) : null}
+              {!done ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="text-[13px]"
+                  disabled={!canSend}
+                  aria-describedby="fd-send-why"
+                  onClick={(event) => void send(event.detail === 0 ? "keyboard" : "pointer")}
+                >
+                  {sendAction.busy ? "Sending…" : sendLabel}
+                  {editable ? (
+                    <span aria-hidden="true" className="ml-1 inline-flex items-center gap-0.5">
+                      <Kbd className="h-4 min-w-4 bg-white/20 px-1 text-[11px] text-white">{MOD_LABEL}</Kbd>
+                      <Kbd className="h-4 min-w-4 bg-white/20 px-1 text-[11px] text-white">⏎</Kbd>
+                    </span>
+                  ) : null}
+                </Button>
+              ) : null}
+              <span className="ml-auto text-[13px] leading-5 text-ink-2">
+                {savedAt && !dirty ? "Saved." : dirty ? "Unsaved edits." : !canEdit && !done ? "Take the thread to edit or send." : ""}
+              </span>
             </div>
           )}
-          {sending ? (
-            <p className="mt-1.5 text-[12px] leading-4 text-ink-3" aria-live="polite">
-              Sending…
-            </p>
+          <Hint id="fd-send-why" className="mt-2">
+            {blocked ??
+              (isDemo
+                ? "Simulated send: the reply is recorded in this demo only. No real email is sent."
+                : verifiedExact
+                  ? "Sends exactly the verified text to the guest."
+                  : "Sends your staff-written text to the guest under your name.")}
+          </Hint>
+          {sendAction.error ? (
+            <InlineNotice tone="error" className="mt-3">
+              {sendAction.error}
+            </InlineNotice>
           ) : null}
-        </m.div>
-      )}
-
-      {action.error ? (
-        <InlineNotice tone="error" className="mt-3">
-          {action.error}
-        </InlineNotice>
-      ) : null}
-
-      {editable && staffEdited && !dirty ? (
-        <label
-          htmlFor="fd-staff-authored"
-          className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-warning-10/20 bg-warning-3 px-3 py-2 text-[13px] leading-5 text-warning-10"
-        >
-          <input
-            id="fd-staff-authored"
-            type="checkbox"
-            checked={staffAuthored}
-            onChange={(e) => setStaffAuthored(e.target.checked)}
-            className="mt-[3px] size-3.5 shrink-0 cursor-pointer rounded-sm accent-accent-9 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2 focus-visible:ring-offset-warning-3"
-          />
-          <span>
-            Send this unverified, staff-written text as my own words. It was not checked against the website
-            {isDemo ? " (demo edits are never re-judged)" : ""}.
-          </span>
-        </label>
-      ) : null}
-
-      {done && !dirty ? null : (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {editable ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-[13px]"
-              disabled={!dirty || action.busy || sendAction.busy || text.trim().length === 0}
-              onClick={() => void save()}
-            >
-              {action.busy ? "Saving…" : "Save edits"}
-            </Button>
+          {handedOff && !isDemo && replyOutbox && replyOutbox.status !== "sent" ? (
+            <InlineNotice tone="info" className="mt-3">
+              Handed to the sender. The delivery state below updates as it happens.
+            </InlineNotice>
           ) : null}
-          {!done ? (
-            <Button
-              type="button"
-              size="sm"
-              className="text-[13px]"
-              disabled={!canSend}
-              aria-describedby="fd-send-why"
-              onClick={(event) => void send(event.detail === 0 ? "keyboard" : "pointer")}
-            >
-              {sendAction.busy ? "Sending…" : sendLabel}
-              {editable ? (
-                <span aria-hidden="true" className="ml-1 inline-flex items-center gap-0.5">
-                  <Kbd className="h-4 min-w-4 bg-white/20 px-1 text-[11px] text-white">{MOD_LABEL}</Kbd>
-                  <Kbd className="h-4 min-w-4 bg-white/20 px-1 text-[11px] text-white">⏎</Kbd>
-                </span>
-              ) : null}
-            </Button>
-          ) : null}
-          <span className="ml-auto text-[13px] leading-5 text-ink-2">
-            {savedAt && !dirty ? "Saved." : dirty ? "Unsaved edits." : !canEdit && !done ? "Take the thread to edit or send." : ""}
-          </span>
+          <OutboxList rows={draftOutbox} title="Reply delivery" className="mt-3 border-t border-border-1 pt-3" />
+          <p className="mt-3 font-mono text-[12px] leading-4 text-ink-3 tabular-nums">drafted by {draft.model}</p>
         </div>
       )}
-      <Hint id="fd-send-why" className="mt-2">
-        {blocked ??
-          (isDemo
-            ? "Simulated send: the reply is recorded in this demo only. No real email is sent."
-            : verifiedExact
-              ? "Sends exactly the verified text to the guest."
-              : "Sends your staff-written text to the guest under your name.")}
-      </Hint>
-      {sendAction.error ? (
-        <InlineNotice tone="error" className="mt-3">
-          {sendAction.error}
-        </InlineNotice>
-      ) : null}
-      {handedOff && !isDemo && replyOutbox && replyOutbox.status !== "sent" ? (
-        <InlineNotice tone="info" className="mt-3">
-          Handed to the sender. The delivery state below updates as it happens.
-        </InlineNotice>
-      ) : null}
-      <OutboxList rows={draftOutbox} title="Reply delivery" className="mt-3 border-t border-border-1 pt-3" />
-      <p className="mt-3 font-mono text-[12px] leading-4 text-ink-3 tabular-nums">drafted by {draft.model}</p>
     </section>
   );
 }

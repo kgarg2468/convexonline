@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,50 @@ export function Hint({ id, className, children }: { id?: string; className?: str
       {children}
     </p>
   );
+}
+
+/**
+ * The toggle of a collapsible section (delivery lists, the follow-up panel,
+ * a sent draft). Its `after:` box stretches over the nearest positioned
+ * ancestor so the whole header row is the hit area while the accessible name
+ * stays the title alone. The chevron only turns under `motion-safe`.
+ */
+export function DisclosureButton({
+  expanded,
+  controls,
+  onClick,
+  className,
+  children,
+}: {
+  expanded: boolean;
+  controls: string;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onClick}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-left outline-hidden after:absolute after:inset-0 after:content-[''] focus-visible:ring-2 focus-visible:ring-accent-9 focus-visible:ring-offset-2",
+        className,
+      )}
+    >
+      {children}
+      <ChevronDown
+        aria-hidden="true"
+        className={cn("size-3.5 shrink-0 text-ink-3 ease-out motion-safe:transition-transform motion-safe:duration-small", expanded && "rotate-180")}
+      />
+    </button>
+  );
+}
+
+/** The empty third column beside a pane that has no sources of its own (only on the three-pane layout). */
+export function SourcesPlaceholder() {
+  return <div aria-hidden="true" className="hidden border-l border-border-1 bg-white min-[1200px]:block" />;
 }
 
 /** Phone layout only: back to the queue. The accessible name stays "All threads" (mobile spec). */

@@ -602,19 +602,9 @@ body {
 
 /* ---------- inbox: frame and queue rebuilt in inbox/InboxView.tsx, QueueList.tsx, QueueRow.tsx ---------- */
 
-/* Thread pane: rebuilt with Tailwind in inbox/ThreadDetail.tsx and friends.
-   `.fd-thread__main` stays only for shell/DemoInbound.tsx, which still pads
-   itself with it; `.fd-thread__head` in the JSX is a bare test hook. */
-.fd-thread__main {
-  padding: 18px 22px 40px;
-  min-width: 0;
-}
-@media (width > 900px) {
-  .fd-thread__main {
-    min-height: 0;
-    overflow-y: auto;
-  }
-}
+/* Thread pane: rebuilt with Tailwind in inbox/ThreadDetail.tsx and friends
+   (shell/DemoInbound.tsx shares its column classes); `.fd-thread__head` in
+   the JSX is a bare test hook. */
 /* Claim bar: still used by corrections/CorrectionCard.tsx (compact variant below); the thread pane has its own. */
 .fd-claimbar {
   display: flex;
@@ -657,12 +647,6 @@ body {
 .fd-fact__meta {
   font-size: 12.5px;
   color: var(--fd-muted);
-}
-
-@media (max-width: 900px) {
-  .fd-thread__main {
-    padding: 14px 14px 20px;
-  }
 }
 
 /* ---------- knowledge ---------- */

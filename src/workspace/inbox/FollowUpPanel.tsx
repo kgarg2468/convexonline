@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OutboxList } from "./OutboxList";
-import { Chip, Hint, InlineNotice, SectionLabel } from "./primitives";
+import { Chip, DisclosureButton, Hint, InlineNotice, SectionLabel } from "./primitives";
 import { LEGACY_TONE } from "./styles";
 
 type Tone = "neutral" | "pine" | "caution" | "error" | "muted";
@@ -21,6 +21,12 @@ type Tone = "neutral" | "pine" | "caution" | "error" | "muted";
  * thread's approval history. Approving the original reply never approves a
  * follow-up; only the explicit button here does, and only while the caller
  * holds the thread claim. Nothing is sent from the browser.
+ *
+ * The panel is a collapsible section (design-spec §4.2). It opens by itself
+ * when there is something to decide or watch (an approval on offer, a
+ * scheduled, due or failed follow-up) and folds when it is only history; once
+ * open it never folds on its own, so a state change under the reader's eyes
+ * does not hide what they were reading.
  */
 export function FollowUpPanel({
   threadId,
@@ -46,12 +52,28 @@ export function FollowUpPanel({
   // server's default (or the pending approval's time when rescheduling).
   const [typed, setTyped] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  // null: follow the default for the current state; a boolean: the reader's choice.
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [applied, setApplied] = useState<{ key: string; defaultOpen: boolean } | null>(null);
+
+  const current = view?.current ?? null;
+  const scheduled = current && current.status === "scheduled" ? current : null;
+  // Approval (first time) or reschedule (a pending approval with a new time).
+  const offerApproval = view !== undefined && view.canApprove && (current === null || scheduled !== null);
+  const attention = current !== null && (current.status === "scheduled" || current.status === "reserved" || current.status === "failed");
+  const defaultOpen = offerApproval || attention;
+  const stateKey = view === undefined ? "" : `${current?._id ?? "-"}:${current?.status ?? "-"}:${offerApproval}`;
+  if (view !== undefined && (applied === null || applied.key !== stateKey)) {
+    const wasOpen = open ?? applied?.defaultOpen ?? defaultOpen;
+    setApplied({ key: stateKey, defaultOpen });
+    if (defaultOpen) setOpen(true);
+    else if (applied !== null) setOpen(wasOpen);
+  }
 
   if (view === undefined) return null;
-  const current = view.current;
-  const scheduled = current && current.status === "scheduled" ? current : null;
   const showPanel = view.canApprove || current !== null || view.history.length > 0 || outbox.length > 0;
   if (!showPanel) return null;
+  const expanded = open ?? defaultOpen;
 
   const zoneName = browserZoneName();
   const inputValue = typed ?? toLocalInput(scheduled ? scheduled.dueAt : view.defaultDueAt);
@@ -59,8 +81,6 @@ export function FollowUpPanel({
   // a time on the far side of a DST change has a different one.
   const parsedInput = fromLocalInput(inputValue);
   const inputZoneLabel = parsedInput.ok ? zoneLabelAt(parsedInput.ms) : zoneName;
-  // Approval (first time) or reschedule (a pending approval with a new time).
-  const offerApproval = view.canApprove && (current === null || scheduled !== null);
   const claimHint = view.requiresClaim || !canAct;
   const approveLabel = scheduled
     ? isDemo ? "Reschedule follow-up (simulated)" : "Reschedule follow-up"
@@ -102,152 +122,166 @@ export function FollowUpPanel({
 
   const busy = approveAction.busy || cancelAction.busy;
   const history = view.history.filter((row) => row._id !== current?._id);
+  const approvals = history.length + (current ? 1 : 0);
 
   return (
     <section aria-labelledby="fd-followup-title" className="rounded-[10px] border border-border-1 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h3 id="fd-followup-title" className="text-[14px] leading-5 font-semibold text-ink-1">
-          Follow-up email
+          <DisclosureButton expanded={expanded} controls="fd-followup-body" onClick={() => setOpen(!expanded)}>
+            Follow-up email
+          </DisclosureButton>
         </h3>
-        {current ? <StatusPill row={current} /> : <Chip tone="muted">Not approved</Chip>}
-      </div>
-      <Hint className="mt-1.5">
-        {current
-          ? "One follow-up email per answered inquiry. It goes out only at the approved time, and only if the guest has not written again and the thread is still an open inquiry."
-          : "If the guest does not reply, staff may approve one follow-up email with exactly the text below. Sending the reply did not approve it; nothing is emailed unless it is approved here."}
-      </Hint>
-
-      {current ? (
-        <div className="mt-3">
-          <blockquote className={quoteClass} aria-label="Approved follow-up text">
-            {current.text ?? view.text}
-          </blockquote>
-          <dl className="fd-followup__meta mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[13px] leading-5">
-            <div className="contents">
-              <dt className="font-medium text-ink-1">{current.status === "sent" ? "Sent" : current.status === "scheduled" ? "Sends" : "Was due"}</dt>
-              <dd className="min-w-0 text-ink-2 tabular-nums [overflow-wrap:anywhere]">
-                <time dateTime={new Date(current.sentAt ?? current.dueAt).toISOString()} className="text-ink-1">
-                  {formatStamp(current.sentAt ?? current.dueAt)}
-                </time>{" "}
-                <span className="text-ink-3">({zoneLabelAt(current.sentAt ?? current.dueAt)})</span>
-              </dd>
-            </div>
-            <div className="contents">
-              <dt className="font-medium text-ink-1">Approved by</dt>
-              <dd className="min-w-0 text-ink-2 [overflow-wrap:anywhere]">
-                {approverLabel(current, viewerId)}
-                {current.approvedAt ? ` on ${formatStamp(current.approvedAt)}` : ""}
-              </dd>
-            </div>
-          </dl>
-          <Hint className="mt-2">{currentExplanation(current, isDemo)}</Hint>
-          {canCancel(current) ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-[13px]"
-                disabled={busy || claimHint}
-                onClick={() => void withdraw(current._id)}
-              >
-                {cancelAction.busy ? "Cancelling…" : "Cancel follow-up"}
-              </Button>
-              {claimHint ? <Hint>Take this thread to cancel the follow-up.</Hint> : null}
-            </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {current ? <StatusPill row={current} /> : <Chip tone="muted">Not approved</Chip>}
+          {approvals > 1 ? (
+            <span className="text-[12px] leading-4 text-ink-3 tabular-nums">
+              {approvals} approvals
+            </span>
           ) : null}
         </div>
-      ) : view.canApprove ? (
-        <blockquote className={cn(quoteClass, "mt-3")} aria-label="Proposed follow-up text">
-          {view.text}
-        </blockquote>
-      ) : null}
-
-      {offerApproval ? (
-        <div className="mt-4 border-t border-border-1 pt-4">
-          <div>
-            <label className="text-[13px] leading-5 font-medium text-ink-1" htmlFor="fd-followup-when">
-              {scheduled ? "New send time" : "Send at"} ({inputZoneLabel})
-            </label>
-            <Input
-              id="fd-followup-when"
-              type="datetime-local"
-              value={inputValue}
-              min={toLocalInput(view.minDueAt)}
-              max={toLocalInput(view.maxDueAt)}
-              step={60}
-              disabled={busy || claimHint}
-              onChange={(e) => {
-                setTyped(e.target.value);
-                setLocalError(null);
-              }}
-              className="mt-1 h-8 w-auto max-w-full bg-bg-1 text-[14px] text-ink-1 tabular-nums md:text-[14px]"
-            />
-            <Hint className="mt-1.5">
-              Times are in your browser's time zone, {zoneName}. Allowed: between 1 minute and 30 days from now
-              {scheduled ? "" : "; the default is 48 hours"}.
-            </Hint>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant={scheduled ? "outline" : "default"}
-              size="sm"
-              className="text-[13px]"
-              disabled={busy || claimHint}
-              aria-describedby="fd-followup-why"
-              onClick={() => void submit()}
-            >
-              {approveAction.busy ? "Approving…" : approveLabel}
-            </Button>
-          </div>
-          <Hint id="fd-followup-why" className="mt-2">
-            {claimHint
-              ? "Take this thread to approve a follow-up."
-              : isDemo
-                ? "Simulated: the follow-up is recorded in this demo at the chosen time. No real email is sent."
-                : "Emails exactly the text above to the guest at the chosen time, with your approval. It is withdrawn automatically if the guest writes first, the thread is closed, or your access ends."}
+      </div>
+      {expanded ? (
+        <div id="fd-followup-body">
+          <Hint className="mt-1.5">
+            {current
+              ? "One follow-up email per answered inquiry. It goes out only at the approved time, and only if the guest has not written again and the thread is still an open inquiry."
+              : "If the guest does not reply, staff may approve one follow-up email with exactly the text below. Sending the reply did not approve it; nothing is emailed unless it is approved here."}
           </Hint>
-        </div>
-      ) : view.blockedReason && current === null ? (
-        <Hint className="mt-3">No follow-up can be approved: {view.blockedReason}.</Hint>
-      ) : null}
 
-      {localError ? (
-        <InlineNotice tone="error" className="mt-3">
-          {localError}
-        </InlineNotice>
-      ) : null}
-      {approveAction.error ? (
-        <InlineNotice tone="error" className="mt-3">
-          {approveAction.error}
-        </InlineNotice>
-      ) : null}
-      {cancelAction.error ? (
-        <InlineNotice tone="error" className="mt-3">
-          {cancelAction.error}
-        </InlineNotice>
-      ) : null}
+          {current ? (
+            <div className="mt-3">
+              <blockquote className={quoteClass} aria-label="Approved follow-up text">
+                {current.text ?? view.text}
+              </blockquote>
+              <dl className="fd-followup__meta mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[13px] leading-5">
+                <div className="contents">
+                  <dt className="font-medium text-ink-1">{current.status === "sent" ? "Sent" : current.status === "scheduled" ? "Sends" : "Was due"}</dt>
+                  <dd className="min-w-0 text-ink-2 tabular-nums [overflow-wrap:anywhere]">
+                    <time dateTime={new Date(current.sentAt ?? current.dueAt).toISOString()} className="text-ink-1">
+                      {formatStamp(current.sentAt ?? current.dueAt)}
+                    </time>{" "}
+                    <span className="text-ink-3">({zoneLabelAt(current.sentAt ?? current.dueAt)})</span>
+                  </dd>
+                </div>
+                <div className="contents">
+                  <dt className="font-medium text-ink-1">Approved by</dt>
+                  <dd className="min-w-0 text-ink-2 [overflow-wrap:anywhere]">
+                    {approverLabel(current, viewerId)}
+                    {current.approvedAt ? ` on ${formatStamp(current.approvedAt)}` : ""}
+                  </dd>
+                </div>
+              </dl>
+              <Hint className="mt-2">{currentExplanation(current, isDemo)}</Hint>
+              {canCancel(current) ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-[13px]"
+                    disabled={busy || claimHint}
+                    onClick={() => void withdraw(current._id)}
+                  >
+                    {cancelAction.busy ? "Cancelling…" : "Cancel follow-up"}
+                  </Button>
+                  {claimHint ? <Hint>Take this thread to cancel the follow-up.</Hint> : null}
+                </div>
+              ) : null}
+            </div>
+          ) : view.canApprove ? (
+            <blockquote className={cn(quoteClass, "mt-3")} aria-label="Proposed follow-up text">
+              {view.text}
+            </blockquote>
+          ) : null}
 
-      {outbox.length > 0 ? <OutboxList rows={outbox} title="Follow-up delivery" className="mt-4 border-t border-border-1 pt-3" /> : null}
+          {offerApproval ? (
+            <div className="mt-4 border-t border-border-1 pt-4">
+              <div>
+                <label className="text-[13px] leading-5 font-medium text-ink-1" htmlFor="fd-followup-when">
+                  {scheduled ? "New send time" : "Send at"} ({inputZoneLabel})
+                </label>
+                <Input
+                  id="fd-followup-when"
+                  type="datetime-local"
+                  value={inputValue}
+                  min={toLocalInput(view.minDueAt)}
+                  max={toLocalInput(view.maxDueAt)}
+                  step={60}
+                  disabled={busy || claimHint}
+                  onChange={(e) => {
+                    setTyped(e.target.value);
+                    setLocalError(null);
+                  }}
+                  className="mt-1 h-8 w-auto max-w-full bg-bg-1 text-[14px] text-ink-1 tabular-nums md:text-[14px]"
+                />
+                <Hint className="mt-1.5">
+                  Times are in your browser's time zone, {zoneName}. Allowed: between 1 minute and 30 days from now
+                  {scheduled ? "" : "; the default is 48 hours"}.
+                </Hint>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant={scheduled ? "outline" : "default"}
+                  size="sm"
+                  className="text-[13px]"
+                  disabled={busy || claimHint}
+                  aria-describedby="fd-followup-why"
+                  onClick={() => void submit()}
+                >
+                  {approveAction.busy ? "Approving…" : approveLabel}
+                </Button>
+              </div>
+              <Hint id="fd-followup-why" className="mt-2">
+                {claimHint
+                  ? "Take this thread to approve a follow-up."
+                  : isDemo
+                    ? "Simulated: the follow-up is recorded in this demo at the chosen time. No real email is sent."
+                    : "Emails exactly the text above to the guest at the chosen time, with your approval. It is withdrawn automatically if the guest writes first, the thread is closed, or your access ends."}
+              </Hint>
+            </div>
+          ) : view.blockedReason && current === null ? (
+            <Hint className="mt-3">No follow-up can be approved: {view.blockedReason}.</Hint>
+          ) : null}
 
-      {history.length > 0 ? (
-        <div className="fd-followup__history mt-4 border-t border-border-1 pt-3" aria-label="Follow-up history">
-          <SectionLabel>Follow-up history</SectionLabel>
-          <ul className="mt-1 divide-y divide-border-1">
-            {history.map((row) => (
-              <li key={row._id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 text-[13px] leading-5 text-ink-2">
-                <StatusPill row={row} />
-                <span className="[overflow-wrap:anywhere]">
-                  {row.status === "sent" && row.sentAt
-                    ? `sent ${formatStamp(row.sentAt)} (${offsetAt(row.sentAt)})`
-                    : `due ${formatStamp(row.dueAt)} (${offsetAt(row.dueAt)})`}
-                  {" · "}approved by {approverLabel(row, viewerId)}
-                  {row.statusReason ? ` · ${row.statusReason}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {localError ? (
+            <InlineNotice tone="error" className="mt-3">
+              {localError}
+            </InlineNotice>
+          ) : null}
+          {approveAction.error ? (
+            <InlineNotice tone="error" className="mt-3">
+              {approveAction.error}
+            </InlineNotice>
+          ) : null}
+          {cancelAction.error ? (
+            <InlineNotice tone="error" className="mt-3">
+              {cancelAction.error}
+            </InlineNotice>
+          ) : null}
+
+          {outbox.length > 0 ? <OutboxList rows={outbox} title="Follow-up delivery" className="mt-4 border-t border-border-1 pt-3" /> : null}
+
+          {history.length > 0 ? (
+            <div className="fd-followup__history mt-4 border-t border-border-1 pt-3" aria-label="Follow-up history">
+              <SectionLabel>Follow-up history</SectionLabel>
+              <ul className="mt-1 divide-y divide-border-1">
+                {history.map((row) => (
+                  <li key={row._id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 text-[13px] leading-5 text-ink-2">
+                    <StatusPill row={row} />
+                    <span className="[overflow-wrap:anywhere]">
+                      {row.status === "sent" && row.sentAt
+                        ? `sent ${formatStamp(row.sentAt)} (${offsetAt(row.sentAt)})`
+                        : `due ${formatStamp(row.dueAt)} (${offsetAt(row.dueAt)})`}
+                      {" · "}approved by {approverLabel(row, viewerId)}
+                      {row.statusReason ? ` · ${row.statusReason}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
