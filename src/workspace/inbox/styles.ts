@@ -16,4 +16,7 @@ export const chipSelectClass =
 /** The thread's main column: scrolls on its own beside the queue, with the page on phones. */
 export const threadMainClass = "min-w-0 bg-bg-1 min-[901px]:min-h-0 min-[901px]:overflow-y-auto";
 /** Horizontal gutter shared by the sticky head and the content stack. */
-export const threadPadClass = "px-4 min-[901px]:px-6";
+export const threadPadClass = "px-4 min-[901px]:px-5";
+/** Inbox typography for the shared primitives: 12px ink-3 helper lines and 11px ink-3 section labels. */
+export const inboxHintClass = "text-[12px] leading-4 text-ink-3";
+export const inboxLabelClass = "text-[11px] tracking-[0.08em] text-ink-3";

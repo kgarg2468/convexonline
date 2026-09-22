@@ -18,8 +18,7 @@ test.describe("inbox", () => {
 
     await openThread(page, THREADS.ready);
 
-    // Unclaimed: read-only draft, no editor, send blocked and explained.
-    await expect(page.getByText("Take the thread to edit or send.")).toBeVisible();
+    // Unclaimed: read-only draft, no editor, send blocked and explained (by the send hint alone).
     await expect(page.getByLabel("Draft reply text")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Close thread" })).toBeDisabled();
     const send = page.getByRole("button", { name: "Send (simulated)" });

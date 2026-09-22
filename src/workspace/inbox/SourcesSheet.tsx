@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { SourcePanel } from "./SourcePanel";
 
 /**
- * Between 900 and 1200px the sources pane leaves the grid and opens from this
+ * Between 900 and 1440px the sources pane leaves the grid and opens from this
  * header button as a right sheet. It subscribes to the same `threads.get` the
  * thread pane already holds (the Convex client shares one subscription), so
  * the count is the number of claims the source panel lists.

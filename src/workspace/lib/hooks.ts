@@ -58,7 +58,7 @@ export function useQueryResult<Q extends FunctionReference<"query">>(
 export const useIsNarrow = () => useMediaQuery("(max-width: 900px)");
 
 /** Between the phone layout and the three-pane inbox: the sources pane becomes a sheet. */
-export const useIsMid = () => useMediaQuery("(width > 900px) and (width < 1200px)");
+export const useIsMid = () => useMediaQuery("(width > 900px) and (width < 1440px)");
 
 /**
  * True once `active` has been continuously true for `delayMs`, false the

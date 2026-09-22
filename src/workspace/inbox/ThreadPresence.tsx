@@ -68,13 +68,14 @@ export function ThreadPresence({ threadId }: { threadId: Id<"threads"> }) {
   return (
     <PresenceLine others={others.length > 0} live>
       {others.length === 0 ? (
-        "Only you are viewing this thread."
+        // Adds nothing to the claim line it sits in; kept for the live region and screen readers.
+        <span className="sr-only">Only you are viewing this thread.</span>
       ) : (
         <>
-          Viewing now: <strong className="font-medium text-ink-1">You</strong>
+          Viewing now: <strong className="font-medium text-ink-2">You</strong>
           {others.map((v) => (
             <span key={v.userId}>
-              , <strong className="font-medium text-ink-1">{v.name}</strong>
+              , <strong className="font-medium text-ink-2">{v.name}</strong>
             </span>
           ))}
         </>
@@ -83,13 +84,13 @@ export function ThreadPresence({ threadId }: { threadId: Id<"threads"> }) {
   );
 }
 
-/** One quiet line under the claim bar: a 6px dot (green while others are here) and 13px ink-2 text. */
+/** Sits inline at the end of the head's claim line: a 6px dot (green while others are here) and 12px ink-3 text. */
 function PresenceLine({ others, live, children }: { others: boolean; live?: boolean; children: React.ReactNode }) {
   return (
-    <p aria-live={live ? "polite" : undefined} className="mt-1.5 flex items-center gap-2 px-1 text-[13px] leading-5 text-ink-2">
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", others ? "bg-success-10" : "bg-ink-3")} />
-      <span>{children}</span>
-    </p>
+    <span aria-live={live ? "polite" : undefined} className={cn("inline-flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-3", !others && "gap-0")}>
+      {others ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success-10" /> : null}
+      <span className="truncate">{children}</span>
+    </span>
   );
 }
 

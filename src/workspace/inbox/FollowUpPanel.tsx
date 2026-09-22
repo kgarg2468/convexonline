@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OutboxList } from "./OutboxList";
 import { Chip, DisclosureButton, Hint, InlineNotice, SectionLabel } from "./primitives";
-import { LEGACY_TONE } from "./styles";
+import { LEGACY_TONE, inboxHintClass, inboxLabelClass } from "./styles";
 
 type Tone = "neutral" | "pine" | "caution" | "error" | "muted";
 
@@ -125,7 +125,7 @@ export function FollowUpPanel({
   const approvals = history.length + (current ? 1 : 0);
 
   return (
-    <section aria-labelledby="fd-followup-title" className="rounded-[10px] border border-border-1 bg-white p-4">
+    <section aria-labelledby="fd-followup-title" className="border-t border-border-1 pt-3">
       <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h3 id="fd-followup-title" className="text-[14px] leading-5 font-semibold text-ink-1">
           <DisclosureButton expanded={expanded} controls="fd-followup-body" onClick={() => setOpen(!expanded)}>
@@ -143,7 +143,7 @@ export function FollowUpPanel({
       </div>
       {expanded ? (
         <div id="fd-followup-body">
-          <Hint className="mt-1.5">
+          <Hint className={cn(inboxHintClass, "mt-1.5")}>
             {current
               ? "One follow-up email per answered inquiry. It goes out only at the approved time, and only if the guest has not written again and the thread is still an open inquiry."
               : "If the guest does not reply, staff may approve one follow-up email with exactly the text below. Sending the reply did not approve it; nothing is emailed unless it is approved here."}
@@ -172,7 +172,7 @@ export function FollowUpPanel({
                   </dd>
                 </div>
               </dl>
-              <Hint className="mt-2">{currentExplanation(current, isDemo)}</Hint>
+              <Hint className={cn(inboxHintClass, "mt-2")}>{currentExplanation(current, isDemo)}</Hint>
               {canCancel(current) ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
@@ -185,7 +185,7 @@ export function FollowUpPanel({
                   >
                     {cancelAction.busy ? "Cancelling…" : "Cancel follow-up"}
                   </Button>
-                  {claimHint ? <Hint>Take this thread to cancel the follow-up.</Hint> : null}
+                  {claimHint ? <Hint className={inboxHintClass}>Take this thread to cancel the follow-up.</Hint> : null}
                 </div>
               ) : null}
             </div>
@@ -215,7 +215,7 @@ export function FollowUpPanel({
                   }}
                   className="mt-1 h-8 w-auto max-w-full bg-bg-1 text-[14px] text-ink-1 tabular-nums md:text-[14px]"
                 />
-                <Hint className="mt-1.5">
+                <Hint className={cn(inboxHintClass, "mt-1.5")}>
                   Times are in your browser's time zone, {zoneName}. Allowed: between 1 minute and 30 days from now
                   {scheduled ? "" : "; the default is 48 hours"}.
                 </Hint>
@@ -233,7 +233,7 @@ export function FollowUpPanel({
                   {approveAction.busy ? "Approving…" : approveLabel}
                 </Button>
               </div>
-              <Hint id="fd-followup-why" className="mt-2">
+              <Hint id="fd-followup-why" className={cn(inboxHintClass, "mt-2")}>
                 {claimHint
                   ? "Take this thread to approve a follow-up."
                   : isDemo
@@ -242,7 +242,7 @@ export function FollowUpPanel({
               </Hint>
             </div>
           ) : view.blockedReason && current === null ? (
-            <Hint className="mt-3">No follow-up can be approved: {view.blockedReason}.</Hint>
+            <Hint className={cn(inboxHintClass, "mt-3")}>No follow-up can be approved: {view.blockedReason}.</Hint>
           ) : null}
 
           {localError ? (
@@ -265,7 +265,7 @@ export function FollowUpPanel({
 
           {history.length > 0 ? (
             <div className="fd-followup__history mt-4 border-t border-border-1 pt-3" aria-label="Follow-up history">
-              <SectionLabel>Follow-up history</SectionLabel>
+              <SectionLabel className={inboxLabelClass}>Follow-up history</SectionLabel>
               <ul className="mt-1 divide-y divide-border-1">
                 {history.map((row) => (
                   <li key={row._id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 text-[13px] leading-5 text-ink-2">
@@ -289,7 +289,7 @@ export function FollowUpPanel({
 }
 
 /** The exact text that can be approved, set as something the guest will read: serif, with an accent rule. */
-const quoteClass = "border-l-2 border-accent-9 pl-3 font-serif text-[15px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1 italic";
+const quoteClass = "border-l-2 border-accent-9 pl-3 font-serif text-[15px] leading-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-1 italic";
 
 /** Status straight from the approval row, refined by its outbox row once the due worker has reserved delivery. */
 function statusMeta(row: FollowUpEmail): { label: string; tone: Tone } {

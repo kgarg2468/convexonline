@@ -7,15 +7,15 @@ import { Button } from "@/components/ui/button";
 /**
  * Colour rules for every chip in the thread pane (design-spec §0, §1): text
  * first, tinted background, semantic colours only for status. `accent` is the
- * one solid chip (ready to send); `secondary` is reserved for the
- * staff-written marker; everything else is a quiet outline.
+ * ready tint (same as the queue's "Ready to send"); `secondary` is reserved
+ * for the staff-written marker; everything else is a quiet outline.
  */
 export type ChipTone = "neutral" | "muted" | "accent" | "accentOutline" | "success" | "warning" | "danger" | "secondary";
 
 const CHIP_TONE: Record<ChipTone, string> = {
   neutral: "border-border-1 bg-transparent text-ink-1",
   muted: "border-border-1 bg-transparent text-ink-2",
-  accent: "border-transparent bg-accent-9 text-white",
+  accent: "border-transparent bg-accent-3 text-accent-10",
   accentOutline: "border-accent-9/40 bg-transparent text-accent-10",
   success: "border-transparent bg-success-3 text-success-10",
   warning: "border-transparent bg-warning-3 text-warning-10",
@@ -123,7 +123,7 @@ export function DisclosureButton({
 
 /** The empty third column beside a pane that has no sources of its own (only on the three-pane layout). */
 export function SourcesPlaceholder() {
-  return <div aria-hidden="true" className="hidden border-l border-border-1 bg-white min-[1200px]:block" />;
+  return <div aria-hidden="true" className="hidden border-l border-border-1 bg-white min-[1440px]:block" />;
 }
 
 /**
@@ -162,7 +162,7 @@ export function ThreadUnavailable({
 /** Phone layout only: back to the queue. The accessible name stays "All threads" (mobile spec). */
 export function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-2 text-[13px] text-ink-2" onClick={onBack}>
+    <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-1 text-[13px] text-ink-2" onClick={onBack}>
       <ArrowLeft data-icon="inline-start" aria-hidden="true" />
       All threads
     </Button>

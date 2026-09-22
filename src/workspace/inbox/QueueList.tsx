@@ -166,7 +166,7 @@ export function QueueList({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </InputGroup>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <label className="sr-only" htmlFor="fd-queue-filter">
             Filter by status
           </label>
@@ -187,8 +187,9 @@ export function QueueList({
             <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-ink-3" />
           </span>
           {onCompose ? (
-            <Button type="button" variant="outline" size="sm" className="px-2 text-[13px]" onClick={onCompose}>
-              Simulate a guest inquiry
+            // Short visible label so the row never wraps at 300px; the accessible name stays the full one.
+            <Button type="button" variant="outline" size="sm" aria-label="Simulate a guest inquiry" className="ml-auto shrink-0 px-2 text-[13px]" onClick={onCompose}>
+              Simulate inquiry
             </Button>
           ) : null}
         </div>
