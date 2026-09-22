@@ -1,22 +1,15 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { DemoStatus, PageSummary, RecordVersionResult } from "../types";
-import { useAsyncAction } from "../lib/hooks";
+import type { PageSummary, RecordVersionResult } from "../types";
 import { VersionPane } from "../knowledge/VersionPane";
-
-/** The sentence shown after a scripted page edit; the result is owned by the workspace so it outlives the control that ran it. */
-function demoChangeNotice(last: RecordVersionResult): string {
-  return last.changeStatus === "changed"
-    ? `Policies page changed: ${last.affectedReplies} ${last.affectedReplies === 1 ? "reply" : "replies"} to review, ${last.unaffectedReplies} unaffected.`
-    : "Policies page unchanged.";
-}
+import { HeaderActions } from "./Shell";
+import { demoChangeNotice, useDemoPolicy } from "./useDemoPolicy";
 
 /**
- * The demo's scripted website edit. `demo.changePolicyPage` toggles the
- * policies page between its two stored versions, so the same button resets
- * the demo once the change has been made.
+ * The demo's scripted website edit. The mutation and its status live in
+ * `useDemoPolicy` (shared with the command palette); this is the control.
  *
  * `variant="compact"` is the header control. `variant="hero"` is the
  * zero-state panel on the review screen: it explains what the edit will do
@@ -37,19 +30,16 @@ export function DemoActions({
   onResult: (result: RecordVersionResult) => void;
   variant?: "compact" | "hero";
 }) {
-  const status = useQuery(api.demo.status, { innId }) as DemoStatus | undefined;
-  const change = useMutation(api.demo.changePolicyPage);
-  const action = useAsyncAction();
-  const changed = status?.policyVersion === "changed";
+  const demo = useDemoPolicy(innId);
 
   async function run() {
-    const r = (await action.run(() => change({ innId }))) as RecordVersionResult | undefined;
+    const r = await demo.run();
     if (r) onResult(r);
   }
 
-  const feedback = action.error ? (
+  const feedback = demo.error ? (
     <span className="fd-small" role="alert" style={{ color: "var(--fd-error)" }}>
-      {action.error}
+      {demo.error}
     </span>
   ) : last ? (
     <span className="fd-small fd-muted" role="status">
@@ -60,25 +50,21 @@ export function DemoActions({
   const button = (
     <button
       type="button"
-      className={`fd-btn${changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
-      disabled={action.busy || status === undefined}
+      className={`fd-btn${demo.changed ? "" : " fd-btn--primary"}${variant === "hero" ? " fd-btn--large" : ""}`}
+      disabled={demo.busy || !demo.ready}
       onClick={() => void run()}
-      title={
-        changed
-          ? "Restores the original policies page. Replies already reviewed stay reviewed."
-          : "Edits the demo inn's policies page (pet fee and check-in window) as the website owner would."
-      }
+      title={demo.description}
     >
-      {action.busy ? "Updating page…" : changed ? "Restore original policy page" : "Change the policy page"}
+      {demo.busy ? "Updating page…" : demo.label}
     </button>
   );
 
   if (variant === "compact") {
     return (
-      <div className="fd-header__actions">
+      <HeaderActions>
         {feedback}
         {button}
-      </div>
+      </HeaderActions>
     );
   }
 

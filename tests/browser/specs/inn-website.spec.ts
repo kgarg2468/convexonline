@@ -230,8 +230,9 @@ test.describe("hosted fictional inn website", () => {
       await expect(a.page.getByText("No pages captured yet")).toBeVisible();
 
       // Reload: the saved values come back from the server, not from this tab.
+      // The URL keeps the view, so the reload lands back on Knowledge.
       await a.page.reload();
-      await expect(a.page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible({ timeout: 30_000 });
+      await expect(a.page.getByRole("heading", { level: 1, name: "Knowledge" })).toBeVisible({ timeout: 30_000 });
       await openSettings(a.page);
       await expect(website(a.page).getByLabel("Pet fee per dog per night (USD)")).toHaveValue("40");
       await expect(website(a.page).getByLabel("Pet policy")).toHaveValue(policyText);

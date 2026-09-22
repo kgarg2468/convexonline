@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { addTransitionType, startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "./format";
+import { formatRoute, landingRoute, parsePath, sameRoute, type NavTransition, type Route } from "./router";
 
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() =>
@@ -70,4 +71,81 @@ export function useNow(intervalMs = 30_000): number {
     return () => window.clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+/**
+ * Set once the first workspace mount has read the address bar. Later mounts
+ * (switching property re-keys the workspace) start on that inn's landing view
+ * instead of re-reading a path that belonged to the previous one.
+ */
+let urlConsumed = false;
+
+function replaceUrl(path: string) {
+  try {
+    window.history.replaceState(window.history.state, "", path + window.location.search + window.location.hash);
+  } catch {
+    /* history unavailable; state still updates */
+  }
+}
+
+/**
+ * The workspace route, derived from the pathname and kept in sync with
+ * history. `navigate` pushes a new entry (or replaces the current one) and
+ * applies the route inside a React transition tagged with `transition`, so
+ * the `<ViewTransition>` around the routed view can animate by kind.
+ * Back/forward restore the route through `popstate`. The fragment and query
+ * string are never read or rewritten here.
+ */
+export function useRoute(isDemo: boolean): {
+  route: Route;
+  navigate: (to: Route, transition?: NavTransition, options?: { replace?: boolean }) => void;
+} {
+  const landing = useMemo(() => landingRoute(isDemo), [isDemo]);
+  const [route, setRoute] = useState<Route>(() => {
+    const fromUrl = urlConsumed ? null : parsePath(window.location.pathname);
+    const initial = fromUrl ?? landing;
+    const path = formatRoute(initial);
+    if (path !== window.location.pathname) replaceUrl(path);
+    return initial;
+  });
+
+  useEffect(() => {
+    urlConsumed = true;
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const parsed = parsePath(window.location.pathname);
+      const next = parsed ?? landing;
+      if (!parsed) replaceUrl(formatRoute(next));
+      startTransition(() => {
+        addTransitionType("nav-back");
+        setRoute((current) => (sameRoute(current, next) ? current : next));
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [landing]);
+
+  const navigate = useCallback(
+    (to: Route, transition: NavTransition = "nav-forward", options?: { replace?: boolean }) => {
+      const path = formatRoute(to);
+      if (path !== window.location.pathname) {
+        try {
+          const url = path + window.location.search + window.location.hash;
+          if (options?.replace) window.history.replaceState(window.history.state, "", url);
+          else window.history.pushState(null, "", url);
+        } catch {
+          /* history unavailable; the view still changes */
+        }
+      }
+      startTransition(() => {
+        addTransitionType(transition);
+        setRoute((current) => (sameRoute(current, to) ? current : to));
+      });
+    },
+    [],
+  );
+
+  return { route, navigate };
 }

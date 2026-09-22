@@ -6,6 +6,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "../workspace/workspace.css" layer(fd);
+@import "./motion.css";
 
 /* Never scan throwaway PoCs or private research for class names. */
 @source not "../../poc";

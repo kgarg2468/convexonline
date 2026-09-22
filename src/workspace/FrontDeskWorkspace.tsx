@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ViewTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
@@ -7,8 +7,11 @@ import type { Correction, InnDetail, InnSummary, RecordVersionResult, ThreadStat
 import { AuthView } from "./auth/AuthView";
 import { InnPicker } from "./onboarding/InnPicker";
 import { InvitationGate } from "./onboarding/InvitationGate";
-import { Shell, HeaderTitle } from "./shell/Shell";
+import { Shell, HeaderActions, HeaderTitle } from "./shell/Shell";
 import { DemoActions } from "./shell/DemoActions";
+import { CommandPalette } from "./shell/CommandPalette";
+import { ShortcutsSheet } from "./shell/ShortcutsSheet";
+import { useShortcuts } from "./shell/useShortcuts";
 import { CorrectionsView } from "./corrections/CorrectionsView";
 import { InboxView } from "./inbox/InboxView";
 import { InboxStats } from "./inbox/InboxStats";
@@ -16,12 +19,27 @@ import { KnowledgeView } from "./knowledge/KnowledgeView";
 import { SettingsView } from "./settings/SettingsView";
 import { Notice, Spinner } from "./lib/ui";
 import { errorMessage } from "./lib/format";
-import { useNow, useStoredState } from "./lib/hooks";
+import { useIsNarrow, useNow, useRoute, useStoredState } from "./lib/hooks";
+import { cn } from "@/lib/utils";
 import { usePendingInvite, type PendingInvite } from "./lib/invitations";
 import { WorkspaceAccessBoundary } from "./lib/WorkspaceAccessBoundary";
 
 const INN_KEY = "frontdesk.innId";
 export const STALL_AFTER_MS = 20_000;
+
+/** Classes styles/motion.css animates, by the transition type `useRoute` tags each navigation with. */
+const VIEW_ENTER = {
+  default: "none",
+  "nav-forward": "vt-fade-in",
+  "nav-back": "vt-back-in",
+  "nav-mobile-detail": "vt-slide-in",
+};
+const VIEW_EXIT = {
+  default: "none",
+  "nav-forward": "vt-fade-out",
+  "nav-back": "vt-back-out",
+  "nav-mobile-detail": "vt-slide-under",
+};
 
 /** True once `pending` has been continuously true for STALL_AFTER_MS; never fakes success. */
 function useStalled(pending: boolean): boolean {
@@ -268,17 +286,58 @@ function Workspace({
   // rolls over (no row changes then); the server decides the actual cutoff.
   const statsMinute = Math.floor(useNow(15_000) / 60_000);
   const stats = useQuery(api.threads.stats, { innId, clock: statsMinute }) as ThreadStats | undefined;
-  // Judges land on the policy-change review; staff land on the inbox.
-  const [view, setView] = useState<WorkspaceView>(current.isDemo ? "corrections" : "inbox");
-  const [selectedThread, setSelectedThread] = useState<Id<"threads"> | null>(null);
+  const narrow = useIsNarrow();
+  // The URL is the source of truth for the view and the open thread (lib/router.ts).
+  const { route, navigate } = useRoute(current.isDemo);
+  const view = route.view;
+  const selectedThread = route.view === "inbox" ? (route.threadId as Id<"threads"> | null) : null;
+  // The thread that was open last, so "Inbox" from another view returns to it on wide screens.
+  const lastThread = useRef<Id<"threads"> | null>(null);
+  useEffect(() => {
+    if (selectedThread) lastThread.current = selectedThread;
+  }, [selectedThread]);
   // Result of the last scripted demo page edit. Held here so the sentence
   // stays on screen when the review zero-state hero gives way to the cards.
   const [lastDemoChange, setLastDemoChange] = useState<RecordVersionResult | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const goTo = useCallback(
+    (next: WorkspaceView) => {
+      navigate(next === "inbox" ? { view: "inbox", threadId: narrow ? null : lastThread.current } : { view: next });
+    },
+    [navigate, narrow],
+  );
 
   function openThread(threadId: Id<"threads">) {
-    setSelectedThread(threadId);
-    setView("inbox");
+    navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-forward");
   }
+
+  /** Selection inside the inbox: a slide on narrow screens, a plain URL change beside an open queue. */
+  function selectThread(threadId: Id<"threads"> | null) {
+    if (threadId === null) navigate({ view: "inbox", threadId: null }, "nav-back");
+    else navigate({ view: "inbox", threadId }, narrow ? "nav-mobile-detail" : "nav-none");
+  }
+
+  function demoChanged(result: RecordVersionResult) {
+    setLastDemoChange(result);
+    goTo("corrections");
+  }
+
+  useShortcuts({
+    onGo: goTo,
+    onTogglePalette: () => {
+      setShortcutsOpen(false);
+      setPaletteOpen((open) => !open);
+    },
+    onHelp: () => {
+      setPaletteOpen(false);
+      setShortcutsOpen(true);
+    },
+    onEscape: () => {
+      if (narrow && selectedThread) selectThread(null);
+    },
+  });
 
   const header = (() => {
     switch (view) {
@@ -286,11 +345,11 @@ function Workspace({
         return (
           <>
             <HeaderTitle title="Policy changes" sub="See which replies need a second look" />
-            <div className="fd-header__actions">
-              <button type="button" className="fd-btn" onClick={() => setView("inbox")}>
+            <HeaderActions>
+              <button type="button" className="fd-btn" onClick={() => goTo("inbox")}>
                 Go to inbox
               </button>
-            </div>
+            </HeaderActions>
           </>
         );
       case "inbox":
@@ -305,18 +364,9 @@ function Workspace({
               />
               {stats ? <InboxStats stats={stats} timezone={detail?.inn.timezone} /> : null}
             </div>
-            <div className="fd-header__actions">
-              {current.isDemo ? (
-                <DemoActions
-                  innId={innId}
-                  last={lastDemoChange}
-                  onResult={(r) => {
-                    setLastDemoChange(r);
-                    setView("corrections");
-                  }}
-                />
-              ) : null}
-            </div>
+            <HeaderActions>
+              {current.isDemo ? <DemoActions innId={innId} last={lastDemoChange} onResult={demoChanged} /> : null}
+            </HeaderActions>
           </>
         );
       case "knowledge":
@@ -326,48 +376,67 @@ function Workspace({
     }
   })();
 
+  const flush = view === "inbox";
+  // On narrow screens the inbox's list and detail are separate views for the transition.
+  const transitionKey = flush && narrow ? (selectedThread ? "inbox-detail" : "inbox-list") : view;
+
   return (
-    <Shell
-      viewer={viewer}
-      inns={inns}
-      currentInn={current}
-      onSwitchInn={onSwitchInn}
-      view={view}
-      onNavigate={setView}
-      correctionsCount={
-        openCorrections ? new Set(openCorrections.map((c) => c.sentReplyId)).size : undefined
-      }
-      isDemo={current.isDemo}
-      header={header}
-      flush={view === "inbox"}
-    >
-      {view === "corrections" ? (
-        <CorrectionsView
-          innId={innId}
-          viewerId={viewer._id}
-          isDemo={current.isDemo}
-          liveMail={detail?.liveMail}
-          lastDemoChange={lastDemoChange}
-          onDemoChange={setLastDemoChange}
-          onOpenThread={openThread}
-        />
-      ) : view === "inbox" ? (
-        <InboxView
-          innId={innId}
-          viewerId={viewer._id}
-          isDemo={current.isDemo}
-          liveMail={detail?.liveMail}
-          selected={selectedThread}
-          onSelect={setSelectedThread}
-          onOpenCorrections={() => setView("corrections")}
-        />
-      ) : view === "knowledge" ? (
-        <KnowledgeView innId={innId} siteUrl={current.siteUrl} isDemo={current.isDemo} />
-      ) : detail === undefined ? (
-        <Spinner label="Loading property" />
-      ) : (
-        <SettingsView viewer={viewer} detail={detail} />
-      )}
-    </Shell>
+    <>
+      <Shell
+        viewer={viewer}
+        inns={inns}
+        currentInn={current}
+        onSwitchInn={onSwitchInn}
+        view={view}
+        onNavigate={goTo}
+        correctionsCount={openCorrections ? new Set(openCorrections.map((c) => c.sentReplyId)).size : undefined}
+        isDemo={current.isDemo}
+        header={header}
+        flush={flush}
+        onOpenPalette={() => setPaletteOpen(true)}
+      >
+        <ViewTransition key={transitionKey} default="none" enter={VIEW_ENTER} exit={VIEW_EXIT}>
+          <div className={cn("min-w-0 flex-1", flush && "flex min-h-0")}>
+            {view === "corrections" ? (
+              <CorrectionsView
+                innId={innId}
+                viewerId={viewer._id}
+                isDemo={current.isDemo}
+                liveMail={detail?.liveMail}
+                lastDemoChange={lastDemoChange}
+                onDemoChange={setLastDemoChange}
+                onOpenThread={openThread}
+              />
+            ) : view === "inbox" ? (
+              <InboxView
+                innId={innId}
+                viewerId={viewer._id}
+                isDemo={current.isDemo}
+                liveMail={detail?.liveMail}
+                selected={selectedThread}
+                onSelect={selectThread}
+                onOpenCorrections={() => goTo("corrections")}
+              />
+            ) : view === "knowledge" ? (
+              <KnowledgeView innId={innId} siteUrl={current.siteUrl} isDemo={current.isDemo} />
+            ) : detail === undefined ? (
+              <Spinner label="Loading property" />
+            ) : (
+              <SettingsView viewer={viewer} detail={detail} />
+            )}
+          </div>
+        </ViewTransition>
+      </Shell>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        innId={innId}
+        isDemo={current.isDemo}
+        onGo={goTo}
+        onOpenThread={openThread}
+        onDemoResult={demoChanged}
+      />
+      <ShortcutsSheet open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    </>
   );
 }

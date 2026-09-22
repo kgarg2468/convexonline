@@ -1,0 +1,132 @@
+/* Front Desk — view-level motion (research-motion §2.2, §4).
+   React 19.3 <ViewTransition> tags the routed view with the classes below by
+   transition type (lib/hooks.ts useRoute → addTransitionType):
+     nav-forward / nav-back   view swap: cross-fade, old out faster than new in
+     nav-mobile-detail        list → detail slide on narrow screens
+   Everything else the shell animates is CSS on Radix data-state (tw-animate)
+   or a Motion layoutId (rail active bar). */
+
+/* The pseudo-element tree must never swallow a click mid-transition. */
+::view-transition {
+  pointer-events: none;
+}
+
+/* The page itself does not move: only the tagged view does. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-group(*) {
+  animation-duration: var(--dur-small);
+  animation-timing-function: var(--ease-out);
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes vt-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes vt-slide-out-right {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+/* The list stays under the arriving detail: nudged left and dimmed, so the stacking reads. */
+@keyframes vt-slide-under {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-24%);
+    opacity: 0.6;
+  }
+}
+@keyframes vt-slide-from-under {
+  from {
+    transform: translateX(-24%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* View swap: 180ms in, ~0.7× out. */
+  ::view-transition-old(.vt-fade-out) {
+    animation: vt-fade-out var(--dur-micro) var(--ease-out) both;
+  }
+  ::view-transition-new(.vt-fade-in) {
+    animation: vt-fade-in var(--dur-small) var(--ease-out) both;
+  }
+
+  /* Mobile list → detail. */
+  ::view-transition-old(.vt-slide-under) {
+    animation: vt-slide-under var(--dur-medium) var(--ease-drawer) both;
+  }
+  ::view-transition-new(.vt-slide-in) {
+    animation: vt-slide-in-right var(--dur-medium) var(--ease-drawer) both;
+  }
+
+  /* Back: a cross-fade on wide screens; on narrow screens the leaving view slides out over the one returning. */
+  ::view-transition-old(.vt-back-out) {
+    animation: vt-fade-out var(--dur-micro) var(--ease-out) both;
+  }
+  ::view-transition-new(.vt-back-in) {
+    animation: vt-fade-in var(--dur-small) var(--ease-out) both;
+  }
+  @media (max-width: 900px) {
+    ::view-transition-group(.vt-back-out) {
+      z-index: 1;
+    }
+    ::view-transition-old(.vt-back-out) {
+      animation: vt-slide-out-right 200ms var(--ease-out) both;
+    }
+    ::view-transition-new(.vt-back-in) {
+      animation: vt-slide-from-under 200ms var(--ease-out) both;
+    }
+  }
+}
+
+/* Reduced motion: opacity only, no transforms, short. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*) {
+    animation-duration: 0s;
+  }
+  ::view-transition-old(*) {
+    animation: vt-fade-out 120ms linear both;
+  }
+  ::view-transition-new(*) {
+    animation: vt-fade-in 120ms linear both;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
