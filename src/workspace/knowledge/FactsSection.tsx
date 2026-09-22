@@ -1,75 +1,43 @@
-import { useState, type FormEvent } from "react";
-import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { StaffFact } from "../types";
-import { Field, Notice } from "../lib/ui";
-import { useAsyncAction } from "../lib/hooks";
 import { formatStamp } from "../lib/format";
+import { SectionLabel } from "../inbox/primitives";
+import { AddFactPopover } from "./AddFactPopover";
+import { metaClass, panelClass } from "./styles";
 
-/** General staff facts: things the website does not say that drafts may use. */
+/**
+ * General staff facts: things the website does not say that drafts may use.
+ * Rows read question (500) over answer (400) over author · date (12px).
+ */
 export function FactsSection({ innId, facts }: { innId: Id<"inns">; facts: StaffFact[] }) {
-  const addFact = useMutation(api.facts.add);
-  const action = useAsyncAction();
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [open, setOpen] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const id = await action.run(() => addFact({ innId, question, answer, scope: "general" }));
-    if (id !== undefined) {
-      setQuestion("");
-      setAnswer("");
-      setOpen(false);
-    }
-  }
-
   return (
-    <div className="fd-section">
-      <div className="fd-btn-row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
-        <p className="fd-section__title" style={{ margin: 0 }}>
+    <section aria-labelledby="fd-facts-title" className={panelClass}>
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <SectionLabel id="fd-facts-title" as="h3">
           Staff facts
-        </p>
-        <button type="button" className="fd-btn fd-btn--small" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          {open ? "Cancel" : "Add a fact"}
-        </button>
+        </SectionLabel>
+        <AddFactPopover innId={innId} />
       </div>
-      {open ? (
-        <form className="fd-card" style={{ marginBottom: 12 }} onSubmit={submit}>
-          <Field label="Question guests ask" htmlFor="fd-fact-q">
-            <input id="fd-fact-q" className="fd-input" required maxLength={2000} value={question} onChange={(e) => setQuestion(e.target.value)} />
-          </Field>
-          <Field label="Answer" htmlFor="fd-fact-a" hint="Drafts may quote this as a staff-provided fact.">
-            <textarea id="fd-fact-a" className="fd-textarea" style={{ minHeight: 80 }} required maxLength={5000} value={answer} onChange={(e) => setAnswer(e.target.value)} />
-          </Field>
-          {action.error ? (
-            <Notice tone="error" role="alert">
-              {action.error}
-            </Notice>
-          ) : null}
-          <div className="fd-btn-row" style={{ marginTop: 8 }}>
-            <button type="submit" className="fd-btn fd-btn--primary" disabled={action.busy || !question.trim() || !answer.trim()}>
-              {action.busy ? "Saving…" : "Save fact"}
-            </button>
-          </div>
-        </form>
-      ) : null}
       {facts.length === 0 ? (
-        <p className="fd-muted fd-small">No staff facts yet. Gap questions answered from a thread with “every future guest” land here.</p>
+        <p className="border-t border-border-1 px-4 py-6 text-center text-[13px] leading-5 text-ink-2">
+          No staff facts yet. Gap questions answered from a thread with “every future guest” land here.
+        </p>
       ) : (
-        <ul className="fd-facts">
+        <ul className="border-t border-border-1">
           {facts.map((f) => (
-            <li key={f._id} className="fd-fact">
-              <span className="fd-fact__q">{f.question}</span>
-              <span>{f.answer}</span>
-              <span className="fd-fact__meta">
+            <li
+              key={f._id}
+              className="flex flex-col gap-0.5 border-b border-border-1 px-4 py-2.5 transition-[opacity,translate] duration-small ease-out last:border-b-0 starting:-translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0"
+            >
+              <span className="text-[14px] leading-5 font-medium text-ink-1">{f.question}</span>
+              <span className="text-[14px] leading-5 text-ink-1">{f.answer}</span>
+              <span className={metaClass}>
                 {f.authorName} · {formatStamp(f.createdAt)}
               </span>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

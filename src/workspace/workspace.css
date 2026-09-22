@@ -297,47 +297,6 @@ body {
   color: var(--fd-muted);
 }
 
-/* ---------- knowledge ---------- */
-
-.fd-pages {
-  display: grid;
-  gap: 8px;
-}
-.fd-page {
-  background: var(--fd-white);
-  border: 1px solid var(--fd-line);
-  border-radius: var(--fd-radius);
-  padding: 12px 14px;
-}
-.fd-page__row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.fd-page__title {
-  font-weight: 600;
-}
-.fd-page__meta {
-  display: flex;
-  gap: 4px 14px;
-  flex-wrap: wrap;
-  color: var(--fd-muted);
-  font-size: 13px;
-  margin-top: 4px;
-}
-.fd-page__actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.fd-page__edit {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--fd-line);
-}
-
 /* ---------- policy changes: rebuilt with Tailwind in corrections/*.tsx ----------
    `.fd-quote--old` / `.fd-quote--new` (diff passages) and `.fd-controls` /
    `.fd-control` (unaffected rows) stay in the JSX as spec locators only.
@@ -422,34 +381,4 @@ body {
   .fd-hero {
     padding: 16px;
   }
-}
-
-.fd-page__watch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.fd-page__watch input {
-  margin: 0;
-  accent-color: var(--fd-pine);
-}
-
-/* ---------- live wiring: send confirmation, delivery, crawl runs ---------- */
-
-.fd-runs {
-  display: grid;
-  gap: 6px;
-}
-.fd-runs__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--fd-line);
-  border-radius: var(--fd-radius);
-  background: var(--fd-white);
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
